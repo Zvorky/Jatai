@@ -17,6 +17,8 @@ The absolute minimum required to route files safely between folders.
 - [x] Implement physical file copying logic (`shutil.copy2`) using **Atomic Delivery** (temporary .tmp extension during copy).
 - [x] Implement name collision resolution (appending numerical suffixes like `(1)` to duplicates in INBOX).
 - [x] Implement the success prefix logic (adding `_` to processed OUTBOX files).
+- [x] Implement `jatai status` command showing node state (INBOX/OUTBOX file counts).
+- [x] Write unit tests for genuine concurrent `filelock` contention on `~/.jatai` using threading (REQ §7 — lock concurrency coverage beyond simulation).
 
 ## **Phase 2: The Routing Engine (Daemon & Watchdog)**
 
@@ -49,6 +51,7 @@ Giving power back to the user via YAML and File-System manipulation.
 - [x] Implement **Soft-Delete**: Daemon strictly ignores node contents where config is named `._jatai`, monitoring only the root.
 - [x] Implement **Hot-Reload**: Watchdog listening to node root for `._jatai` -> `.jatai` renames.
 - [x] Implement **Prefix Hot-Swap & Rollback**: Auto-rename local history if prefix config changes, aborting via `.bkp` on collisions.
+- [x] Drop an error notification file into the originating node's INBOX when a prefix hot-swap rollback is triggered by a naming collision (ADR 3).
 
 ## **Phase 5: Onboarding & Documentation (In-Band Help)**
 
@@ -65,7 +68,7 @@ The "File-System First" user experience.
 
 Adding convenience commands and storage management.
 
-- [ ] Implement `jatai status`, `jatai list`, `jatai send`, `jatai read`, `jatai unread`.
+- [ ] Implement `jatai list`, `jatai send`, `jatai read`, `jatai unread`.
 - [ ] Implement `jatai config` to read/write settings via CLI.
 - [ ] Implement `jatai remove` (CLI wrapper for renaming to `._jatai`).
 - [ ] Implement **Garbage Collection (Auto-Remove):** Background daemon logic to delete `_` prefixed files based on config thresholds.

@@ -268,6 +268,7 @@ class TestDaemonHappyPath:
     def test_daemon_handle_node_config_change_rolls_back_on_prefix_collision(self, temp_home):
         registry_path = temp_home / ".jatai"
         node = register_node(registry_path, "node_a", temp_home / "node_a")
+        node_b = register_node(registry_path, "node_b", temp_home / "node_b")
 
         source_file = node.outbox_path / "_message.txt"
         colliding_target = node.outbox_path / "processed_message.txt"
@@ -294,6 +295,9 @@ class TestDaemonHappyPath:
         assert node.backup_config_path.exists()
         notice_files = list(node.inbox_path.glob("!_config-migration-error*.md"))
         assert len(notice_files) == 1
+        assert "Prefix migration aborted" in notice_files[0].read_text(encoding="utf-8")
+        assert "collision" in notice_files[0].read_text(encoding="utf-8").lower()
+        assert not list(node_b.inbox_path.glob("!_config-migration-error*.md"))
 
 
 class TestDaemonExclusivity:

@@ -6,6 +6,8 @@ Coverage: Happy Path, Error/Failure Scenarios, Malicious/Adversarial Scenarios.
 
 import pytest
 import yaml
+import threading
+import time
 from pathlib import Path
 from jatai.core.registry import Registry
 
@@ -281,3 +283,47 @@ class TestRegistryMaliciousAdversarialScenarios:
         reg3.load()
         # reg3 should have node2 but not node1 (reg2 overwrote reg1's changes)
         assert "node2" in reg3.nodes
+
+    def test_registry_filelock_thread_contention_blocks_and_recovers(self, temp_dir):
+        """Validate real thread contention on the registry file lock."""
+        registry_path = temp_dir / ".jatai"
+        holder_registry = Registry(registry_path=registry_path)
+        holder_registry.add_node("holder", "/tmp/holder")
+        holder_registry.save()
+
+        waiting_registry = Registry(registry_path=registry_path)
+        waiting_registry.load()
+        waiting_registry.add_node("waiter", "/tmp/waiter")
+
+        lock_entered = threading.Event()
+        release_lock = threading.Event()
+        save_completed = threading.Event()
+
+        def holder() -> None:
+            with holder_registry._lock():
+                lock_entered.set()
+                release_lock.wait(timeout=5)
+
+        def waiter() -> None:
+            waiting_registry.save()
+            save_completed.set()
+
+        holder_thread = threading.Thread(target=holder)
+        waiter_thread = threading.Thread(target=waiter)
+
+        holder_thread.start()
+        assert lock_entered.wait(timeout=2)
+
+        waiter_thread.start()
+        time.sleep(0.2)
+        assert not save_completed.is_set()
+
+        release_lock.set()
+        holder_thread.join(timeout=5)
+        waiter_thread.join(timeout=5)
+
+        assert save_completed.is_set()
+
+        verify = Registry(registry_path=registry_path)
+        verify.load()
+        assert "waiter" in verify.nodes
