@@ -85,6 +85,37 @@ class TestPrefixHappyPath:
         prefix = Prefix()
         assert prefix.get_state(file_path) == "error"
 
+    def test_prefix_get_detailed_state_5_matrix(self, temp_dir):
+        """Test detailed states across all retry and fatal prefixes."""
+        pending = temp_dir / "msg.txt"
+        processed = temp_dir / "_msg.txt"
+        error_total = temp_dir / "!msg.txt"
+        error_partial = temp_dir / "!_msg.txt"
+        fatal_total = temp_dir / "!!msg.txt"
+        fatal_partial = temp_dir / "!!_msg.txt"
+
+        for file_path in [pending, processed, error_total, error_partial, fatal_total, fatal_partial]:
+            file_path.write_text("x")
+
+        prefix = Prefix()
+        assert prefix.get_detailed_state(pending) == "pending"
+        assert prefix.get_detailed_state(processed) == "processed"
+        assert prefix.get_detailed_state(error_total) == "error_total"
+        assert prefix.get_detailed_state(error_partial) == "error_partial"
+        assert prefix.get_detailed_state(fatal_total) == "fatal_total"
+        assert prefix.get_detailed_state(fatal_partial) == "fatal_partial"
+
+    def test_prefix_to_pending_from_error(self, temp_dir):
+        """Test stripping error prefix returns file to pending state name."""
+        file_path = temp_dir / "!_file.txt"
+        file_path.write_text("content")
+
+        prefix = Prefix()
+        pending = prefix.to_pending(file_path)
+
+        assert pending.name == "file.txt"
+        assert prefix.is_pending(pending)
+
     def test_prefix_is_pending(self, temp_dir):
         """Test is_pending method."""
         pending = temp_dir / "file.txt"
@@ -228,6 +259,15 @@ class TestPrefixErrorFailureScenarios:
         # Should not raise, behavior depends on implementation
         # Current impl returns "unknown" for non-existent files
         # (implicitly, since file_path.name doesn't exist)
+
+    def test_prefix_set_state_invalid_state(self, temp_dir):
+        """Test invalid target state raises validation error."""
+        file_path = temp_dir / "file.txt"
+        file_path.write_text("content")
+
+        prefix = Prefix()
+        with pytest.raises(ValueError):
+            prefix.set_state(file_path, "invalid_state")
 
 
 class TestPrefixMaliciousAdversarialScenarios:

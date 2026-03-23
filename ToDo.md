@@ -34,11 +34,11 @@ Making the system reactive and background-driven.
 
 Ensuring no data is lost during I/O failures.
 
-- [ ] Implement the 5-state prefix matrix (`_`, `!`, `!_`, `!!`, `!!_`) for success, partial, and total failures.
-- [ ] Create the `~/.retry` global state file to track retry indices.
-- [ ] Implement the dynamic exponential retry loop and the `MAX_RETRIES` transition to fatal prefixes (`!!`).
-- [ ] Write unit tests for the exponential retry math (`RETRY_DELAY_BASE` * (2 ^ index)) and state transitions.
-- [ ] Setup global logging (logging to `~/.jatai.log`).
+- [x] Implement the 5-state prefix matrix (`_`, `!`, `!_`, `!!`, `!!_`) for success, partial, and total failures.
+- [x] Create the `~/.retry` global state file to track retry indices.
+- [x] Implement the dynamic exponential retry loop and the `MAX_RETRIES` transition to fatal prefixes (`!!`).
+- [x] Write unit tests for the exponential retry math (`RETRY_DELAY_BASE` * (2 ^ index)) and state transitions.
+- [x] Setup global logging (logging to `~/.jatai.log`).
 
 ## **Phase 4: Configuration & File-System Reactivity**
 

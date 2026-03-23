@@ -2,6 +2,7 @@
 Tests for daemon lifecycle, startup scan, watchdog routing, and auto-start registration.
 """
 
+import json
 from pathlib import Path
 
 import pytest
@@ -90,6 +91,62 @@ class TestDaemonHappyPath:
 
         assert not (node_b.inbox_path / "writing.txt").exists()
         assert (node_a.outbox_path / "_writing.txt").exists()
+
+    def test_daemon_retry_transitions_to_fatal_total(self, temp_home, monkeypatch):
+        registry_path = temp_home / ".jatai"
+        node_a = register_node(registry_path, "node_a", temp_home / "node_a")
+        node_b = register_node(registry_path, "node_b", temp_home / "node_b")
+
+        node_a.set_config("MAX_RETRIES", 2)
+        node_a.set_config("RETRY_DELAY_BASE", 1)
+
+        source_file = node_a.outbox_path / "message.txt"
+        source_file.write_text("hello")
+
+        def fail_delivery(_self):
+            raise OSError("simulated failure")
+
+        monkeypatch.setattr("jatai.core.daemon.Delivery.deliver", fail_delivery)
+
+        daemon = JataiDaemon(
+            registry_path=registry_path,
+            pid_path=temp_home / ".jatai.pid",
+            retry_path=temp_home / ".retry",
+            log_path=temp_home / ".jatai.log",
+        )
+
+        daemon.startup_scan()
+        first_failure = node_a.outbox_path / "!message.txt"
+        assert first_failure.exists()
+
+        retry_data = json.loads((temp_home / ".retry").read_text(encoding="utf-8"))
+        key = str((node_a.outbox_path / "message.txt").resolve())
+        retry_data[key]["next_retry_at"] = 0
+        (temp_home / ".retry").write_text(json.dumps(retry_data), encoding="utf-8")
+
+        daemon.startup_scan()
+        fatal_failure = node_a.outbox_path / "!!message.txt"
+        assert fatal_failure.exists()
+
+    def test_daemon_writes_global_log_file(self, temp_home):
+        registry_path = temp_home / ".jatai"
+        node_a = register_node(registry_path, "node_a", temp_home / "node_a")
+        register_node(registry_path, "node_b", temp_home / "node_b")
+
+        source_file = node_a.outbox_path / "loggable.txt"
+        source_file.write_text("payload")
+
+        log_path = temp_home / ".jatai.log"
+        daemon = JataiDaemon(
+            registry_path=registry_path,
+            pid_path=temp_home / ".jatai.pid",
+            retry_path=temp_home / ".retry",
+            log_path=log_path,
+        )
+        daemon.startup_scan()
+
+        assert log_path.exists()
+        assert "Delivery succeeded" in log_path.read_text(encoding="utf-8")
 
 
 class TestDaemonExclusivity:

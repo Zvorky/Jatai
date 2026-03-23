@@ -31,6 +31,7 @@ class TestRegistryHappyPath:
             "PREFIX_PROCESSED",
             "PREFIX_ERROR",
             "RETRY_DELAY_BASE",
+            "MAX_RETRIES",
             "INBOX_DIR",
             "OUTBOX_DIR",
         }

@@ -17,6 +17,7 @@ class Registry:
         "PREFIX_PROCESSED": "_",
         "PREFIX_ERROR": "!_",
         "RETRY_DELAY_BASE": 60,
+        "MAX_RETRIES": 3,
         "INBOX_DIR": "INBOX",
         "OUTBOX_DIR": "OUTBOX",
     }

@@ -25,14 +25,15 @@ pip install -e .
 
 ## **🐝 Usage (The File-System Way)**
 
-Current implementation status: core modules, basic CLI, daemon lifecycle, startup scan, and watchdog-based routing are available for local development and testing.
+Current implementation status: core modules, basic CLI, daemon lifecycle, startup scan, watchdog-based routing, 5-state prefix handling, exponential retry management, and global logging are available for local development and testing.
 
 1. **Initialize a Node (current command):** `jatai init ./my-folder`
 2. **Initialize via Alias (current command):** `jatai ./my-folder`
 3. **Check Node Status (current command):** `jatai status`
 4. **Start the Daemon (current command):** `jatai start`
 5. **Stop the Daemon (current command):** `jatai stop`
-6. **Delivery behavior already implemented in core:** Atomic copy logic, startup scan, watchdog triggers, collision handling, and success-prefix processing are covered by current code/tests.
+6. **Resilience behavior already implemented in core:** 5-state prefix matrix (`_`, `!`, `!_`, `!!`, `!!_`), global `.retry` state with exponential backoff, and `MAX_RETRIES` fatal transitions are covered by current code/tests.
+7. **Observability already implemented in core:** Global daemon log file output to `~/.jatai.log` is active.
 
 The command surface in the sections below remains the product target roadmap, not a statement that every command is already available.
 
@@ -77,6 +78,7 @@ $PLANNED / TODO$
 │   │   ├── registry.py           # Global registry (~/.jatai) management
 │   │   ├── delivery.py           # Atomic file delivery (shutil.copy2 with .tmp)
 │   │   ├── prefix.py             # Prefix/state handling helpers
+│   │   ├── retry.py              # Global retry state and exponential backoff scheduling
 │   │   └── node.py               # Node representation (INBOX/OUTBOX)
 │   └── cli/                       # Command-line interface
 │       ├── __init__.py
@@ -88,6 +90,7 @@ $PLANNED / TODO$
 │   ├── test_registry.py          # Registry module tests (happy/error/adversarial/locks)
 │   ├── test_delivery.py          # Delivery module tests (atomic delivery & naming collision)
 │   ├── test_prefix.py            # Prefix state machine & max retries tests
+│   ├── test_retry.py             # Retry state and exponential delay tests
 │   ├── test_node.py              # Node module tests (INBOX/OUTBOX overlap validation)
 │   └── test_cli.py               # CLI tests using Typer's CliRunner
 ├── docs/                          # Documentation directory

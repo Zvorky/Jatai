@@ -7,6 +7,7 @@ from jatai.core.daemon import AlreadyRunningError, JataiDaemon, JataiWatchdogHan
 from jatai.core.registry import Registry
 from jatai.core.delivery import Delivery
 from jatai.core.prefix import Prefix
+from jatai.core.retry import RetryState
 from jatai.core.node import Node
 
 __all__ = [
@@ -17,5 +18,6 @@ __all__ = [
 	"Registry",
 	"Delivery",
 	"Prefix",
+	"RetryState",
 	"Node",
 ]

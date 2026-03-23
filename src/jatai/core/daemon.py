@@ -2,12 +2,12 @@
 Background daemon, startup scan, and watchdog integration for Jataí.
 """
 
+import logging
 import os
 import signal
 import threading
-import time
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from filelock import FileLock, Timeout
 from watchdog.events import FileCreatedEvent, FileMovedEvent, FileSystemEventHandler
@@ -17,6 +17,7 @@ from jatai.core.delivery import Delivery
 from jatai.core.node import Node
 from jatai.core.prefix import Prefix
 from jatai.core.registry import Registry
+from jatai.core.retry import RetryState
 
 
 class AlreadyRunningError(RuntimeError):
@@ -51,13 +52,31 @@ class JataiDaemon:
         self,
         registry_path: Optional[Path] = None,
         pid_path: Optional[Path] = None,
+        retry_path: Optional[Path] = None,
+        log_path: Optional[Path] = None,
         observer_factory=Observer,
     ) -> None:
         self.registry_path = Path(registry_path) if registry_path is not None else Path.home() / ".jatai"
         self.pid_path = Path(pid_path) if pid_path is not None else Path.home() / ".jatai.pid"
+        self.retry_path = Path(retry_path) if retry_path is not None else Path.home() / ".retry"
+        self.log_path = Path(log_path) if log_path is not None else Path.home() / ".jatai.log"
         self.observer_factory = observer_factory
         self.stop_event = threading.Event()
         self.observer: Optional[Observer] = None
+        self.retry_state = RetryState(self.retry_path)
+        self.logger = self._build_logger(self.log_path)
+
+    def _build_logger(self, log_path: Path) -> logging.Logger:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        logger_name = f"jatai.daemon.{log_path}"
+        logger = logging.getLogger(logger_name)
+        logger.setLevel(logging.INFO)
+        logger.propagate = False
+        if not logger.handlers:
+            handler = logging.FileHandler(log_path, encoding="utf-8")
+            handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+            logger.addHandler(handler)
+        return logger
 
     @property
     def pid_lock_path(self) -> Path:
@@ -177,22 +196,103 @@ class JataiDaemon:
                 return node
         return None
 
-    def broadcast_file(self, source_node: Node, source_file: Path, nodes: List[Node]) -> bool:
-        all_delivered = True
+    def _deliver_to_active_nodes(
+        self,
+        source_node: Node,
+        source_file: Path,
+        nodes: List[Node],
+    ) -> Tuple[int, List[str]]:
+        delivered_count = 0
+        failed_nodes: List[str] = []
         for destination_node in nodes:
             if destination_node.node_path == source_node.node_path:
                 continue
             try:
                 Delivery(source_file, destination_node.inbox_path).deliver()
-            except Exception:
-                all_delivered = False
+                delivered_count += 1
+            except Exception as exc:
+                failed_nodes.append(str(destination_node.node_path))
+                self.logger.warning(
+                    "Delivery failed for file=%s destination=%s reason=%s",
+                    source_file,
+                    destination_node.node_path,
+                    exc,
+                )
+        return delivered_count, failed_nodes
 
-        if all_delivered and source_file.exists():
-            Prefix(
-                success_prefix=str(source_node.get_config("PREFIX_PROCESSED", "_")),
-                error_prefix=str(source_node.get_config("PREFIX_ERROR", "!_")),
-            ).add_success_prefix(source_file)
-        return all_delivered
+    def _handle_delivery_result(
+        self,
+        source_node: Node,
+        source_file: Path,
+        canonical_retry_path: Path,
+        total_targets: int,
+        delivered_count: int,
+        failed_nodes: List[str],
+    ) -> bool:
+        prefix = Prefix(
+            success_prefix=str(source_node.get_config("PREFIX_PROCESSED", "_")),
+            error_prefix=str(source_node.get_config("PREFIX_ERROR", "!_")),
+        )
+
+        if not failed_nodes:
+            if source_file.exists():
+                prefix.set_state(source_file, "processed")
+            self.retry_state.clear(canonical_retry_path)
+            self.logger.info("Delivery succeeded for file=%s", source_file)
+            return True
+
+        retry_delay_base = int(source_node.get_config("RETRY_DELAY_BASE", 60))
+        max_retries = int(source_node.get_config("MAX_RETRIES", 3))
+        partial_failure = delivered_count > 0 and delivered_count < total_targets
+        retry_info = self.retry_state.register_failure(
+            canonical_retry_path,
+            failed_nodes=failed_nodes,
+            retry_delay_base=retry_delay_base,
+            max_retries=max_retries,
+            partial_failure=partial_failure,
+        )
+
+        if retry_info["is_fatal"]:
+            target_state = "fatal_partial" if partial_failure else "fatal_total"
+            prefix.set_state(source_file, target_state)
+            self.logger.error(
+                "File reached fatal retry limit file=%s state=%s retries=%s",
+                source_file,
+                target_state,
+                retry_info["retry_index"],
+            )
+            return False
+
+        target_state = "error_partial" if partial_failure else "error_total"
+        prefix.set_state(source_file, target_state)
+        self.logger.warning(
+            "File scheduled for retry file=%s state=%s retry_index=%s delay_seconds=%s",
+            source_file,
+            target_state,
+            retry_info["retry_index"],
+            retry_info["delay_seconds"],
+        )
+        return False
+
+    def broadcast_file(self, source_node: Node, source_file: Path, nodes: List[Node]) -> bool:
+        prefix = Prefix(
+            success_prefix=str(source_node.get_config("PREFIX_PROCESSED", "_")),
+            error_prefix=str(source_node.get_config("PREFIX_ERROR", "!_")),
+        )
+        canonical_retry_path = prefix.canonical_retry_path(source_file)
+        self.retry_state.load()
+        total_targets = sum(1 for node in nodes if node.node_path != source_node.node_path)
+        delivered_count, failed_nodes = self._deliver_to_active_nodes(source_node, source_file, nodes)
+        result = self._handle_delivery_result(
+            source_node=source_node,
+            source_file=source_file,
+            canonical_retry_path=canonical_retry_path,
+            total_targets=total_targets,
+            delivered_count=delivered_count,
+            failed_nodes=failed_nodes,
+        )
+        self.retry_state.save()
+        return result
 
     def startup_scan(self) -> None:
         nodes = self.load_active_nodes()
@@ -207,8 +307,20 @@ class JataiDaemon:
         for file_path in sorted(node.list_outbox()):
             if Delivery.is_being_written(file_path, success_prefix=prefix.success_prefix):
                 continue
+
             if prefix.is_pending(file_path):
                 self.broadcast_file(node, file_path, nodes)
+                continue
+
+            if prefix.is_retryable_error(file_path):
+                canonical_retry_path = prefix.canonical_retry_path(file_path)
+                self.retry_state.load()
+                due = self.retry_state.is_due(canonical_retry_path)
+                self.retry_state.save()
+                if not due:
+                    continue
+                pending_path = prefix.to_pending(file_path)
+                self.broadcast_file(node, pending_path, nodes)
 
     def setup_watchdog(self) -> None:
         nodes = self.load_active_nodes()
