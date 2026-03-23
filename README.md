@@ -24,8 +24,9 @@ By utilizing standardized directories (INBOX/ and OUTBOX/) and operating system 
 
 ## **🛠️ CLI & TUI Toolbox**
 
-$$PLANNED / TODO$$  
 *While daily operations are done directly via the file system, a robust CLI and an interactive Text User Interface (TUI) are currently planned for node management.*
+
+$PLANNED / TODO$  
 
 | Command | Action |
 | :---- | :---- |
@@ -48,6 +49,44 @@ $$PLANNED / TODO$$
 * [**Architecture Decision Records (ADR)**](ARCHITECTURE.md)  
 * [**Technical Requirements**](REQUIREMENTS.md)  
 * **Deep Documentation:** Planned to be stored in the `docs/` folder (can be fetched via jatai docs).
+
+## **🗂️ File Structure**
+
+```
+.
+├── .git/                          # Git repository
+├── src/jatai/                     # Main package source code
+│   ├── __init__.py               # Package metadata and version info
+│   ├── core/                      # Core modules
+│   │   ├── __init__.py
+│   │   ├── registry.py           # Global registry (~/.jatai) management
+│   │   ├── delivery.py           # Atomic file delivery (shutil.copy2 with .tmp)
+│   │   ├── prefix.py             # State machine using file prefixes
+│   │   └── node.py               # Node representation (INBOX/OUTBOX)
+│   └── cli/                       # Command-line interface
+│       ├── __init__.py
+│       └── main.py               # Typer CLI app and commands
+├── tests/                         # Test suite (pytest)
+│   ├── conftest.py               # pytest fixtures and configuration
+│   ├── test_dummy.py             # Basic pytest setup test
+│   ├── test_registry.py          # Registry module tests (happy/error/adversarial)
+│   ├── test_delivery.py          # Delivery module tests (atomic delivery validation)
+│   ├── test_prefix.py            # Prefix state machine tests
+│   ├── test_node.py              # Node module tests
+│   └── test_cli.py               # CLI tests using Typer's CliRunner
+├── docs/                          # Documentation (future Phase 5)
+├── venv/                          # Python virtual environment (Fedora Silverblue)
+├── requirements.txt               # Python dependencies
+├── validate_phase1.py            # Phase 1 validation script (requires deps)
+├── test_phase1_core_logic.py     # Phase 1 core logic tests (no external deps)
+├── run_all_tests.py              # Test runner script
+├── AGENTS.md                      # Agent rules and development guidelines
+├── ARCHITECTURE.md                # Architecture Decision Records (ADR)
+├── REQUIREMENTS.md                # Technical requirements specification
+├── README.md                      # This file
+├── ToDo.md                        # Implementation roadmap
+└── LICENSE                        # Mozilla Public License 2.0 (MPL-2.0)
+```
 
 ## **🚀 Future Ideas & Roadmap**
 
