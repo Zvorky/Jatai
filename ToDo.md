@@ -44,11 +44,11 @@ Ensuring no data is lost during I/O failures.
 
 Giving power back to the user via YAML and File-System manipulation.
 
-- [x] Parse and apply local `.jatai` configurations (overriding global defaults).
-- [x] Implement `.jatai.bkp` mechanism for configuration rollback on collisions.
-- [x] Implement **Soft-Delete**: Daemon strictly ignores node contents where config is named `._jatai`, monitoring only the root.
-- [x] Implement **Hot-Reload**: Watchdog listening to node root for `._jatai` -> `.jatai` renames.
-- [x] Implement **Prefix Hot-Swap & Rollback**: Auto-rename local history if prefix config changes, aborting via `.bkp` on collisions.
+- [ ] Parse and apply local `.jatai` configurations (overriding global defaults).
+- [ ] Implement `.jatai.bkp` mechanism for configuration rollback on collisions.
+- [ ] Implement **Soft-Delete**: Daemon strictly ignores node contents where config is named `._jatai`, monitoring only the root.
+- [ ] Implement **Hot-Reload**: Watchdog listening to node root for `._jatai` -> `.jatai` renames.
+- [ ] Implement **Prefix Hot-Swap & Rollback**: Auto-rename local history if prefix config changes, aborting via `.bkp` on collisions.
 
 ## **Phase 5: Onboarding & Documentation (In-Band Help)**
 

@@ -25,15 +25,14 @@ pip install -e .
 
 ## **🐝 Usage (The File-System Way)**
 
-Current implementation status: core modules, basic CLI, daemon lifecycle, startup scan, watchdog-based routing, local config override handling, soft-delete/hot-reload monitoring, and prefix hot-swap rollback are available for local development and testing.
+Current implementation status: core modules, basic CLI, daemon lifecycle, startup scan, and watchdog-based routing are available for local development and testing.
 
 1. **Initialize a Node (current command):** `jatai init ./my-folder`
 2. **Initialize via Alias (current command):** `jatai ./my-folder`
 3. **Check Node Status (current command):** `jatai status`
 4. **Start the Daemon (current command):** `jatai start`
 5. **Stop the Daemon (current command):** `jatai stop`
-6. **Configuration reactivity already implemented in core:** Local `.jatai` overrides are applied over global defaults, `._jatai` nodes are ignored while their roots remain monitored, and reactivation via rename is handled by the daemon.
-7. **Prefix migration safety already implemented in core:** Prefix changes trigger historical file renames; collisions restore the previous config from `.jatai.bkp` and drop an error notice into the node INBOX.
+6. **Delivery behavior already implemented in core:** Atomic copy logic, startup scan, watchdog triggers, collision handling, and success-prefix processing are covered by current code/tests.
 
 The command surface in the sections below remains the product target roadmap, not a statement that every command is already available.
 
@@ -74,22 +73,22 @@ $PLANNED / TODO$
 │   ├── core/                      # Core modules
 │   │   ├── __init__.py
 │   │   ├── autostart.py          # OS auto-start registration helpers
-│   │   ├── daemon.py             # Background daemon, PID lock, watchdog integration, hot-reload
+│   │   ├── daemon.py             # Background daemon, PID lock, watchdog integration
 │   │   ├── registry.py           # Global registry (~/.jatai) management
 │   │   ├── delivery.py           # Atomic file delivery (shutil.copy2 with .tmp)
 │   │   ├── prefix.py             # Prefix/state handling helpers
-│   │   └── node.py               # Node representation, config override, backup, and prefix migration
+│   │   └── node.py               # Node representation (INBOX/OUTBOX)
 │   └── cli/                       # Command-line interface
 │       ├── __init__.py
 │       └── main.py               # Typer CLI app and commands
 ├── tests/                         # Test suite (pytest)
 │   ├── conftest.py               # pytest fixtures and configuration
 │   ├── test_dummy.py             # Basic pytest setup test
-│   ├── test_daemon.py            # Daemon lifecycle, watchdog, auto-start, hot-reload, and rollback tests
+│   ├── test_daemon.py            # Daemon lifecycle, watchdog, and auto-start tests
 │   ├── test_registry.py          # Registry module tests (happy/error/adversarial/locks)
 │   ├── test_delivery.py          # Delivery module tests (atomic delivery & naming collision)
 │   ├── test_prefix.py            # Prefix state machine & max retries tests
-│   ├── test_node.py              # Node module tests (config override, backup, and path validation)
+│   ├── test_node.py              # Node module tests (INBOX/OUTBOX overlap validation)
 │   └── test_cli.py               # CLI tests using Typer's CliRunner
 ├── docs/                          # Documentation directory
 ├── OUTBOX/                        # Reports and output artifacts
