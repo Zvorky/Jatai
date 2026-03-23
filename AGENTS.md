@@ -94,14 +94,20 @@ This ensures consistency, maintainability, and accessibility across the entire c
 
 ### After All Tests Pass
 
-1. **Create a comprehensive report** in the `OUTBOX/` directory containing:
+1. **Verify implementation against ARCHITECTURE and REQUIREMENTS:**
+   - Ensure all code changes align with `ARCHITECTURE.md` design decisions.
+   - Verify all functional requirements from `REQUIREMENTS.md` are met or documented as pending.
+   - If deviations exist, document them in the report or update ARCHITECTURE/REQUIREMENTS as needed.
+   - Do NOT commit code that violates established architecture without explicit user authorization.
+
+2. **Create a comprehensive .md report** in the `OUTBOX/` directory containing:
    - Summary of changes made.
-   - Test results (reference to `pytest.log`).
+   - Test results from `pytest.log`.
    - Files modified/created.
    - Tasks completed in `ToDo.md`.
    - Any breaking changes or migration notes.
 
-2. **Commit your changes** to git:
+3. **Commit your changes** to git:
    ```bash
    git add <modified files>
    git commit -m "<clear commit message describing changes>"
