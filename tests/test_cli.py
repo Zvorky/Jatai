@@ -8,7 +8,7 @@ import pytest
 from pathlib import Path
 from typer.testing import CliRunner
 
-from jatai.cli.main import app
+from jatai.cli.main import app, run
 from jatai.core.registry import Registry
 from jatai.core.node import Node
 
@@ -35,7 +35,7 @@ class TestCLIHappyPath:
         assert (Path(node_path) / "OUTBOX").exists()
 
     def test_cli_init_current_directory(self, temp_dir):
-        """Test initializing current directory as node."""
+        """Test initializing current directory as node using init alias."""
         # Pass temp_dir as explicit path argument instead of using cwd
         result = runner.invoke(app, ["init", str(temp_dir)])
 
@@ -60,6 +60,7 @@ class TestCLIHappyPath:
 
         assert result.exit_code == 0
         assert "Node:" in result.stdout or "INBOX" in result.stdout
+
 
     def test_cli_status_with_files(self, temp_dir):
         """Test status command showing file counts."""
@@ -95,6 +96,17 @@ class TestCLIHappyPath:
         # Verify registry was updated
         registry_path = temp_home / ".jatai"
         assert registry_path.exists()
+
+    def test_cli_root_alias_path(self, temp_dir, monkeypatch):
+        """Test `jatai [path]` alias using run() entrypoint."""
+        node_path = temp_dir / "alias_node"
+        monkeypatch.setattr("sys.argv", ["jatai", str(node_path)])
+
+        run()
+
+        assert node_path.exists()
+        assert (node_path / "INBOX").exists()
+        assert (node_path / "OUTBOX").exists()
 
 
 class TestCLIErrorFailureScenarios:
@@ -149,6 +161,43 @@ class TestCLIErrorFailureScenarios:
         assert result.exit_code == 0
         assert "Jataí" in result.stdout
         assert "usage" in result.stdout.lower()
+
+    def test_cli_init_overlap_prompt_rejected(self, temp_dir, monkeypatch):
+        """Test init fails when overlap suggestion prompt is rejected."""
+        node_path = temp_dir / "overlap_node"
+
+        # Build a global registry config that forces overlap.
+        from jatai.core.registry import Registry
+
+        reg = Registry(registry_path=temp_dir / ".jatai")
+        reg.set_config("INBOX_DIR", "shared")
+        reg.set_config("OUTBOX_DIR", "shared")
+        reg.save()
+        monkeypatch.setenv("HOME", str(temp_dir))
+
+        monkeypatch.setattr("typer.confirm", lambda *args, **kwargs: False)
+        result = runner.invoke(app, ["init", str(node_path)])
+
+        assert result.exit_code == 1
+
+    def test_cli_init_overlap_prompt_accepted(self, temp_dir, monkeypatch):
+        """Test init creates suggested split folders when overlap prompt is accepted."""
+        node_path = temp_dir / "overlap_node_accept"
+
+        from jatai.core.registry import Registry
+
+        reg = Registry(registry_path=temp_dir / ".jatai")
+        reg.set_config("INBOX_DIR", "shared")
+        reg.set_config("OUTBOX_DIR", "shared")
+        reg.save()
+        monkeypatch.setenv("HOME", str(temp_dir))
+
+        monkeypatch.setattr("typer.confirm", lambda *args, **kwargs: True)
+        result = runner.invoke(app, ["init", str(node_path)])
+
+        assert result.exit_code == 0
+        assert (node_path / "shared" / "INBOX").exists()
+        assert (node_path / "shared" / "OUTBOX").exists()
 
 
 class TestCLIMaliciousAdversarialScenarios:

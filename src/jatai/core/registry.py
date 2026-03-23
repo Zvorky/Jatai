@@ -2,19 +2,23 @@
 Registry module: Manages the global ~/.jatai file containing all registered node paths.
 """
 
-import json
 import yaml
+from filelock import FileLock, Timeout
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Dict, Optional, Any
 
 
 class Registry:
     """Manages global registry of all Jataí nodes and configurations."""
 
+    LOCK_TIMEOUT_SECONDS = 10
+
     DEFAULT_CONFIG = {
         "PREFIX_PROCESSED": "_",
         "PREFIX_ERROR": "!_",
         "RETRY_DELAY_BASE": 60,
+        "INBOX_DIR": "INBOX",
+        "OUTBOX_DIR": "OUTBOX",
     }
 
     def __init__(self, registry_path: Optional[Path] = None):
@@ -32,6 +36,16 @@ class Registry:
         self.nodes: Dict[str, Dict[str, Any]] = {}
         self.global_config: Dict[str, Any] = self.DEFAULT_CONFIG.copy()
 
+    @property
+    def lock_path(self) -> Path:
+        """Return lock file path used to synchronize registry access."""
+        return Path(f"{self.registry_path}.lock")
+
+    def _lock(self) -> FileLock:
+        """Create a file lock for the registry file."""
+        self.registry_path.parent.mkdir(parents=True, exist_ok=True)
+        return FileLock(str(self.lock_path), timeout=self.LOCK_TIMEOUT_SECONDS)
+
     def load(self) -> None:
         """
         Load registry from disk.
@@ -40,35 +54,38 @@ class Registry:
             FileNotFoundError: If registry file does not exist.
             yaml.YAMLError: If registry file is malformed YAML.
         """
-        if not self.registry_path.exists():
-            raise FileNotFoundError(f"Registry file not found: {self.registry_path}")
-
         try:
-            with open(self.registry_path, "r") as f:
-                data = yaml.safe_load(f)
+            with self._lock():
+                if not self.registry_path.exists():
+                    raise FileNotFoundError(f"Registry file not found: {self.registry_path}")
 
-            if data is None:
-                self.nodes = {}
-                self.global_config = self.DEFAULT_CONFIG.copy()
-            else:
-                # Extract global config and nodes
-                self.global_config = {
-                    k: v
-                    for k, v in data.items()
-                    if k in self.DEFAULT_CONFIG
-                }
-                # Merge with defaults
-                config = self.DEFAULT_CONFIG.copy()
-                config.update(self.global_config)
-                self.global_config = config
+                with open(self.registry_path, "r", encoding="utf-8") as f:
+                    data = yaml.safe_load(f)
 
-                # Extract nodes (entries that are dicts with path key)
-                self.nodes = {
-                    k: v for k, v in data.items() if isinstance(v, dict) and "path" in v
-                }
+                if data is None:
+                    self.nodes = {}
+                    self.global_config = self.DEFAULT_CONFIG.copy()
+                else:
+                    # Extract global config and nodes
+                    self.global_config = {
+                        k: v
+                        for k, v in data.items()
+                        if k in self.DEFAULT_CONFIG
+                    }
+                    # Merge with defaults
+                    config = self.DEFAULT_CONFIG.copy()
+                    config.update(self.global_config)
+                    self.global_config = config
+
+                    # Extract nodes (entries that are dicts with path key)
+                    self.nodes = {
+                        k: v for k, v in data.items() if isinstance(v, dict) and "path" in v
+                    }
 
         except yaml.YAMLError as e:
             raise yaml.YAMLError(f"Failed to parse registry YAML: {e}")
+        except Timeout as e:
+            raise TimeoutError(f"Registry lock timeout for {self.registry_path}: {e}")
 
     def save(self) -> None:
         """
@@ -76,14 +93,18 @@ class Registry:
 
         Creates parent directories if they don't exist.
         """
-        self.registry_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with self._lock():
+                self.registry_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Build output dict: global config + nodes
-        output = self.global_config.copy()
-        output.update(self.nodes)
+                # Build output dict: global config + nodes
+                output = self.global_config.copy()
+                output.update(self.nodes)
 
-        with open(self.registry_path, "w") as f:
-            yaml.safe_dump(output, f, default_flow_style=False, sort_keys=False)
+                with open(self.registry_path, "w", encoding="utf-8") as f:
+                    yaml.safe_dump(output, f, default_flow_style=False, sort_keys=False)
+        except Timeout as e:
+            raise TimeoutError(f"Registry lock timeout for {self.registry_path}: {e}")
 
     def add_node(self, node_name: str, node_path: str, config: Optional[Dict[str, Any]] = None) -> None:
         """

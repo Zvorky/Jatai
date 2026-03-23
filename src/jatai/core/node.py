@@ -28,7 +28,21 @@ class Node:
         self.local_config_path = self.node_path / self.LOCAL_CONFIG_FILENAME
         self.local_config: Dict[str, Any] = {}
 
-    def create(self, global_config: Optional[Dict[str, Any]] = None) -> None:
+    @staticmethod
+    def validate_inbox_outbox_overlap(inbox_path: Path, outbox_path: Path) -> None:
+        """Ensure INBOX and OUTBOX paths are different to avoid loops."""
+        if inbox_path.resolve() == outbox_path.resolve():
+            raise ValueError(
+                "INBOX and OUTBOX cannot point to the same directory. "
+                "Use separate paths to avoid broadcast loops."
+            )
+
+    def create(
+        self,
+        global_config: Optional[Dict[str, Any]] = None,
+        inbox_path: Optional[Path] = None,
+        outbox_path: Optional[Path] = None,
+    ) -> None:
         """
         Create the node structure (node dir, INBOX, OUTBOX, .jatai config).
 
@@ -38,12 +52,31 @@ class Node:
         # Create node directory
         self.node_path.mkdir(parents=True, exist_ok=True)
 
+        if inbox_path is None:
+            inbox_path = self.inbox_path
+        else:
+            inbox_path = Path(inbox_path)
+
+        if outbox_path is None:
+            outbox_path = self.outbox_path
+        else:
+            outbox_path = Path(outbox_path)
+
+        self.validate_inbox_outbox_overlap(inbox_path, outbox_path)
+
+        self.inbox_path = inbox_path
+        self.outbox_path = outbox_path
+
         # Create INBOX and OUTBOX
-        self.inbox_path.mkdir(exist_ok=True)
-        self.outbox_path.mkdir(exist_ok=True)
+        self.inbox_path.mkdir(parents=True, exist_ok=True)
+        self.outbox_path.mkdir(parents=True, exist_ok=True)
 
         # Create local config file
-        local_config = {"node_path": str(self.node_path)}
+        local_config = {
+            "node_path": str(self.node_path),
+            "INBOX_DIR": str(self.inbox_path),
+            "OUTBOX_DIR": str(self.outbox_path),
+        }
 
         if global_config:
             # Copy relevant global config to local (allow override)

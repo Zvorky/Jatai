@@ -27,7 +27,13 @@ class TestRegistryHappyPath:
     def test_registry_default_config(self):
         """Test Registry has correct default configuration."""
         registry = Registry()
-        expected_keys = {"PREFIX_PROCESSED", "PREFIX_ERROR", "RETRY_DELAY_BASE"}
+        expected_keys = {
+            "PREFIX_PROCESSED",
+            "PREFIX_ERROR",
+            "RETRY_DELAY_BASE",
+            "INBOX_DIR",
+            "OUTBOX_DIR",
+        }
         assert set(registry.DEFAULT_CONFIG.keys()) == expected_keys
 
     def test_registry_save_and_load(self, temp_dir):
@@ -101,6 +107,17 @@ class TestRegistryHappyPath:
         registry = Registry()
         registry.set_config("PREFIX_PROCESSED", "-marked")
         assert registry.get_config("PREFIX_PROCESSED") == "-marked"
+
+    def test_registry_uses_lock_file_on_save(self, temp_dir):
+        """Test save operation creates and uses a lock file."""
+        registry_path = temp_dir / ".jatai"
+        registry = Registry(registry_path=registry_path)
+        registry.add_node("n1", "/tmp/node")
+
+        registry.save()
+
+        assert registry_path.exists()
+        assert registry.lock_path.exists()
 
     def test_registry_config_node_override(self):
         """Test node-specific config overrides global."""

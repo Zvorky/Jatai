@@ -7,15 +7,15 @@ This document organizes the planned development phases for Jataí, ordered by pr
 The absolute minimum required to route files safely between folders.
 
 - [x] Set up Python project structure (`core/`, `cli/`, `tests/`).
-- [ ] Configure `pyproject.toml` with `console_scripts` entry point to expose `jatai` globally via pip.
+- [x] Configure `pyproject.toml` with `console_scripts` entry point to expose `jatai` globally via pip.
 - [x] Set up pytest framework and write first dummy test.
 - [x] Implement typer base setup.
 - [x] Write unit tests for global registry parsing (`~/.jatai`).
-- [ ] Implement `filelock` for concurrent-safe reading/writing of the global registry (`~/.jatai`).
-- [ ] Create `jatai init [path]` command (and its `jatai [path]` alias) to initialize INBOX/, OUTBOX/, and .jatai.
-- [ ] Implement path validation forbidding INBOX/OUTBOX overlap, adding an interactive prompt to suggest and create separate subdirectories.
+- [x] Implement `filelock` for concurrent-safe reading/writing of the global registry (`~/.jatai`).
+- [x] Create `jatai init [path]` command (and its `jatai [path]` alias) to initialize INBOX/, OUTBOX/, and .jatai.
+- [x] Implement path validation forbidding INBOX/OUTBOX overlap, adding an interactive prompt to suggest and create separate subdirectories.
 - [x] Implement physical file copying logic (`shutil.copy2`) using **Atomic Delivery** (temporary .tmp extension during copy).
-- [ ] Implement name collision resolution (appending numerical suffixes like `(1)` to duplicates in INBOX).
+- [x] Implement name collision resolution (appending numerical suffixes like `(1)` to duplicates in INBOX).
 - [x] Implement the success prefix logic (adding `_` to processed OUTBOX files).
 
 ## **Phase 2: The Routing Engine (Daemon & Watchdog)**

@@ -61,7 +61,7 @@ class TestDeliveryHappyPath:
         assert result.stat().st_mode == source.stat().st_mode
 
     def test_delivery_deliver_overwrites_existing_file(self, temp_dir):
-        """Test that deliver overwrites existing files."""
+        """Test that deliver resolves name collisions instead of overwriting."""
         source = temp_dir / "source.txt"
         source.write_text("new content")
 
@@ -74,7 +74,24 @@ class TestDeliveryHappyPath:
         delivery = Delivery(source, dest_dir)
         result = delivery.deliver()
 
+        assert result.name == "source (1).txt"
         assert result.read_text() == "new content"
+        assert existing.read_text() == "old content"
+
+    def test_delivery_deliver_collision_double_extension(self, temp_dir):
+        """Test collision handling with files that have double extensions."""
+        source = temp_dir / "archive.tar.gz"
+        source.write_text("new")
+
+        dest_dir = temp_dir / "dest"
+        dest_dir.mkdir()
+        (dest_dir / "archive.tar.gz").write_text("old")
+
+        delivery = Delivery(source, dest_dir)
+        result = delivery.deliver()
+
+        assert result.name == "archive (1).tar.gz"
+        assert result.read_text() == "new"
 
     def test_delivery_deliver_large_file(self, temp_dir):
         """Test that deliver works with large files."""

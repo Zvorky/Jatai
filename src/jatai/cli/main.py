@@ -2,6 +2,7 @@
 Main CLI module for Jataí using Typer.
 """
 
+import sys
 import typer
 from pathlib import Path
 from typing import Optional
@@ -14,12 +15,19 @@ app = typer.Typer(
     help="Jataí 🐝 - The local micro-email and messaging bus for your file system.",
 )
 
+KNOWN_COMMANDS = {"init", "status"}
 
-@app.command()
-def init(
-    path: Optional[str] = typer.Argument(None, help="Path to initialize as a Jataí node"),
-) -> None:
-    """Initialize a new Jataí node."""
+
+def _to_path(node_path: Path, raw_value: str) -> Path:
+    """Convert INBOX/OUTBOX config values into absolute paths."""
+    candidate = Path(raw_value)
+    if candidate.is_absolute():
+        return candidate
+    return node_path / candidate
+
+
+def _initialize_node(path: Optional[str] = None) -> None:
+    """Initialize and register a Jataí node for the provided path."""
     if path is None:
         path = str(Path.cwd())
 
@@ -35,8 +43,35 @@ def init(
         # If global registry doesn't exist, use defaults
         global_config = Registry.DEFAULT_CONFIG.copy()
 
+    inbox_cfg = str(global_config.get("INBOX_DIR", Node.INBOX_DIRNAME))
+    outbox_cfg = str(global_config.get("OUTBOX_DIR", Node.OUTBOX_DIRNAME))
+    inbox_path = _to_path(node_path, inbox_cfg)
+    outbox_path = _to_path(node_path, outbox_cfg)
+
+    if inbox_path.resolve() == outbox_path.resolve():
+        base_dir = inbox_path.resolve()
+        suggested_inbox = base_dir / "INBOX"
+        suggested_outbox = base_dir / "OUTBOX"
+        typer.echo("✗ INBOX_DIR and OUTBOX_DIR cannot be the same path.")
+        typer.echo(
+            "Suggested split: "
+            f"INBOX={suggested_inbox} OUTBOX={suggested_outbox}"
+        )
+        confirmed = typer.confirm(
+            "Create and use suggested INBOX/OUTBOX subdirectories?",
+            default=True,
+        )
+        if not confirmed:
+            raise typer.Exit(code=1)
+        inbox_path = suggested_inbox
+        outbox_path = suggested_outbox
+
     try:
-        node.create(global_config=global_config)
+        node.create(
+            global_config=global_config,
+            inbox_path=inbox_path,
+            outbox_path=outbox_path,
+        )
         typer.echo(f"✓ Initialized node at {node_path}")
         typer.echo(f"  INBOX:  {node.inbox_path}")
         typer.echo(f"  OUTBOX: {node.outbox_path}")
@@ -57,6 +92,14 @@ def init(
     except Exception as e:
         typer.echo(f"✗ Error initializing node: {e}", err=True)
         raise typer.Exit(code=1)
+
+
+@app.command()
+def init(
+    path: Optional[str] = typer.Argument(None, help="Path to initialize as a Jataí node"),
+) -> None:
+    """Initialize a new Jataí node."""
+    _initialize_node(path)
 
 
 @app.command()
@@ -83,5 +126,14 @@ def status() -> None:
         raise typer.Exit(code=1)
 
 
-if __name__ == "__main__":
+def run() -> None:
+    """Entrypoint for console_scripts supporting `jatai [path]` alias."""
+    args = sys.argv[1:]
+    if args and not args[0].startswith("-") and args[0] not in KNOWN_COMMANDS:
+        _initialize_node(args[0])
+        return
     app()
+
+
+if __name__ == "__main__":
+    run()

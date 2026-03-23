@@ -15,21 +15,22 @@ By utilizing standardized directories (INBOX/ and OUTBOX/) and operating system 
 ## **📦 Installation**
 
 Jataí is currently in active development and is not published as a pip package yet.
-Use a local virtual environment and install dependencies from `requirements.txt`.
+Use a local virtual environment and install in editable mode.
 
 ```bash
 python3 -m venv venv
 . venv/bin/activate
-pip install -r requirements.txt
+pip install -e .
 ```
 
 ## **🐝 Usage (The File-System Way)**
 
 Current implementation status: core modules plus basic CLI commands are available for local development and testing.
 
-1. **Initialize a Node (current command):** `python -m jatai.cli.main init ./my-folder`
-2. **Check Node Status (current command):** `python -m jatai.cli.main status`
-3. **Delivery behavior already implemented in core:** Atomic copy logic and success-prefix processing are covered by current code/tests.
+1. **Initialize a Node (current command):** `jatai init ./my-folder`
+2. **Initialize via Alias (current command):** `jatai ./my-folder`
+3. **Check Node Status (current command):** `jatai status`
+4. **Delivery behavior already implemented in core:** Atomic copy logic and success-prefix processing are covered by current code/tests.
 
 The command surface in the sections below remains the product target roadmap, not a statement that every command is already available.
 
@@ -89,6 +90,7 @@ $PLANNED / TODO$
 ├── TESTE/                         # Auxiliary local directory
 ├── venv/                          # Local Python virtual environment
 ├── requirements.txt               # Python dependencies currently in use
+├── pyproject.toml                 # Packaging metadata and console_scripts entrypoint
 ├── pytest.ini                     # Pytest configuration
 ├── pytest.log                     # Latest recorded pytest run output
 ├── .gitignore                     # Git ignore rules

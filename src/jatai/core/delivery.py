@@ -12,6 +12,30 @@ class Delivery:
 
     TMP_EXTENSION = ".tmp"
 
+    @staticmethod
+    def _split_name_and_suffix(file_name: str) -> tuple[str, str]:
+        """Split a filename into stem and full suffix string."""
+        path = Path(file_name)
+        suffix = "".join(path.suffixes)
+        if suffix:
+            stem = file_name[: -len(suffix)]
+        else:
+            stem = file_name
+        return stem, suffix
+
+    def _resolve_collision(self, target_path: Path) -> Path:
+        """Return a non-conflicting destination by appending ` (n)` when needed."""
+        if not target_path.exists():
+            return target_path
+
+        stem, suffix = self._split_name_and_suffix(target_path.name)
+        index = 1
+        while True:
+            candidate = target_path.parent / f"{stem} ({index}){suffix}"
+            if not candidate.exists():
+                return candidate
+            index += 1
+
     def __init__(self, source_path: Path, destination_path: Path):
         """
         Initialize Delivery handler.
@@ -45,8 +69,8 @@ class Delivery:
         """
         # Build intermediate and final paths
         file_name = self.source_path.name
-        tmp_file_path = self.destination_path / (file_name + self.TMP_EXTENSION)
-        final_file_path = self.destination_path / file_name
+        final_file_path = self._resolve_collision(self.destination_path / file_name)
+        tmp_file_path = final_file_path.parent / (final_file_path.name + self.TMP_EXTENSION)
 
         try:
             # Step 1: Copy to temporary file

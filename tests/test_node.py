@@ -250,6 +250,15 @@ class TestNodeErrorFailureScenarios:
         # Should return empty list, not raise
         assert node.list_inbox() == []
 
+    def test_node_create_fails_when_inbox_outbox_overlap(self, temp_dir):
+        """Test creating node fails when INBOX and OUTBOX paths overlap."""
+        node_path = temp_dir / "my_node"
+        node = Node(node_path)
+        shared = node_path / "same"
+
+        with pytest.raises(ValueError):
+            node.create(inbox_path=shared, outbox_path=shared)
+
 
 class TestNodeMaliciousAdversarialScenarios:
     """Malicious/adversarial scenario tests for Node."""
