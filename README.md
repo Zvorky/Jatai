@@ -25,12 +25,14 @@ pip install -e .
 
 ## **🐝 Usage (The File-System Way)**
 
-Current implementation status: core modules plus basic CLI commands are available for local development and testing.
+Current implementation status: core modules, basic CLI, daemon lifecycle, startup scan, and watchdog-based routing are available for local development and testing.
 
 1. **Initialize a Node (current command):** `jatai init ./my-folder`
 2. **Initialize via Alias (current command):** `jatai ./my-folder`
 3. **Check Node Status (current command):** `jatai status`
-4. **Delivery behavior already implemented in core:** Atomic copy logic and success-prefix processing are covered by current code/tests.
+4. **Start the Daemon (current command):** `jatai start`
+5. **Stop the Daemon (current command):** `jatai stop`
+6. **Delivery behavior already implemented in core:** Atomic copy logic, startup scan, watchdog triggers, collision handling, and success-prefix processing are covered by current code/tests.
 
 The command surface in the sections below remains the product target roadmap, not a statement that every command is already available.
 
@@ -70,6 +72,8 @@ $PLANNED / TODO$
 │   ├── __init__.py               # Package metadata and version info
 │   ├── core/                      # Core modules
 │   │   ├── __init__.py
+│   │   ├── autostart.py          # OS auto-start registration helpers
+│   │   ├── daemon.py             # Background daemon, PID lock, watchdog integration
 │   │   ├── registry.py           # Global registry (~/.jatai) management
 │   │   ├── delivery.py           # Atomic file delivery (shutil.copy2 with .tmp)
 │   │   ├── prefix.py             # Prefix/state handling helpers
@@ -80,6 +84,7 @@ $PLANNED / TODO$
 ├── tests/                         # Test suite (pytest)
 │   ├── conftest.py               # pytest fixtures and configuration
 │   ├── test_dummy.py             # Basic pytest setup test
+│   ├── test_daemon.py            # Daemon lifecycle, watchdog, and auto-start tests
 │   ├── test_registry.py          # Registry module tests (happy/error/adversarial/locks)
 │   ├── test_delivery.py          # Delivery module tests (atomic delivery & naming collision)
 │   ├── test_prefix.py            # Prefix state machine & max retries tests

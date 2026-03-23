@@ -22,13 +22,13 @@ The absolute minimum required to route files safely between folders.
 
 Making the system reactive and background-driven.
 
-- [ ] Implement `jatai start` and `jatai stop` logic.
-- [ ] Implement **Daemon Exclusivity**: Use a PID/Lock file to gracefully reject duplicate `start` commands.
-- [ ] Implement **OS Auto-Start Registration** logic (systemd, launchd, or startup folder mapping).
-- [ ] Implement the **Startup Scan**: on boot, scan all registered OUTBOXes for pending files.
-- [ ] Integrate watchdog to listen for `on_created` and `on_moved` events in active OUTBOXes.
-- [ ] Write integration tests simulating watchdog file drop events.
-- [ ] Implement logic to ignore files currently being written (files starting with the success prefix).
+- [x] Implement `jatai start` and `jatai stop` logic.
+- [x] Implement **Daemon Exclusivity**: Use a PID/Lock file to gracefully reject duplicate `start` commands.
+- [x] Implement **OS Auto-Start Registration** logic (systemd, launchd, or startup folder mapping).
+- [x] Implement the **Startup Scan**: on boot, scan all registered OUTBOXes for pending files.
+- [x] Integrate watchdog to listen for `on_created` and `on_moved` events in active OUTBOXes.
+- [x] Write integration tests simulating watchdog file drop events.
+- [x] Implement logic to ignore files currently being written (files starting with the success prefix).
 
 ## **Phase 3: Resilience & Error Handling**
 

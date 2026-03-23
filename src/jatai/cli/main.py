@@ -2,11 +2,17 @@
 Main CLI module for Jataí using Typer.
 """
 
+import os
+import signal
+import subprocess
 import sys
+import time
 import typer
 from pathlib import Path
 from typing import Optional
 
+from jatai.core.autostart import AutoStartRegistrar
+from jatai.core.daemon import AlreadyRunningError, JataiDaemon
 from jatai.core.registry import Registry
 from jatai.core.node import Node
 
@@ -15,7 +21,7 @@ app = typer.Typer(
     help="Jataí 🐝 - The local micro-email and messaging bus for your file system.",
 )
 
-KNOWN_COMMANDS = {"init", "status"}
+KNOWN_COMMANDS = {"init", "status", "start", "stop", "_daemon-run"}
 
 
 def _to_path(node_path: Path, raw_value: str) -> Path:
@@ -94,6 +100,17 @@ def _initialize_node(path: Optional[str] = None) -> None:
         raise typer.Exit(code=1)
 
 
+def _spawn_daemon_process() -> subprocess.Popen:
+    """Spawn the background daemon process detached from the current terminal."""
+    return subprocess.Popen(
+        [sys.executable, "-m", "jatai.cli.main", "_daemon-run"],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
+
 @app.command()
 def init(
     path: Optional[str] = typer.Argument(None, help="Path to initialize as a Jataí node"),
@@ -124,6 +141,67 @@ def status() -> None:
     except Exception as e:
         typer.echo(f"✗ Error: {e}", err=True)
         raise typer.Exit(code=1)
+
+
+@app.command()
+def start(
+    foreground: bool = typer.Option(False, "--foreground", hidden=True),
+) -> None:
+    """Start the Jataí daemon."""
+    daemon = JataiDaemon()
+
+    if foreground:
+        try:
+            daemon.run()
+        except AlreadyRunningError as e:
+            typer.echo(f"✗ {e}", err=True)
+            raise typer.Exit(code=1)
+        return
+
+    if daemon.is_running():
+        typer.echo("✗ Already running", err=True)
+        raise typer.Exit(code=1)
+
+    service_path = AutoStartRegistrar().register()
+    _spawn_daemon_process()
+    typer.echo("✓ Daemon started")
+    typer.echo(f"✓ Auto-start registered at {service_path}")
+
+
+@app.command(name="_daemon-run", hidden=True)
+def daemon_run() -> None:
+    """Internal command used to run the daemon in the background."""
+    daemon = JataiDaemon()
+    try:
+        daemon.run()
+    except AlreadyRunningError as e:
+        typer.echo(f"✗ {e}", err=True)
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def stop() -> None:
+    """Stop the Jataí daemon."""
+    daemon = JataiDaemon()
+    pid = daemon.read_pid()
+
+    if pid is None or not daemon.is_process_running(pid):
+        daemon.release_singleton()
+        typer.echo("✗ Daemon is not running", err=True)
+        raise typer.Exit(code=1)
+
+    os.kill(pid, signal.SIGTERM)
+    deadline = 5.0
+    start_time = time.monotonic()
+    while time.monotonic() - start_time < deadline:
+        if not daemon.is_process_running(pid):
+            daemon.release_singleton()
+            typer.echo("✓ Daemon stopped")
+            return
+        time.sleep(0.1)
+
+    typer.echo("✗ Failed to stop daemon within timeout", err=True)
+    raise typer.Exit(code=1)
 
 
 def run() -> None:

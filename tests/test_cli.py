@@ -97,6 +97,50 @@ class TestCLIHappyPath:
         registry_path = temp_home / ".jatai"
         assert registry_path.exists()
 
+    def test_cli_start_spawns_background_daemon(self, monkeypatch):
+        """Test start command spawns daemon and registers auto-start."""
+        calls = {"spawn": 0, "register": 0}
+
+        monkeypatch.setattr("jatai.cli.main.JataiDaemon.is_running", lambda self: False)
+        monkeypatch.setattr(
+            "jatai.cli.main.AutoStartRegistrar.register",
+            lambda self: Path("/tmp/jatai.service"),
+        )
+
+        def fake_spawn():
+            calls["spawn"] += 1
+            return object()
+
+        monkeypatch.setattr("jatai.cli.main._spawn_daemon_process", fake_spawn)
+
+        result = runner.invoke(app, ["start"])
+
+        assert result.exit_code == 0
+        assert calls["spawn"] == 1
+        assert "Daemon started" in result.stdout
+
+    def test_cli_stop_running_daemon(self, monkeypatch):
+        """Test stop command terminates a running daemon."""
+        state = {"running": True, "killed": False}
+
+        monkeypatch.setattr("jatai.cli.main.JataiDaemon.read_pid", lambda self: 99999)
+
+        def fake_running(self, pid):
+            return state["running"]
+
+        def fake_kill(pid, sig):
+            state["killed"] = True
+            state["running"] = False
+
+        monkeypatch.setattr("jatai.cli.main.JataiDaemon.is_process_running", fake_running)
+        monkeypatch.setattr("jatai.cli.main.os.kill", fake_kill)
+
+        result = runner.invoke(app, ["stop"])
+
+        assert result.exit_code == 0
+        assert state["killed"] is True
+        assert "Daemon stopped" in result.stdout
+
     def test_cli_root_alias_path(self, temp_dir, monkeypatch):
         """Test `jatai [path]` alias using run() entrypoint."""
         node_path = temp_dir / "alias_node"
@@ -161,6 +205,24 @@ class TestCLIErrorFailureScenarios:
         assert result.exit_code == 0
         assert "Jataí" in result.stdout
         assert "usage" in result.stdout.lower()
+
+    def test_cli_start_when_already_running(self, monkeypatch):
+        """Test start fails gracefully when daemon is already running."""
+        monkeypatch.setattr("jatai.cli.main.JataiDaemon.is_running", lambda self: True)
+
+        result = runner.invoke(app, ["start"])
+
+        assert result.exit_code == 1
+        assert "Already running" in result.stdout or "Already running" in result.stderr
+
+    def test_cli_stop_when_not_running(self, monkeypatch):
+        """Test stop fails gracefully if daemon is not running."""
+        monkeypatch.setattr("jatai.cli.main.JataiDaemon.read_pid", lambda self: None)
+
+        result = runner.invoke(app, ["stop"])
+
+        assert result.exit_code == 1
+        assert "not running" in result.stdout.lower() or "not running" in result.stderr.lower()
 
     def test_cli_init_overlap_prompt_rejected(self, temp_dir, monkeypatch):
         """Test init fails when overlap suggestion prompt is rejected."""
