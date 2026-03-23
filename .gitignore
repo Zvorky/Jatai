@@ -1,3 +1,8 @@
+# Jataí
+.jatai
+INBOX/
+OUTBOX/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
