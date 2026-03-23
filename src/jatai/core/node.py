@@ -2,9 +2,11 @@
 Node module: Represents a single Jataí node with INBOX and OUTBOX folders.
 """
 
-import yaml
+import shutil
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
+
+import yaml
 
 
 class Node:
@@ -12,8 +14,10 @@ class Node:
 
     LOCAL_CONFIG_FILENAME = ".jatai"
     LOCAL_CONFIG_DISABLED = "._jatai"
+    LOCAL_CONFIG_BACKUP = ".jatai.bkp"
     INBOX_DIRNAME = "INBOX"
     OUTBOX_DIRNAME = "OUTBOX"
+    PREFIX_KEYS = ("PREFIX_PROCESSED", "PREFIX_ERROR")
 
     def __init__(self, node_path: Path):
         """
@@ -26,6 +30,8 @@ class Node:
         self.inbox_path = self.node_path / self.INBOX_DIRNAME
         self.outbox_path = self.node_path / self.OUTBOX_DIRNAME
         self.local_config_path = self.node_path / self.LOCAL_CONFIG_FILENAME
+        self.disabled_config_path = self.node_path / self.LOCAL_CONFIG_DISABLED
+        self.backup_config_path = self.node_path / self.LOCAL_CONFIG_BACKUP
         self.local_config: Dict[str, Any] = {}
 
     @staticmethod
@@ -108,10 +114,76 @@ class Node:
         except yaml.YAMLError as e:
             raise yaml.YAMLError(f"Failed to parse local config: {e}")
 
+    def load_any_config(self) -> None:
+        """Load either enabled or disabled local configuration from disk."""
+        config_path = self.local_config_path
+        if not config_path.exists():
+            config_path = self.disabled_config_path
+        if not config_path.exists():
+            raise FileNotFoundError(
+                f"Local config not found: {self.local_config_path} or {self.disabled_config_path}"
+            )
+
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                self.local_config = yaml.safe_load(f) or {}
+        except yaml.YAMLError as e:
+            raise yaml.YAMLError(f"Failed to parse local config: {e}")
+
+    def apply_effective_config(self, global_config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Merge global defaults with local overrides and update resolved paths."""
+        effective_config = dict(global_config or {})
+        effective_config.update(self.local_config)
+        self.local_config = effective_config
+
+        inbox_value = effective_config.get("INBOX_DIR", self.INBOX_DIRNAME)
+        outbox_value = effective_config.get("OUTBOX_DIR", self.OUTBOX_DIRNAME)
+
+        self.inbox_path = self._resolve_configured_path(inbox_value, self.node_path / self.INBOX_DIRNAME)
+        self.outbox_path = self._resolve_configured_path(outbox_value, self.node_path / self.OUTBOX_DIRNAME)
+        self.validate_inbox_outbox_overlap(self.inbox_path, self.outbox_path)
+        return self.local_config
+
+    def _resolve_configured_path(self, value: Any, default_path: Path) -> Path:
+        if not value:
+            return default_path
+        candidate = Path(value)
+        if candidate.is_absolute():
+            return candidate
+        return self.node_path / candidate
+
     def save_config(self) -> None:
         """Save local configuration to .jatai file."""
-        with open(self.local_config_path, "w") as f:
+        with open(self.local_config_path, "w", encoding="utf-8") as f:
             yaml.safe_dump(self.local_config, f, default_flow_style=False)
+
+    def write_config(self, config: Dict[str, Any], target_path: Optional[Path] = None) -> None:
+        """Write a configuration mapping to the target path."""
+        destination = target_path or self.local_config_path
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with open(destination, "w", encoding="utf-8") as f:
+            yaml.safe_dump(config, f, default_flow_style=False)
+
+    def backup_current_config(self, previous_config: Optional[Dict[str, Any]] = None) -> Path:
+        """Persist the current or provided config into .jatai.bkp."""
+        if previous_config is None:
+            if self.local_config_path.exists():
+                shutil.copy2(self.local_config_path, self.backup_config_path)
+            elif self.disabled_config_path.exists():
+                shutil.copy2(self.disabled_config_path, self.backup_config_path)
+            else:
+                raise FileNotFoundError("Cannot create backup without an existing config")
+        else:
+            self.write_config(previous_config, self.backup_config_path)
+        return self.backup_config_path
+
+    def restore_backup(self) -> None:
+        """Restore .jatai from .jatai.bkp."""
+        if not self.backup_config_path.exists():
+            raise FileNotFoundError(f"Backup config not found: {self.backup_config_path}")
+
+        shutil.copy2(self.backup_config_path, self.local_config_path)
+        self.load_config()
 
     def is_enabled(self) -> bool:
         """
@@ -129,8 +201,7 @@ class Node:
         Returns:
             True if node is disabled, False otherwise
         """
-        disabled_config_path = self.node_path / self.LOCAL_CONFIG_DISABLED
-        return disabled_config_path.exists()
+        return self.disabled_config_path.exists()
 
     def disable(self) -> None:
         """
@@ -142,8 +213,7 @@ class Node:
         if not self.local_config_path.exists():
             raise FileNotFoundError(f"Cannot disable: {self.local_config_path} not found")
 
-        disabled_path = self.node_path / self.LOCAL_CONFIG_DISABLED
-        self.local_config_path.rename(disabled_path)
+        self.local_config_path.rename(self.disabled_config_path)
 
     def enable(self) -> None:
         """
@@ -152,11 +222,10 @@ class Node:
         Raises:
             FileNotFoundError: If ._jatai doesn't exist
         """
-        disabled_path = self.node_path / self.LOCAL_CONFIG_DISABLED
-        if not disabled_path.exists():
-            raise FileNotFoundError(f"Cannot enable: {disabled_path} not found")
+        if not self.disabled_config_path.exists():
+            raise FileNotFoundError(f"Cannot enable: {self.disabled_config_path} not found")
 
-        disabled_path.rename(self.local_config_path)
+        self.disabled_config_path.rename(self.local_config_path)
         self.load_config()
 
     def get_config(self, key: str, default: Any = None) -> Any:
@@ -204,3 +273,65 @@ class Node:
         if not self.outbox_path.exists():
             return []
         return [f for f in self.outbox_path.iterdir() if f.is_file()]
+
+    def migrate_prefix_history(
+        self,
+        previous_config: Dict[str, Any],
+        current_config: Dict[str, Any],
+    ) -> bool:
+        """Rename local historical files when prefix values change."""
+        rename_plan: list[tuple[Path, Path]] = []
+        processed_keys = []
+
+        for key in self.PREFIX_KEYS:
+            old_prefix = str(previous_config.get(key, ""))
+            new_prefix = str(current_config.get(key, ""))
+            if not old_prefix or old_prefix == new_prefix:
+                continue
+            processed_keys.append((old_prefix, new_prefix))
+
+        if not processed_keys:
+            return False
+
+        for directory in (self.inbox_path, self.outbox_path):
+            if not directory.exists():
+                continue
+            for file_path in sorted(directory.iterdir()):
+                if not file_path.is_file():
+                    continue
+                target_name = file_path.name
+                for old_prefix, new_prefix in sorted(processed_keys, key=lambda item: len(item[0]), reverse=True):
+                    if target_name.startswith(old_prefix):
+                        target_name = new_prefix + target_name[len(old_prefix) :]
+                        break
+                if target_name == file_path.name:
+                    continue
+                target_path = file_path.parent / target_name
+                if target_path.exists() and target_path != file_path:
+                    raise FileExistsError(f"Prefix migration collision for {target_path}")
+                rename_plan.append((file_path, target_path))
+
+        completed: list[tuple[Path, Path]] = []
+        try:
+            for source_path, target_path in rename_plan:
+                source_path.rename(target_path)
+                completed.append((source_path, target_path))
+        except Exception:
+            for source_path, target_path in reversed(completed):
+                if target_path.exists():
+                    target_path.rename(source_path)
+            raise
+
+        return bool(rename_plan)
+
+    def drop_error_notice(self, message: str, error_prefix: Optional[str] = None) -> Path:
+        """Write an error notice into the INBOX for manual inspection."""
+        self.inbox_path.mkdir(parents=True, exist_ok=True)
+        prefix = error_prefix if error_prefix is not None else str(self.local_config.get("PREFIX_ERROR", "!_"))
+        notice_path = self.inbox_path / f"{prefix}config-migration-error.md"
+        suffix = 1
+        while notice_path.exists():
+            notice_path = self.inbox_path / f"{prefix}config-migration-error ({suffix}).md"
+            suffix += 1
+        notice_path.write_text(message, encoding="utf-8")
+        return notice_path

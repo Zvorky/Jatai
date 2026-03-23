@@ -52,6 +52,42 @@ class TestNodeHappyPath:
         assert node.local_config["PREFIX_ERROR"] == "❌"
         assert node.local_config["RETRY_DELAY_BASE"] == 120
 
+    def test_node_apply_effective_config_prefers_local_over_global(self, temp_dir):
+        """Test local .jatai values override global defaults dynamically."""
+        node_path = temp_dir / "my_node"
+        node = Node(node_path)
+        node.create()
+        node.local_config = {
+            "PREFIX_PROCESSED": "local_",
+            "INBOX_DIR": "custom_inbox",
+        }
+
+        effective = node.apply_effective_config(
+            {
+                "PREFIX_PROCESSED": "global_",
+                "PREFIX_ERROR": "global_error_",
+                "OUTBOX_DIR": "custom_outbox",
+            }
+        )
+
+        assert effective["PREFIX_PROCESSED"] == "local_"
+        assert effective["PREFIX_ERROR"] == "global_error_"
+        assert node.inbox_path == node_path / "custom_inbox"
+        assert node.outbox_path == node_path / "custom_outbox"
+
+    def test_node_restore_backup_restores_previous_config(self, temp_dir):
+        """Test .jatai.bkp can restore a previous configuration snapshot."""
+        node_path = temp_dir / "my_node"
+        node = Node(node_path)
+        node.create(global_config={"PREFIX_PROCESSED": "original_"})
+        original_config = dict(node.local_config)
+
+        node.backup_current_config(original_config)
+        node.write_config({"PREFIX_PROCESSED": "changed_"})
+        node.restore_backup()
+
+        assert node.local_config["PREFIX_PROCESSED"] == original_config["PREFIX_PROCESSED"]
+
     def test_node_load_config(self, temp_dir):
         """Test loading node config from disk."""
         node_path = temp_dir / "my_node"

@@ -5,9 +5,8 @@ Background daemon, startup scan, and watchdog integration for Jataí.
 import os
 import signal
 import threading
-import time
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from filelock import FileLock, Timeout
 from watchdog.events import FileCreatedEvent, FileMovedEvent, FileSystemEventHandler
@@ -41,6 +40,36 @@ class JataiWatchdogHandler(FileSystemEventHandler):
         self.daemon.process_outbox_candidate(Path(event.dest_path), self.source_node_path)
 
 
+class JataiNodeConfigHandler(FileSystemEventHandler):
+    """Watch node roots for config enable/disable and live edits."""
+
+    CONFIG_FILENAMES = {Node.LOCAL_CONFIG_FILENAME, Node.LOCAL_CONFIG_DISABLED}
+
+    def __init__(self, daemon: "JataiDaemon", node_path: Path) -> None:
+        self.daemon = daemon
+        self.node_path = Path(node_path).resolve()
+
+    def on_created(self, event: FileCreatedEvent) -> None:
+        if event.is_directory:
+            return
+        self._handle_path(Path(event.src_path))
+
+    def on_modified(self, event) -> None:
+        if event.is_directory:
+            return
+        self._handle_path(Path(event.src_path))
+
+    def on_moved(self, event: FileMovedEvent) -> None:
+        if event.is_directory:
+            return
+        self._handle_path(Path(event.src_path))
+        self._handle_path(Path(event.dest_path))
+
+    def _handle_path(self, path: Path) -> None:
+        if path.name in self.CONFIG_FILENAMES:
+            self.daemon.handle_node_config_change(self.node_path)
+
+
 class JataiDaemon:
     """Manage background routing lifecycle and event-driven delivery."""
 
@@ -58,6 +87,12 @@ class JataiDaemon:
         self.observer_factory = observer_factory
         self.stop_event = threading.Event()
         self.observer: Optional[Observer] = None
+        self.node_config_cache: Dict[Path, Dict[str, object]] = {}
+
+    def _load_registry(self) -> Registry:
+        registry = Registry(self.registry_path)
+        registry.load()
+        return registry
 
     @property
     def pid_lock_path(self) -> Path:
@@ -114,31 +149,102 @@ class JataiDaemon:
     def _handle_shutdown_signal(self, signum: int, frame) -> None:
         self.stop_event.set()
 
-    def _resolve_configured_path(self, node: Node, key: str, default_path: Path) -> Path:
-        value = node.get_config(key)
-        if not value:
-            return default_path
-        candidate = Path(value)
-        if candidate.is_absolute():
-            return candidate
-        return node.node_path / candidate
-
-    def load_active_nodes(self) -> List[Node]:
-        registry = Registry(self.registry_path)
-        registry.load()
+    def load_registered_nodes(self) -> List[Node]:
+        registry = self._load_registry()
         nodes: List[Node] = []
         for node_data in registry.nodes.values():
             node = Node(Path(node_data["path"]))
-            if node.is_disabled() or not node.is_enabled():
+            if not node.node_path.exists():
                 continue
             try:
-                node.load_config()
+                node.load_any_config()
             except FileNotFoundError:
                 continue
-            node.inbox_path = self._resolve_configured_path(node, "INBOX_DIR", node.inbox_path)
-            node.outbox_path = self._resolve_configured_path(node, "OUTBOX_DIR", node.outbox_path)
+            node.apply_effective_config(registry.global_config)
             nodes.append(node)
         return nodes
+
+    def load_active_nodes(self) -> List[Node]:
+        nodes: List[Node] = []
+        for node in self.load_registered_nodes():
+            if node.is_disabled() or not node.is_enabled():
+                continue
+            nodes.append(node)
+        return nodes
+
+    def _update_node_cache(self, node: Node) -> None:
+        self.node_config_cache[node.node_path] = dict(node.local_config)
+
+    def _remove_node_cache(self, node_path: Path) -> None:
+        self.node_config_cache.pop(Path(node_path).resolve(), None)
+
+    def _refresh_observer_watches(self) -> None:
+        if self.observer is None:
+            return
+        if hasattr(self.observer, "unschedule_all"):
+            self.observer.unschedule_all()
+
+        registered_nodes = self.load_registered_nodes()
+        for node in registered_nodes:
+            self.observer.schedule(
+                JataiNodeConfigHandler(self, node.node_path),
+                str(node.node_path),
+                recursive=False,
+            )
+
+        for node in registered_nodes:
+            if node.is_disabled() or not node.is_enabled():
+                self._remove_node_cache(node.node_path)
+                continue
+            self.observer.schedule(
+                JataiWatchdogHandler(self, node.node_path),
+                str(node.outbox_path),
+                recursive=False,
+            )
+            self._update_node_cache(node)
+
+    def handle_node_config_change(self, node_path: Path) -> None:
+        node = Node(node_path)
+        previous_config = self.node_config_cache.get(node.node_path)
+
+        try:
+            registry = self._load_registry()
+        except FileNotFoundError:
+            return
+
+        try:
+            node.load_any_config()
+        except FileNotFoundError:
+            self._remove_node_cache(node.node_path)
+            self._refresh_observer_watches()
+            return
+
+        node.apply_effective_config(registry.global_config)
+
+        if previous_config and node.is_enabled():
+            prefix_keys_changed = any(
+                previous_config.get(key) != node.local_config.get(key)
+                for key in Node.PREFIX_KEYS
+            )
+            if prefix_keys_changed:
+                node.backup_current_config(previous_config)
+                try:
+                    node.migrate_prefix_history(previous_config, node.local_config)
+                except Exception as exc:
+                    node.write_config(previous_config)
+                    node.local_config = dict(previous_config)
+                    node.apply_effective_config(registry.global_config)
+                    node.drop_error_notice(
+                        f"Prefix migration aborted and configuration restored.\n\nReason: {exc}\n",
+                        error_prefix=str(previous_config.get("PREFIX_ERROR", "!_")),
+                    )
+
+        if node.is_enabled() and not node.is_disabled():
+            self._update_node_cache(node)
+        else:
+            self._remove_node_cache(node.node_path)
+
+        self._refresh_observer_watches()
 
     def process_outbox_candidate(self, file_path: Path, source_node_path: Optional[Path] = None) -> None:
         if not file_path.exists() or not file_path.is_file():
@@ -211,16 +317,10 @@ class JataiDaemon:
                 self.broadcast_file(node, file_path, nodes)
 
     def setup_watchdog(self) -> None:
-        nodes = self.load_active_nodes()
         observer = self.observer_factory()
-        for node in nodes:
-            observer.schedule(
-                JataiWatchdogHandler(self, node.node_path),
-                str(node.outbox_path),
-                recursive=False,
-            )
         observer.start()
         self.observer = observer
+        self._refresh_observer_watches()
 
     def shutdown_watchdog(self) -> None:
         if self.observer is None:
