@@ -53,10 +53,6 @@ The command surface in the sections below mixes implemented commands and product
 
 ## **🛠️ CLI & TUI Toolbox**
 
-*Target command surface (planned and in-progress).*
-
-$PLANNED / TODO$
-
 | Command | Action |
 | :---- | :---- |
 | `jatai` | Opens the interactive Text User Interface (TUI). |
@@ -71,7 +67,10 @@ $PLANNED / TODO$
 | `jatai unread <file>` | Removes the success prefix from a file in the INBOX. |
 | `jatai remove [path]` | Disables the node (current dir by default). Safeguarded against global origin. |
 | `jatai clear [inbox\|outbox]` | Clears processed files (`_`) in both folders or a specific one. |
-| `jatai docs [query]` | Fetches deep documentation from docs/ into the INBOX. |
+| `jatai log` | Prints the latest log content in terminal (use `--inbox` to export). |
+| `jatai log <YYYY-MM-DD>` | Prints logs filtered by date in terminal (use `--inbox` to export). |
+| `jatai logs` | Prints the complete log output in terminal (use `--inbox` to export). |
+| `jatai docs [query]` | Prints matching documentation in terminal by default (use `--inbox` to export file(s)). |
 
 ## **🏗️ Architecture & Requirements**
 
@@ -112,10 +111,11 @@ $PLANNED / TODO$
 ├── pytest.ini                     # Pytest configuration
 ├── .gitignore                     # Git ignore rules
 └── docs/                           # Runtime in-band documentation and manual page
-	├── jatai.1                    # Manual page used by the system CLI
-	├── getting-started/           # Quick user onboarding references
-	├── operations/                # Operational guides (retry, health)
-	└── security/                  # Safe usage and hardening notes
+    ├── jatai.1                    # Manual page used by the system CLI
+    ├── getting-started/           # Quickstart, configuration reference
+    ├── operations/                # CLI reference, prefix states, retry & health
+    ├── security/                  # Safe usage and hardening notes
+    └── development/               # Repository structure and debug guides
 ```
 
 ## **🚀 Future Ideas & Roadmap**
