@@ -64,6 +64,8 @@ Default config values (code reference: `Registry.DEFAULT_CONFIG`):
 | `MAX_RETRIES` | `3` |
 | `INBOX_DIR` | `INBOX` |
 | `OUTBOX_DIR` | `OUTBOX` |
+| `GC_MAX_READ_FILES` | `0` (disabled) |
+| `GC_MAX_SENT_FILES` | `0` (disabled) |
 
 ---
 
@@ -195,7 +197,8 @@ docs/
 ├── operations/
 │   ├── retry-and-health.md
 │   ├── cli-reference.md
-│   └── prefix-states.md
+│   ├── prefix-states.md
+│   └── garbage-collection.md
 ├── security/
 │   └── safe-operations.md
 └── development/

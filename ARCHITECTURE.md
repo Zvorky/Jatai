@@ -56,3 +56,46 @@ This document details the Architecture Decision Records (ADR) for the Jataí pro
   * `jatai log --all` (or `jatai log -a`) returns the complete log stream (or paginated/streamed output).
   * `jatai docs` and `jatai docs {query}` return documentation content in terminal output by default.
   * Both log and docs commands support an explicit `--inbox` option to export the retrieved content as file(s) into the current node INBOX when persistence/share is needed.
+
+## **13. CLI Short-Option Policy (Abbreviated Flags)**
+* **Context:** CLI usability requires consistent, mnemonic abbreviated options to reduce verbosity in scripts and terminal usage.
+* **Decision:** Adopt a canonical short-option mapping for all optional flags:
+  * `-a` ↔ `--all` : Show/process complete output (e.g., full logs).
+  * `-i` ↔ `--inbox` : Export/process via current node INBOX.
+  * `-m` ↔ `--move` : Move instead of copy after operation.
+  * `-r` ↔ `--read` : Target/clear read (processed) files.
+  * `-s` ↔ `--sent` : Target/clear sent (processed) files.
+  * `-f` ↔ `--foreground` : Run daemon in foreground (diagnostic/hidden use).
+  * `-G` ↔ `--global` : Operate on global configuration (uppercase to emphasize significance).
+* **Restriction:** Config key arguments (positional, not flags) are explicitly excluded from short-option mapping to maintain clarity and prevent future key-name ambiguity.
+* **Config Retrieval Extension (specified):** Add explicit retrieval subcommand via `jatai config get [key]` with the following behavior:
+  * Default scope is local node config.
+  * `-G` / `--global` switches retrieval scope to global config.
+  * `-i` / `--inbox` exports rendered retrieval output into current node INBOX.
+  * Optional `key` returns only the requested key value from the selected scope.
+  * Missing key in selected scope must return a clear error (for example, `INBOX_DIR` in global scope when absent).
+* **Scope:** All future CLI development must follow this policy for consistency.
+
+## **14. TUI Architecture and Default Launch Behavior**
+* **Context:** The current TUI bootstrap is intentionally minimal and does not yet provide a coherent operator workflow across the existing CLI surface. Jataí is file-system first, but operators still need a productive terminal control plane for inspection, configuration, and operational actions.
+* **Decision:** The canonical TUI stack for Jataí must be **Textual**.
+  * **Why Textual:** It supports structured multi-pane terminal applications, background workers, keyboard-first navigation, reactive state updates, and automated UI testing while remaining compatible with Jataí's terminal-first operating model.
+  * **Rejected alternatives:**
+    * `prompt_toolkit`: strong for prompts and line-oriented flows, but too low-level for a full multi-view operations console.
+    * `urwid`: mature, but less ergonomic for modern reactive layouts, styling, and testability.
+* **Interaction model:**
+  * Running `jatai` with no arguments in an interactive terminal must open the TUI.
+  * Running `jatai` with no arguments in a non-interactive context must print the CLI help summary instead of attempting to open the TUI.
+* **Command coverage rule:** The TUI must expose all existing CLI capabilities through discoverable screens, actions, or dialogs, including status, start/stop, docs, log, list, send, read, unread, config, remove, clear, and future CLI additions.
+* **Implementation rule:** The TUI must not reimplement core behavior independently. It must orchestrate the same application services and command handlers used by the regular CLI so terminal and TUI behavior remain aligned.
+* **File-system first constraint:** The TUI is an operator layer, not the primary system interface. It must surface filesystem state clearly and never obscure the underlying INBOX/OUTBOX and prefix-based workflow.
+
+## **15. System-Generated INBOX Artifact Prefix Policy**
+* **Context:** Jataí writes some files directly into INBOX as system-generated artifacts (for example onboarding files, exported operational snapshots, or internal notices). These files must be visually distinguishable from user-delivered payload files.
+* **Decision:** Any file created by Jataí itself inside an INBOX without originating from another node delivery flow must use filename prefix `!`.
+* **Examples in scope:**
+  * auto-onboarding welcome files;
+  * daemon/system notice files;
+  * CLI-generated exports to INBOX (for example docs/log/config exports).
+* **Out of scope:** Files delivered from other nodes through normal OUTBOX → INBOX routing are not affected by this rule.
+* **Goal:** Preserve operator clarity by making system-originated artifacts immediately recognizable in the filesystem-first workflow.

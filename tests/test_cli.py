@@ -8,7 +8,7 @@ import pytest
 from pathlib import Path
 from typer.testing import CliRunner
 
-from jatai.cli.main import app, run
+from jatai.cli.main import app, run, _run_tui
 from jatai.core.registry import Registry
 from jatai.core.node import Node
 
@@ -152,8 +152,8 @@ class TestCLIHappyPath:
         assert (node_path / "INBOX").exists()
         assert (node_path / "OUTBOX").exists()
 
-    def test_cli_docs_without_query_drops_index(self, temp_dir):
-        """Test docs command without query creates category index in INBOX."""
+    def test_cli_docs_without_query_prints_index_in_terminal(self, temp_dir):
+        """Test docs command without query prints category index by default."""
         node = Node(temp_dir / "docs_node")
         node.create()
 
@@ -166,12 +166,11 @@ class TestCLIHappyPath:
             os.chdir(old_cwd)
 
         assert result.exit_code == 0
-        index_path = node.inbox_path / "!docs-index.md"
-        assert index_path.exists()
-        assert "Jatai Documentation Index" in index_path.read_text(encoding="utf-8")
+        assert "Jatai Documentation Index" in result.stdout
+        assert not (node.inbox_path / "!docs-index.md").exists()
 
-    def test_cli_docs_with_query_copies_matching_files(self, temp_dir):
-        """Test docs command with query copies matching docs to INBOX."""
+    def test_cli_docs_with_query_prints_matches_in_terminal(self, temp_dir):
+        """Test docs command with query prints matching docs by default."""
         node = Node(temp_dir / "docs_query_node")
         node.create()
 
@@ -184,8 +183,60 @@ class TestCLIHappyPath:
             os.chdir(old_cwd)
 
         assert result.exit_code == 0
+        assert "retry-and-health.md" in result.stdout
+        copied = list(node.inbox_path.glob("*retry*.md"))
+        assert not copied
+
+    def test_cli_docs_inbox_option_exports_index(self, temp_dir):
+        """Test docs --inbox exports index file to INBOX."""
+        node = Node(temp_dir / "docs_inbox_node")
+        node.create()
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            result = runner.invoke(app, ["docs", "--inbox"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 0
+        index_path = node.inbox_path / "!docs-index.md"
+        assert index_path.exists()
+
+    def test_cli_docs_query_inbox_option_exports_matches(self, temp_dir):
+        """Test docs query --inbox copies matching files."""
+        node = Node(temp_dir / "docs_query_inbox_node")
+        node.create()
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            result = runner.invoke(app, ["docs", "retry", "--inbox"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 0
         copied = list(node.inbox_path.glob("*retry*.md"))
         assert copied
+
+    def test_cli_docs_query_inbox_applies_bang_prefix(self, temp_dir):
+        """Test docs query --inbox names all exported files with ! prefix (ADR 15)."""
+        node = Node(temp_dir / "docs_bang_prefix_node")
+        node.create()
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            result = runner.invoke(app, ["docs", "retry", "--inbox"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 0
+        for f in node.inbox_path.iterdir():
+            assert f.name.startswith("!"), f"Expected ! prefix on system artifact: {f.name}"
 
 
 class TestCLIErrorFailureScenarios:
@@ -296,13 +347,13 @@ class TestCLIErrorFailureScenarios:
         assert (node_path / "shared" / "INBOX").exists()
         assert (node_path / "shared" / "OUTBOX").exists()
 
-    def test_cli_docs_fails_outside_node(self, temp_dir):
-        """Test docs command fails in non-node directories."""
+    def test_cli_docs_inbox_fails_outside_node(self, temp_dir):
+        """Test docs --inbox fails in non-node directories."""
         import os
         old_cwd = os.getcwd()
         try:
             os.chdir(temp_dir)
-            result = runner.invoke(app, ["docs"])
+            result = runner.invoke(app, ["docs", "--inbox"])
         finally:
             os.chdir(old_cwd)
 
@@ -324,6 +375,14 @@ class TestCLIErrorFailureScenarios:
 
         assert result.exit_code == 1
         assert "no docs matched" in result.stdout.lower() or "no docs matched" in result.stderr.lower()
+
+    def test_cli_log_missing_file(self, temp_home, monkeypatch):
+        """Test log command fails gracefully when log file doesn't exist."""
+        monkeypatch.setenv("HOME", str(temp_home))
+        result = runner.invoke(app, ["log"])
+
+        assert result.exit_code == 1
+        assert "log file not found" in result.stdout.lower() or "log file not found" in result.stderr.lower()
 
 
 class TestCLIMaliciousAdversarialScenarios:
@@ -423,3 +482,387 @@ class TestCLIMaliciousAdversarialScenarios:
 
         assert result.exit_code == 1
         assert not any("passwd" in p.name for p in node.inbox_path.glob("*.md"))
+
+
+class TestCLIPhase6Toolbox:
+    """Phase 6 command surface tests."""
+
+    def test_cli_log_latest_and_all(self, temp_home, monkeypatch):
+        monkeypatch.setenv("HOME", str(temp_home))
+        log_path = temp_home / ".jatai.log"
+        log_path.write_text("line1\nline2\nline3\n", encoding="utf-8")
+
+        latest = runner.invoke(app, ["log"])
+        assert latest.exit_code == 0
+        assert "line3" in latest.stdout
+
+        full = runner.invoke(app, ["log", "--all"])
+        assert full.exit_code == 0
+        assert "line1" in full.stdout
+        assert "line3" in full.stdout
+
+    def test_cli_log_inbox_exports_rendered_output(self, temp_dir, temp_home, monkeypatch):
+        monkeypatch.setenv("HOME", str(temp_home))
+        (temp_home / ".jatai.log").write_text("abc\ndef\n", encoding="utf-8")
+        node = Node(temp_dir / "log_export_node")
+        node.create()
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            result = runner.invoke(app, ["log", "--inbox"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 0
+        exported = node.inbox_path / "!log-latest.txt"
+        assert exported.exists()
+        assert "abc" in exported.read_text(encoding="utf-8")
+
+    def test_cli_list_inbox_outbox_and_addrs(self, temp_dir, temp_home, monkeypatch):
+        node = Node(temp_dir / "list_node")
+        node.create()
+        (node.inbox_path / "in.txt").write_text("in")
+        (node.outbox_path / "out.txt").write_text("out")
+
+        reg = Registry(registry_path=temp_home / ".jatai")
+        reg.add_node("list_node", str(node.node_path))
+        reg.save()
+        monkeypatch.setenv("HOME", str(temp_home))
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            inbox = runner.invoke(app, ["list", "inbox"])
+            outbox = runner.invoke(app, ["list", "outbox"])
+            addrs = runner.invoke(app, ["list", "addrs"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert inbox.exit_code == 0 and "in.txt" in inbox.stdout
+        assert outbox.exit_code == 0 and "out.txt" in outbox.stdout
+        assert addrs.exit_code == 0 and "list_node" in addrs.stdout
+
+    def test_cli_send_read_unread_cycle(self, temp_dir):
+        node = Node(temp_dir / "send_read_node")
+        node.create()
+        source = temp_dir / "payload.txt"
+        source.write_text("payload")
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            send_result = runner.invoke(app, ["send", str(source)])
+            assert send_result.exit_code == 0
+
+            inbox_file = node.inbox_path / "msg.txt"
+            inbox_file.write_text("x")
+            read_result = runner.invoke(app, ["read", "msg.txt"])
+            assert read_result.exit_code == 0
+            assert (node.inbox_path / "_msg.txt").exists()
+
+            unread_result = runner.invoke(app, ["unread", "_msg.txt"])
+            assert unread_result.exit_code == 0
+            assert (node.inbox_path / "msg.txt").exists()
+        finally:
+            os.chdir(old_cwd)
+
+    def test_cli_config_local_and_global(self, temp_dir, temp_home, monkeypatch):
+        node = Node(temp_dir / "config_node")
+        node.create()
+        monkeypatch.setenv("HOME", str(temp_home))
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            set_local = runner.invoke(app, ["config", "RETRY_DELAY_BASE", "90"])
+            get_local = runner.invoke(app, ["config", "RETRY_DELAY_BASE"])
+            set_global = runner.invoke(app, ["config", "--global", "MAX_RETRIES", "8"])
+            get_global = runner.invoke(app, ["config", "--global", "MAX_RETRIES"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert set_local.exit_code == 0
+        assert "RETRY_DELAY_BASE=90" in get_local.stdout
+        assert set_global.exit_code == 0
+        assert "MAX_RETRIES=8" in get_global.stdout
+
+    def test_cli_config_get_local_and_global(self, temp_dir, temp_home, monkeypatch):
+        node = Node(temp_dir / "config_get_node")
+        node.create()
+        monkeypatch.setenv("HOME", str(temp_home))
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            set_local = runner.invoke(app, ["config", "RETRY_DELAY_BASE", "77"])
+            set_global = runner.invoke(app, ["config", "-G", "MAX_RETRIES", "6"])
+            get_local = runner.invoke(app, ["config", "get", "RETRY_DELAY_BASE"])
+            get_global = runner.invoke(app, ["config", "get", "MAX_RETRIES", "-G"])
+            get_local_full = runner.invoke(app, ["config", "get"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert set_local.exit_code == 0
+        assert set_global.exit_code == 0
+        assert get_local.exit_code == 0 and "RETRY_DELAY_BASE=77" in get_local.stdout
+        assert get_global.exit_code == 0 and "MAX_RETRIES=6" in get_global.stdout
+        assert get_local_full.exit_code == 0 and "RETRY_DELAY_BASE" in get_local_full.stdout
+
+    def test_cli_config_get_with_inbox_export(self, temp_dir, temp_home, monkeypatch):
+        node = Node(temp_dir / "config_get_export_node")
+        node.create()
+        monkeypatch.setenv("HOME", str(temp_home))
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            runner.invoke(app, ["config", "RETRY_DELAY_BASE", "66"])
+            exported = runner.invoke(app, ["config", "get", "RETRY_DELAY_BASE", "-i"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert exported.exit_code == 0
+        output_file = node.inbox_path / "!config-local-RETRY_DELAY_BASE.txt"
+        assert output_file.exists()
+        assert "RETRY_DELAY_BASE=66" in output_file.read_text(encoding="utf-8")
+
+    def test_cli_config_get_missing_key_fails(self, temp_dir):
+        node = Node(temp_dir / "config_missing_key_node")
+        node.create()
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            result = runner.invoke(app, ["config", "get", "NOT_A_KEY"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 1
+        assert "unknown local config key" in result.stdout.lower() or "unknown local config key" in result.stderr.lower()
+
+    def test_cli_config_inbox_without_get_fails(self, temp_dir):
+        node = Node(temp_dir / "config_invalid_inbox_node")
+        node.create()
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            result = runner.invoke(app, ["config", "MAX_RETRIES", "9", "-i"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 1
+        assert "only supported with 'config get'" in result.stdout.lower() or "only supported with 'config get'" in result.stderr.lower()
+
+    def test_cli_remove_soft_delete_and_clear(self, temp_dir):
+        node = Node(temp_dir / "remove_clear_node")
+        node.create()
+        (node.inbox_path / "_read.md").write_text("r")
+        (node.outbox_path / "_sent.md").write_text("s")
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            clear_result = runner.invoke(app, ["clear"])
+            assert clear_result.exit_code == 0
+            assert not (node.inbox_path / "_read.md").exists()
+            assert not (node.outbox_path / "_sent.md").exists()
+
+            remove_result = runner.invoke(app, ["remove"])
+            assert remove_result.exit_code == 0
+            assert (node.node_path / "._jatai").exists()
+        finally:
+            os.chdir(old_cwd)
+
+
+class TestCLITUI:
+    """Interactive TUI behavior tests."""
+
+    def test_run_without_args_uses_tui_in_interactive_terminal(self, monkeypatch):
+        calls = {"tui": 0}
+
+        monkeypatch.setattr("sys.argv", ["jatai"])
+        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+        monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+
+        def fake_tui():
+            calls["tui"] += 1
+
+        monkeypatch.setattr("jatai.cli.main._run_tui", fake_tui)
+
+        run()
+        assert calls["tui"] == 1
+
+    def test_run_without_args_non_interactive_prints_help(self, monkeypatch):
+        calls = {"help": 0}
+
+        monkeypatch.setattr("sys.argv", ["jatai"])
+        monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+
+        def fake_app(args=None):
+            calls["help"] += 1
+            assert args == ["--help"]
+
+        monkeypatch.setattr("jatai.cli.main.app", fake_app)
+        run()
+        assert calls["help"] == 1
+
+    def test_run_known_command_is_not_treated_as_path(self, monkeypatch):
+        calls = {"init": 0, "app": 0}
+
+        monkeypatch.setattr("sys.argv", ["jatai", "list", "inbox"])
+
+        def fake_init(path=None):
+            calls["init"] += 1
+
+        def fake_app(args=None):
+            calls["app"] += 1
+
+        monkeypatch.setattr("jatai.cli.main._initialize_node", fake_init)
+        monkeypatch.setattr("jatai.cli.main.app", fake_app)
+
+        run()
+        assert calls["init"] == 0
+        assert calls["app"] == 1
+
+    def test_run_tui_launches_textual_app(self, monkeypatch):
+        calls = {"run": 0}
+
+        class FakeApp:
+            def run(self):
+                calls["run"] += 1
+
+        monkeypatch.setattr("jatai.tui.JataiApp", FakeApp)
+
+        _run_tui()
+        assert calls["run"] == 1
+
+    def test_jatai_app_capture_call_returns_output(self):
+        from jatai.tui import _capture_call
+
+        def fn():
+            print("hello tui")
+
+        result = _capture_call(fn)
+        assert "hello tui" in result
+
+    def test_jatai_app_capture_call_suppresses_typer_exit(self):
+        import typer
+        from jatai.tui import _capture_call
+
+        def fn():
+            raise typer.Exit(code=1)
+
+        result = _capture_call(fn)
+        assert result == ""
+
+    def test_jatai_app_capture_call_captures_exceptions(self):
+        from jatai.tui import _capture_call
+
+        def fn():
+            raise RuntimeError("boom")
+
+        result = _capture_call(fn)
+        assert "boom" in result
+
+    def test_jatai_app_dispatch_init_pushes_screen(self):
+        from jatai.tui import JataiApp
+
+        pushed = {}
+        app = JataiApp()
+        app._run = lambda fn, *args: None
+        app.push_screen = lambda screen, cb=None: pushed.update({"screen": screen, "cb": cb})
+        app._dispatch("0")
+
+        assert "screen" in pushed
+
+    def test_jatai_app_dispatch_status_calls_status(self):
+        from jatai.tui import JataiApp
+        from jatai.cli import main as cli_main
+
+        captured = {}
+        app = JataiApp()
+        app._run = lambda fn, *args: captured.update({"fn": fn, "args": args})
+        app._dispatch("1")
+
+        assert captured.get("fn") == cli_main.status
+        assert captured.get("args") == ()
+
+    def test_jatai_app_dispatch_docs_index_calls_docs(self):
+        from jatai.tui import JataiApp
+        from jatai.cli import main as cli_main
+
+        captured = {}
+        app = JataiApp()
+        app._run = lambda fn, *args: captured.update({"fn": fn, "args": args})
+        app._dispatch("2")
+
+        assert captured.get("fn") == cli_main.docs
+        assert captured.get("args") == (None, False)
+
+    def test_jatai_app_dispatch_unknown_key_does_nothing(self):
+        from jatai.tui import JataiApp
+
+        called = {"_run": False}
+        app = JataiApp()
+        app._run = lambda fn, *args: called.update({"_run": True})
+        app._dispatch("99")
+
+        assert not called["_run"]
+
+    def test_jatai_app_has_expected_menu_item_count(self):
+        from jatai.tui import MENU_ITEMS
+
+        assert len(MENU_ITEMS) == 16
+
+    def test_jatai_app_menu_item_keys_are_unique(self):
+        from jatai.tui import MENU_ITEMS
+
+        keys = [k for k, _ in MENU_ITEMS]
+        assert len(keys) == len(set(keys))
+
+    def test_jatai_app_dispatch_pushes_screen_for_docs_query(self, monkeypatch):
+        from jatai.tui import JataiApp
+
+        pushed = {}
+        app = JataiApp()
+        app._run = lambda fn, *args: None
+        app.push_screen = lambda screen, cb=None: pushed.update({"screen": screen, "cb": cb})
+        app._dispatch("3")
+
+        assert "screen" in pushed
+
+    def test_jatai_app_dispatch_log_latest(self):
+        from jatai.tui import JataiApp
+        from jatai.cli import main as cli_main
+
+        captured = {}
+        app = JataiApp()
+        app._run = lambda fn, *args: captured.update({"fn": fn, "args": args})
+        app._dispatch("4")
+
+        assert captured.get("fn") == cli_main.log
+        assert captured.get("args") == (False, False)
+
+    def test_jatai_app_dispatch_log_all(self):
+        from jatai.tui import JataiApp
+        from jatai.cli import main as cli_main
+
+        captured = {}
+        app = JataiApp()
+        app._run = lambda fn, *args: captured.update({"fn": fn, "args": args})
+        app._dispatch("5")
+
+        assert captured.get("fn") == cli_main.log
+        assert captured.get("args") == (True, False)

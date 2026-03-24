@@ -78,15 +78,26 @@ during the delivery scan. This prevents reprocessing of already-handled files.
 Nodes in soft-delete state (`._jatai`) are also skipped and do **not** generate
 error prefixes for files routed while they are disabled.
 
-## Error notice files
+## System-generated INBOX artifacts
 
-The daemon drops `.md` files with error prefixes into a node's INBOX to communicate
-system events:
+Any file written directly into INBOX by Jataí itself (not delivered from another
+node OUTBOX) uses the `!` prefix. This makes system-generated content immediately
+distinguishable from user payload files.
+
+Common patterns:
 
 | Pattern | When dropped |
 |---|---|
-| `!_config-migration-error*.md` | Prefix migration aborted due to collision |
 | `!helloworld.md` | First-time auto-onboarding welcome message |
+| `!_config-migration-error*.md` | Prefix migration aborted due to naming collision |
+| `!docs-index.md` | Docs index exported via `jatai docs -i` |
+| `!log-latest.txt` | Log snapshot exported via `jatai log -i` |
+| `!log-all.txt` | Full log exported via `jatai log -a -i` |
+| `!config-local.txt` | Local config exported via `jatai config get -i` |
+| `!config-local-<KEY>.txt` | Single local key exported via `jatai config get KEY -i` |
+| `!config-global.txt` | Global config exported via `jatai config get -G -i` |
+| `!config-global-<KEY>.txt` | Single global key exported via `jatai config get KEY -G -i` |
+| `!<docname>.md` | Docs file exported via `jatai docs QUERY -i` |
 
-These files follow the same prefix conventions and can be cleared using the
-`jatai clear` command (planned for Phase 6).
+These files share the same prefix conventions and can be cleared using
+`jatai clear -r`.

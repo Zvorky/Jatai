@@ -78,6 +78,7 @@ class JataiDaemon:
 
     POLL_INTERVAL_SECONDS = 0.2
     LOCK_TIMEOUT_SECONDS = 2
+    MAINTENANCE_INTERVAL_TICKS = 25
     HELLOWORLD_FILENAME = "!helloworld.md"
     HELLOWORLD_CONTENT = """# Welcome to Jatai
 
@@ -496,7 +497,42 @@ How to use:
         self.logger.info("Startup scan begin nodes=%s", len(nodes))
         for node in nodes:
             self.process_pending_outbox(node, nodes)
+            self._run_auto_gc_for_node(node)
         self.logger.info("Startup scan complete")
+
+    def _trim_processed_history(self, files: List[Path], success_prefix: str, max_files: int) -> int:
+        if max_files <= 0:
+            return 0
+
+        processed_files = sorted(
+            [path for path in files if path.name.startswith(success_prefix)],
+            key=lambda path: path.stat().st_mtime,
+        )
+        excess = len(processed_files) - max_files
+        if excess <= 0:
+            return 0
+
+        removed = 0
+        for file_path in processed_files[:excess]:
+            file_path.unlink(missing_ok=True)
+            removed += 1
+        return removed
+
+    def _run_auto_gc_for_node(self, node: Node) -> None:
+        success_prefix = str(node.get_config("PREFIX_PROCESSED", "_"))
+        max_read = int(node.get_config("GC_MAX_READ_FILES", 0) or 0)
+        max_sent = int(node.get_config("GC_MAX_SENT_FILES", 0) or 0)
+
+        removed_read = self._trim_processed_history(node.list_inbox(), success_prefix, max_read)
+        removed_sent = self._trim_processed_history(node.list_outbox(), success_prefix, max_sent)
+
+        if removed_read or removed_sent:
+            self.logger.info(
+                "Auto-GC removed node=%s inbox=%s outbox=%s",
+                node.node_path,
+                removed_read,
+                removed_sent,
+            )
 
     def process_pending_outbox(self, node: Node, nodes: List[Node]) -> None:
         prefix = Prefix(
@@ -539,11 +575,16 @@ How to use:
         self.install_signal_handlers()
         self.acquire_singleton()
         self.logger.info("Daemon starting pid=%s registry=%s", os.getpid(), self.registry_path)
+        tick_count = 0
         try:
             self.startup_scan()
             self.setup_watchdog()
             while not self.stop_event.wait(self.POLL_INTERVAL_SECONDS):
-                pass
+                tick_count += 1
+                if tick_count >= self.MAINTENANCE_INTERVAL_TICKS:
+                    tick_count = 0
+                    for node in self.load_active_nodes():
+                        self._run_auto_gc_for_node(node)
         finally:
             self.shutdown_watchdog()
             self.release_singleton()

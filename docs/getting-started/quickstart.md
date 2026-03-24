@@ -81,21 +81,40 @@ If you manually add a path to the global registry (`~/.jatai`) without running
 daemon starts. A `!helloworld.md` tutorial file is dropped in the new node's
 `INBOX` on first onboarding.
 
-## Reading the documentation in-band
+## Reading documentation and logs in-band
 
-Fetch a category index of all available docs into your current node's `INBOX`:
+Show a category index of all available docs directly in terminal:
 
 ```bash
 cd my-project
 jatai docs
 ```
 
-Copy a specific doc by keyword:
+Copy docs to INBOX only when explicitly requested:
 
 ```bash
-jatai docs retry
-jatai docs configuration
-jatai docs prefix
+jatai docs -i
+jatai docs retry -i
+```
+
+Inspect logs in terminal:
+
+```bash
+jatai log
+jatai log -a
+```
+
+Export logs to INBOX:
+
+```bash
+jatai log -i
+jatai log -a -i
+```
+
+Global config updates use uppercase short flag by policy:
+
+```bash
+jatai config -G MAX_RETRIES 5
 ```
 
 ## .gitignore recommendations
@@ -110,10 +129,15 @@ OUTBOX/
 
 ## Next steps
 
-- [Configuration reference](configuration.md) — customize prefixes, retry logic, and folder names
+- [Configuration reference](configuration.md) — customize prefixes, retry logic, folder names, and garbage collection limits
 - [Prefix states](../operations/prefix-states.md) — understand what `_`, `!`, `!!` mean
 - [Retry and health](../operations/retry-and-health.md) — how failures are handled
+- [Garbage collection](../operations/garbage-collection.md) — manual and automatic cleanup of processed files
 - [CLI reference](../operations/cli-reference.md) — full command-line reference
 
-> **Future:** A full interactive TUI will be available via bare `jatai` (no arguments).
-> For now, `jatai` with no arguments displays the help screen.
+> Running `jatai` with no arguments opens the **Textual**-powered interactive TUI
+> in a terminal session. In non-interactive usage (scripts, cron), the same
+> command prints the CLI help summary.
+>
+> The TUI provides a two-pane layout: a scrollable command menu on the left and
+> a live output display on the right. It covers the full CLI command set.

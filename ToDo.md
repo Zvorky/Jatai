@@ -70,18 +70,22 @@ The "File-System First" user experience.
 
 Adding convenience commands and storage management.
 
-- [ ] **[ARCH]** Define and document the CLI short-option policy (abbreviated flags), including canonical mappings such as `-a` for `--all`.
-- [ ] Implement `jatai log` (latest log view in terminal).
-- [ ] Implement `jatai log --all|-a` (full log output in terminal).
-- [ ] Refactor `jatai docs` and `jatai docs [query]` to terminal-first output by default.
-- [ ] Add `--inbox` option to `jatai docs` and `jatai docs [query]` to export files into current node INBOX.
-- [ ] Add `--inbox` option to `jatai log` (latest/all) to export rendered output into current node INBOX.
-- [ ] Implement `jatai list`, `jatai send`, `jatai read`, `jatai unread`.
-- [ ] Implement `jatai config` to read/write settings via CLI.
-- [ ] Implement `jatai remove` (CLI wrapper for renaming to `._jatai`).
-- [ ] Implement **Garbage Collection (Auto-Remove):** Background daemon logic to delete `_` prefixed files based on config thresholds.
-- [ ] Implement `jatai clear [--read] [--sent]` manual CLI command.
-- [ ] Build the interactive TUI (invoked by `jatai` with no arguments). **[TEMP]** Until TUI is ready, bare `jatai` (no args) is aliased to `jatai --help`.
+- [x] **[ARCH]** Define and document the CLI short-option policy (abbreviated flags), including canonical mappings such as `-a` for `--all` and `-G` for `--global`.
+- [x] Implement canonical short-option flags in CLI: `-a`, `-i`, `-m`, `-r`, `-s`, `-f`, `-G` (excluding config keys per ADR 13).
+- [x] Implement `jatai log` (latest log view in terminal).
+- [x] Implement `jatai log --all|-a` (full log output in terminal).
+- [x] Refactor `jatai docs` and `jatai docs [query]` to terminal-first output by default.
+- [x] Add `--inbox` option to `jatai docs` and `jatai docs [query]` to export files into current node INBOX.
+- [x] Add `--inbox` option to `jatai log` (latest/all) to export rendered output into current node INBOX.
+- [x] Enforce `!` prefix for all system-generated INBOX artifacts (including docs query exports) and add/adjust tests to verify the naming policy.
+- [x] Implement `jatai list`, `jatai send`, `jatai read`, `jatai unread`.
+- [x] Implement `jatai config` to read/write settings via CLI.
+- [x] Implement `jatai config get [key]` with optional `-G|--global` scope and optional `-i|--inbox` export.
+- [x] Implement `jatai remove` (CLI wrapper for renaming to `._jatai`).
+- [x] Implement **Garbage Collection (Auto-Remove):** Background daemon logic to delete `_` prefixed files based on config thresholds.
+- [x] Implement `jatai clear [--read] [--sent]` manual CLI command.
+- [x] Build the interactive TUI (invoked by `jatai` with no arguments).
+- [x] Refactor the TUI with Textual so it exposes all current CLI commands through an efficient interactive workflow.
 
 ## **Phase 7: Advanced / Future Expansion (Post-Core)**
 

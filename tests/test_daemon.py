@@ -354,6 +354,53 @@ class TestDaemonHappyPath:
         assert nodes == []
         assert not (manual_node_path / ".jatai").exists()
 
+    def test_daemon_auto_gc_trims_processed_history(self, temp_home):
+        registry_path = temp_home / ".jatai"
+        node = register_node(registry_path, "node_a", temp_home / "node_a")
+
+        node.set_config("GC_MAX_READ_FILES", 1)
+        node.set_config("GC_MAX_SENT_FILES", 2)
+
+        # INBOX processed files: keep only newest 1
+        read_old = node.inbox_path / "_read-old.md"
+        read_new = node.inbox_path / "_read-new.md"
+        read_old.write_text("old")
+        read_new.write_text("new")
+
+        # OUTBOX processed files: keep only newest 2
+        sent_1 = node.outbox_path / "_sent-1.md"
+        sent_2 = node.outbox_path / "_sent-2.md"
+        sent_3 = node.outbox_path / "_sent-3.md"
+        sent_1.write_text("1")
+        sent_2.write_text("2")
+        sent_3.write_text("3")
+
+        daemon = JataiDaemon(registry_path=registry_path, pid_path=temp_home / ".jatai.pid")
+        daemon.startup_scan()
+
+        assert not read_old.exists()
+        assert read_new.exists()
+        assert not sent_1.exists()
+        assert sent_2.exists()
+        assert sent_3.exists()
+
+    def test_daemon_auto_gc_ignores_unprocessed_files(self, temp_home):
+        registry_path = temp_home / ".jatai"
+        node = register_node(registry_path, "node_a", temp_home / "node_a")
+        node.set_config("GC_MAX_READ_FILES", 1)
+        node.set_config("GC_MAX_SENT_FILES", 1)
+
+        pending_inbox = node.inbox_path / "pending.md"
+        pending_outbox = node.outbox_path / "pending.md"
+        pending_inbox.write_text("in")
+        pending_outbox.write_text("out")
+
+        daemon = JataiDaemon(registry_path=registry_path, pid_path=temp_home / ".jatai.pid")
+        daemon.startup_scan()
+
+        assert pending_inbox.exists()
+        assert pending_outbox.exists() or (node.outbox_path / "_pending.md").exists()
+
 
 class TestDaemonExclusivity:
     """Singleton/PID lock behavior tests."""

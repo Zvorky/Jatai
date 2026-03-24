@@ -33,6 +33,19 @@ This file defines mandatory rules for any agent executing development tasks in t
    - At minimum, keep `pyproject.toml`, `src/jatai/__init__.py`, `README.md`, `docs/jatai.1`, and `tools/set_version` aligned with the same current version.
    - Verify the replacement result after running the script (for example with `rg` and targeted file checks).
 10. Whenever a new explicit project version citation is added in any file, register that file/pattern in `tools/set_version` (`VERSION_TARGETS`) in the same change set.
+11. User-facing documentation under `docs/` must not reference ADRs or architecture/requirements governance artifacts.
+   - Do NOT reference `ARCHITECTURE.md`, `REQUIREMENTS.md`, or ADR identifiers (for example, `ADR 13`) inside `docs/`.
+   - Keep `docs/` focused on end-user operation and behavior; governance/design rationale belongs to developer-facing files.
+12. Before creating any commit, the agent must explicitly classify it by asking: **"Is this commit code or documentation?"**
+   - If the commit is **documentation-only**, no version bump is required.
+   - If the commit includes **any code, tests, packaging, dependency, tooling, schema, or behavior change**, it is a **code commit** and the version bump must happen before the commit.
+   - Mixed commits (code + documentation) are treated as **code commits**.
+13. Every pending architecture/requirements decision that implies implementation work must be represented in `ToDo.md` as explicit actionable task(s) before implementation starts.
+   - Do not leave ADR/REQUIREMENTS implementation implications implicit.
+   - Add missing tasks immediately when a pending requirement/ADR is identified.
+14. After implementing any code/behavior change, the agent must update all affected user-facing documentation under `docs/` before creating a commit.
+   - Documentation in `docs/` must reflect the implemented behavior, command surface, options, and examples.
+   - This documentation update is mandatory for code commits and must happen before the commit step.
 
 ## Architecture & Requirements Governance
 
@@ -50,15 +63,22 @@ Whenever `ARCHITECTURE.md` or `REQUIREMENTS.md` are changed:
 3. Keep the list ordered by phase and priority.
 4. Explicitly inform the user about created/updated tasks.
 
+When reviewing pending ADR/requirement items:
+
+5. If an ADR/requirement defines behavior that is not fully implemented yet, add explicit implementation task(s) to `ToDo.md` even when no file in `ARCHITECTURE.md` or `REQUIREMENTS.md` was changed in that turn.
+
 ## Quick Operational Checklist
 
 - Read `ARCHITECTURE.md` and `REQUIREMENTS.md`.
 - Locate related tasks in `ToDo.md`.
 - Execute implementation without deciding architecture/requirements without authorization.
 - Update `ToDo.md` and `README.md`.
+- Ensure user-facing `docs/` content is updated to match implemented behavior before committing.
 - Ensure "File Structure" section is updated in `README.md` with only non-ignored system files (excluding project governance/documentation files).
-- Update `pyproject.toml` version using `MAJOR.PHASE.ITERATION` before report/commit.
-- Run `tools/set_version <new_version>` and verify all version citations were updated correctly.
+- Ensure pending ADR/requirements implications are reflected as explicit actionable tasks in `ToDo.md`.
+- Classify the pending commit by asking: "Is this commit code or documentation?"
+- For code commits, update `pyproject.toml` version using `MAJOR.PHASE.ITERATION` before report/commit.
+- For code commits, run `tools/set_version <new_version>` and verify all version citations were updated correctly.
 - Report changes and pending items to the user.
 
 ## Language Requirements
@@ -113,14 +133,41 @@ When the agent is working exclusively on development tooling under `tools/` (wit
 
 ### Manual Testing Protocol
 
+### File-System First Design
+
+Jatai is a **file-system first** system. Agents must preserve this principle in implementation, validation, and documentation.
+
+1. The **primary interface** is the filesystem itself:
+   - dropping files into `OUTBOX/`
+   - receiving files in `INBOX/`
+   - renaming files to apply/remove prefixes
+   - renaming `.jatai` to `._jatai` and back for node lifecycle control
+2. The CLI is a **secondary convenience tool**, mainly for initialization, inspection, and operator ergonomics.
+3. Manual validation must prefer **direct filesystem operations** over CLI wrappers whenever the use case is fundamentally file-driven.
+4. Verification must focus on **filesystem state**, for example:
+   - `find`, `ls`, checksums, file counts, file names, and file contents
+   - presence/absence of prefixed files
+   - presence/absence of `.jatai` / `._jatai`
+5. Tests and reports must make clear whether they validated:
+   - direct filesystem behavior
+   - daemon-mediated behavior
+   - CLI convenience behavior
+6. When a manual test can be written as a direct file operation, prefer that over testing only CLI output.
+7. Documentation and helper scripts should reflect this architecture explicitly.
+
 **After automated tests pass**, perform an end-to-end manual validation:
+
+0. **Use the manual test helper script as the default execution path:**
+   - Prefer updating and running `tools/manual_test_helper.sh` instead of performing ad-hoc command-by-command tests directly in terminal.
+   - The script execution output is saved to `./manual-tests.log` (in the directory where it is executed).
+   - When manual testing requirements evolve, update this script in the same change set so future runs stay reproducible.
 
 1. **Install the project** following the instructions in `README.md` exactly (e.g., `pip install -e .` or the documented install command).
 
-2. **Set up a test environment** using at least two node addresses under `/tmp/`, for example:
+2. **Set up a test environment** using at least two node addresses under a local temporary directory (`./tmp_tests/`), for example:
    ```bash
-   export JATAI_TEST_A=/tmp/jatai_test_a
-   export JATAI_TEST_B=/tmp/jatai_test_b
+   export JATAI_TEST_A=./tmp_tests/node_a
+   export JATAI_TEST_B=./tmp_tests/node_b
    mkdir -p "$JATAI_TEST_A" "$JATAI_TEST_B"
    ```
 
@@ -139,7 +186,7 @@ When the agent is working exclusively on development tooling under `tools/` (wit
    ```bash
    rm -rf "$JATAI_TEST_A" "$JATAI_TEST_B"
    ```
-   All files and directories created during manual testing under `/tmp/` must be deleted before the final commit.
+   All files and directories created during manual testing under `./tmp_tests/` must be deleted before the final commit.
 
 ## Project Versioning Policy
 
@@ -151,6 +198,13 @@ Versioning must strictly follow this scheme:
 - **PHASE:** Must match the current implementation phase in `ToDo.md` (e.g., if current phase is 4, use `0.4.x`).
 - **ITERATION:** Incremented on each commit iteration for the same phase (patch-like counter).
 - **Source of truth:** Update `pyproject.toml` `[project].version` before reporting and committing.
+
+Commit classification gate:
+
+- Before creating any commit, the agent must explicitly ask itself: **"Is this commit code or documentation?"**
+- **Documentation-only commit:** Changes limited to documentation/governance text with no source, test, packaging, dependency, script, schema, or runtime-behavior impact. No version bump is required.
+- **Code commit:** Any commit that changes source code, tests, packaging metadata, dependencies, scripts, schemas, operational behavior, or mixes code with documentation. A version bump is required before the commit.
+- When uncertain, classify the commit as a **code commit** and perform the bump.
 
 Branch flow constraints:
 
@@ -171,6 +225,9 @@ The workflow in this section applies to implementation tasks tied to `ToDo.md`. 
    - Do NOT commit code that violates established architecture without explicit user authorization.
 
 2. **Update project version before report/commit:**
+   - First classify the pending commit by asking: **"Is this commit code or documentation?"**
+   - If the answer is **documentation-only**, skip the version bump and continue with the remaining applicable workflow steps.
+   - If the answer is **code** (or mixed code + documentation), the version bump is mandatory before the commit.
    - Apply the `MAJOR.PHASE.ITERATION` rule from this document.
    - Keep `MAJOR` unchanged unless the user explicitly requested a major bump.
    - Set `PHASE` to the current `ToDo.md` phase being executed.

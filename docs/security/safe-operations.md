@@ -10,8 +10,11 @@ Jataí **never deletes pending or unprocessed files**. The only files eligible f
 deletion are those already marked with the success prefix (`_`), and only when
 explicitly triggered:
 
-- **Manually:** via `jatai clear` (not yet implemented — planned for Phase 6).
-- **Automatically:** via configurable retention policies (planned for Phase 6).
+- **Manually:** via `jatai clear` — removes `_`-prefixed files from INBOX and/or
+  OUTBOX on demand.
+- **Automatically:** via configurable retention limits (`GC_MAX_READ_FILES` and
+  `GC_MAX_SENT_FILES`). Set either to `0` (the default) to disable auto-cleanup.
+  See [Garbage Collection](../operations/garbage-collection.md) for details.
 
 All other state transitions are renames, not deletions.
 
