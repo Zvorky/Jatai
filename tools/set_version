@@ -1,0 +1,101 @@
+#!/usr/bin/env python3
+"""Synchronize project version references from a single command.
+
+Usage:
+    tools/set_version 0.4.3
+"""
+
+from __future__ import annotations
+
+import argparse
+import re
+from pathlib import Path
+
+CURRENT_VERSION = "0.4.2"
+ROOT_DIR = Path(__file__).resolve().parents[1]
+
+# Keep this list aligned with any new version citations.
+VERSION_TARGETS: dict[str, list[dict[str, str]]] = {
+    "pyproject.toml": [
+        {
+            "pattern": r"(?m)^version = \"\d+\.\d+\.\d+\"$",
+            "replacement": "version = \"{version}\"",
+        }
+    ],
+    "src/jatai/__init__.py": [
+        {
+            "pattern": r"(?m)^__version__ = \"\d+\.\d+\.\d+\"$",
+            "replacement": "__version__ = \"{version}\"",
+        }
+    ],
+    "README.md": [
+        {
+            "pattern": r"(?m)^\*\*Version:\*\* `\d+\.\d+\.\d+` \(_Alpha_\).*$",
+            "replacement": "**Version:** `{version}` (_Alpha_) · **Author:** Zvorky",
+        }
+    ],
+    "docs/jatai.1": [
+        {
+            "pattern": r"(?m)^\.TH JATAI 1 \"(?P<date>[^\"]+)\" \"\d+\.\d+\.\d+\" \"Jataí Manual\"$",
+            "replacement": ".TH JATAI 1 \"{date}\" \"{version}\" \"Jataí Manual\"",
+        }
+    ],
+    "tools/set_version": [
+        {
+            "pattern": r"(?m)^CURRENT_VERSION = \"\d+\.\d+\.\d+\"$",
+            "replacement": "CURRENT_VERSION = \"{version}\"",
+        }
+    ],
+}
+
+
+def replace_one(text: str, pattern: str, replacement: str, version: str) -> tuple[str, int]:
+    regex = re.compile(pattern)
+
+    def _repl(match: re.Match[str]) -> str:
+        payload = match.groupdict().copy()
+        payload["version"] = version
+        return replacement.format(**payload)
+
+    new_text, count = regex.subn(_repl, text, count=1)
+    return new_text, count
+
+
+def update_file(path: Path, specs: list[dict[str, str]], version: str) -> int:
+    text = path.read_text(encoding="utf-8")
+    total_replacements = 0
+
+    for spec in specs:
+        text, count = replace_one(text, spec["pattern"], spec["replacement"], version)
+        if count != 1:
+            raise RuntimeError(
+                f"Expected exactly one match for pattern in {path}: {spec['pattern']}"
+            )
+        total_replacements += count
+
+    path.write_text(text, encoding="utf-8")
+    return total_replacements
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Set project version everywhere.")
+    parser.add_argument("new_version", help="New semantic version (e.g. 0.4.3)")
+    args = parser.parse_args()
+
+    if not re.fullmatch(r"\d+\.\d+\.\d+", args.new_version):
+        raise SystemExit("Invalid version format. Use MAJOR.PHASE.ITERATION (e.g. 0.4.3).")
+
+    changed = 0
+    for rel_path, specs in VERSION_TARGETS.items():
+        file_path = ROOT_DIR / rel_path
+        if not file_path.exists():
+            raise FileNotFoundError(f"Version target file not found: {rel_path}")
+        changed += update_file(file_path, specs, args.new_version)
+
+    print(f"Updated version to {args.new_version} in {len(VERSION_TARGETS)} files ({changed} replacements).")
+    print("Verify with: rg --line-number --fixed-strings \"" + args.new_version + "\"")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

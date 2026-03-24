@@ -14,6 +14,11 @@ This file defines mandatory rules for any agent executing development tasks in t
 5. Keep `README.md` updated whenever there is functional, usage, architecture, or folder structure impact.
 6. Always keep the "File Structure" section in `README.md` updated.
    - If the section does not exist yet, create it on the first structure update.
+   - Keep this section exclusive to system files/directories relevant to runtime/build/development flow.
+   - The `docs/` directory is the only documentation directory allowed there, because it is part of the runtime documentation system.
+   - Do NOT include project governance/documentation files there (for example `AGENTS.md`, `ARCHITECTURE.md`, `REQUIREMENTS.md`, `ToDo.md`, `README.md`, `LICENSE`).
+   - Do NOT include developer-only utility directories (for example `tools/`).
+   - Do NOT include paths ignored by `.gitignore`.
 7. When finishing, explicitly inform the user:
    - Which files were updated.
    - Which tasks in `ToDo.md` were changed.
@@ -24,8 +29,10 @@ This file defines mandatory rules for any agent executing development tasks in t
    - Remove dependencies no longer in use.
    - Maintain consistency with code changes.
 9. Keep all explicit project version citations synchronized whenever the version changes:
-   - Update all version references in code and documentation in the same change set.
-   - At minimum, keep `pyproject.toml`, `src/jatai/__init__.py`, and `README.md` aligned with the same current version.
+   - Run `tools/set_version <new_version>` instead of editing version references manually.
+   - At minimum, keep `pyproject.toml`, `src/jatai/__init__.py`, `README.md`, `docs/jatai.1`, and `tools/set_version` aligned with the same current version.
+   - Verify the replacement result after running the script (for example with `rg` and targeted file checks).
+10. Whenever a new explicit project version citation is added in any file, register that file/pattern in `tools/set_version` (`VERSION_TARGETS`) in the same change set.
 
 ## Architecture & Requirements Governance
 
@@ -48,9 +55,9 @@ Whenever `ARCHITECTURE.md` or `REQUIREMENTS.md` are changed:
 - Locate related tasks in `ToDo.md`.
 - Execute implementation without deciding architecture/requirements without authorization.
 - Update `ToDo.md` and `README.md`.
-- Ensure "File Structure" section is updated in `README.md`.
+- Ensure "File Structure" section is updated in `README.md` with only non-ignored system files (excluding project governance/documentation files).
 - Update `pyproject.toml` version using `MAJOR.PHASE.ITERATION` before report/commit.
-- Synchronize every explicit version citation in code/docs to the same current version.
+- Run `tools/set_version <new_version>` and verify all version citations were updated correctly.
 - Report changes and pending items to the user.
 
 ## Language Requirements
@@ -127,8 +134,8 @@ Branch flow constraints:
    - Keep `MAJOR` unchanged unless the user explicitly requested a major bump.
    - Set `PHASE` to the current `ToDo.md` phase being executed.
    - Increment `ITERATION` for each new commit in that same phase.
-   - Persist the new version in `pyproject.toml` before creating the report and commit.
-   - Synchronize every explicit version citation across code and docs in the same change.
+   - Run `tools/set_version <new_version>` before creating the report and commit.
+   - Verify every explicit version citation was correctly updated across code/docs after running the script.
 
 3. **Create a comprehensive .md report** in the `OUTBOX/` directory containing:
    - Summary of changes made.

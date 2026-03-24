@@ -58,6 +58,8 @@ Giving power back to the user via YAML and File-System manipulation.
 The "File-System First" user experience.
 
 - [x] Curate project documentation to reflect only the current implementation state and real repository structure.
+- [x] Move the version utility to `tools/set_version`, update all references, and add a directory-scoped permissive license in `tools/LICENSE`.
+- [x] Define and document that README "File Structure" must list only non-ignored system files, allowing `docs/` as the only documentation directory, while excluding governance/project documentation files.
 - [ ] Implement Auto-Onboarding: Daemon detects paths added manually to `~/.jatai` and generates missing folders.
 - [ ] Add `!helloworld.md` file drop to newly created INBOXes.
 - [ ] Create the `docs/` folder structure (markdown files in subfolders).

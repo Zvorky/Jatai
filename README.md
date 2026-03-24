@@ -1,7 +1,7 @@
 # **Jataí 🐝**
 **The local micro-email and messaging bus for your file system. Connect scripts and AI agents instantly using a zero-config drop-folder pattern. Jataí uses OS file events to route data across directories via standardized INBOX/OUTBOX folders, without complex APIs or sockets. Drop a file, and it's delivered!**
 
-**Version:** `0.4.2` (_Alpha_)
+**Version:** `0.4.2` (_Alpha_) · **Author:** Zvorky
 
 ## **🎯 Philosophy & Goal**
 
@@ -106,26 +106,12 @@ $PLANNED / TODO$
 │   ├── test_retry.py             # Retry state and exponential delay tests
 │   ├── test_node.py              # Node module tests (config override, backup, and path validation)
 │   └── test_cli.py               # CLI tests using Typer's CliRunner
-├── docs/                          # Documentation directory
-├── OUTBOX/                        # Reports and output artifacts
-├── TESTE/                         # Auxiliary local directory
-├── venv/                          # Local Python virtual environment
 ├── requirements.txt               # Python dependencies currently in use
 ├── pyproject.toml                 # Packaging metadata and console_scripts entrypoint
 ├── pytest.ini                     # Pytest configuration
-├── pytest.log                     # Latest recorded pytest run output
 ├── .gitignore                     # Git ignore rules
-├── AGENTS.md                      # Agent rules and development guidelines
-├── ARCHITECTURE.md                # Architecture Decision Records (ADR)
-├── REQUIREMENTS.md                # Technical requirements specification
-├── README.md                      # This file
-├── ToDo.md                        # Implementation roadmap
-└── LICENSE                        # Mozilla Public License 2.0 (MPL-2.0)
+└── docs/jatai.1                   # Manual page used by the system CLI
 ```
-
-Notes:
-- This section reflects the current repository state.
-- Generated caches (for example `__pycache__/` and `.pytest_cache/`) are intentionally omitted for readability.
 
 ## **🚀 Future Ideas & Roadmap**
 
