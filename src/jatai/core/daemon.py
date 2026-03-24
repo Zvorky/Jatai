@@ -6,9 +6,9 @@ import logging
 import os
 import signal
 import threading
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
-from typing import Tuple
+from typing import Dict, List, Optional, Tuple
 
 from filelock import FileLock, Timeout
 from watchdog.events import FileCreatedEvent, FileMovedEvent, FileSystemEventHandler
@@ -78,6 +78,18 @@ class JataiDaemon:
 
     POLL_INTERVAL_SECONDS = 0.2
     LOCK_TIMEOUT_SECONDS = 2
+    HELLOWORLD_FILENAME = "!helloworld.md"
+    HELLOWORLD_CONTENT = """# Welcome to Jatai
+
+This node was auto-onboarded from the global registry.
+
+How to use:
+
+1. Drop files into OUTBOX to broadcast.
+2. Read files from INBOX.
+3. Use `jatai status` to inspect this node.
+4. Use `jatai docs` to receive documentation files in INBOX.
+"""
 
     def __init__(
         self,
@@ -114,6 +126,62 @@ class JataiDaemon:
         registry = Registry(self.registry_path)
         registry.load()
         return registry
+
+    def _resolve_configured_path(self, node: Node, configured_value: object, fallback_name: str) -> Path:
+        if not configured_value:
+            return node.node_path / fallback_name
+        candidate = Path(str(configured_value))
+        if candidate.is_absolute():
+            return candidate
+        return node.node_path / candidate
+
+    def _drop_helloworld(self, node: Node) -> None:
+        inbox = node.inbox_path
+        inbox.mkdir(parents=True, exist_ok=True)
+        hello_path = inbox / self.HELLOWORLD_FILENAME
+        if hello_path.exists():
+            return
+        hello_path.write_text(
+            self.HELLOWORLD_CONTENT + f"\nGenerated at: {datetime.now(timezone.utc).isoformat()}\n",
+            encoding="utf-8",
+        )
+
+    def _ensure_node_onboarded(
+        self,
+        node: Node,
+        node_data: Dict[str, object],
+        global_config: Dict[str, object],
+    ) -> None:
+        effective = dict(global_config)
+        for key in (
+            "PREFIX_PROCESSED",
+            "PREFIX_ERROR",
+            "RETRY_DELAY_BASE",
+            "MAX_RETRIES",
+            "INBOX_DIR",
+            "OUTBOX_DIR",
+        ):
+            if key in node_data:
+                effective[key] = node_data[key]
+
+        inbox_path = self._resolve_configured_path(node, effective.get("INBOX_DIR"), Node.INBOX_DIRNAME)
+        outbox_path = self._resolve_configured_path(node, effective.get("OUTBOX_DIR"), Node.OUTBOX_DIRNAME)
+        Node.validate_inbox_outbox_overlap(inbox_path, outbox_path)
+
+        if not node.node_path.exists():
+            node.node_path.mkdir(parents=True, exist_ok=True)
+
+        has_any_local_config = node.local_config_path.exists() or node.disabled_config_path.exists()
+        if not has_any_local_config:
+            node.create(global_config=effective, inbox_path=inbox_path, outbox_path=outbox_path)
+            self._drop_helloworld(node)
+            self.logger.info("Auto-onboarded node at %s", node.node_path)
+            return
+
+        inbox_path.mkdir(parents=True, exist_ok=True)
+        outbox_path.mkdir(parents=True, exist_ok=True)
+        node.inbox_path = inbox_path
+        node.outbox_path = outbox_path
 
     @property
     def pid_lock_path(self) -> Path:
@@ -175,7 +243,10 @@ class JataiDaemon:
         nodes: List[Node] = []
         for node_data in registry.nodes.values():
             node = Node(Path(node_data["path"]))
-            if not node.node_path.exists():
+            try:
+                self._ensure_node_onboarded(node, node_data, registry.global_config)
+            except Exception as exc:
+                self.logger.warning("Failed to onboard node=%s reason=%s", node.node_path, exc)
                 continue
             try:
                 node.load_any_config()

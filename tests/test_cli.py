@@ -152,6 +152,41 @@ class TestCLIHappyPath:
         assert (node_path / "INBOX").exists()
         assert (node_path / "OUTBOX").exists()
 
+    def test_cli_docs_without_query_drops_index(self, temp_dir):
+        """Test docs command without query creates category index in INBOX."""
+        node = Node(temp_dir / "docs_node")
+        node.create()
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            result = runner.invoke(app, ["docs"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 0
+        index_path = node.inbox_path / "!docs-index.md"
+        assert index_path.exists()
+        assert "Jatai Documentation Index" in index_path.read_text(encoding="utf-8")
+
+    def test_cli_docs_with_query_copies_matching_files(self, temp_dir):
+        """Test docs command with query copies matching docs to INBOX."""
+        node = Node(temp_dir / "docs_query_node")
+        node.create()
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            result = runner.invoke(app, ["docs", "retry"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 0
+        copied = list(node.inbox_path.glob("*retry*.md"))
+        assert copied
+
 
 class TestCLIErrorFailureScenarios:
     """Error and failure scenario tests for CLI."""
@@ -261,6 +296,35 @@ class TestCLIErrorFailureScenarios:
         assert (node_path / "shared" / "INBOX").exists()
         assert (node_path / "shared" / "OUTBOX").exists()
 
+    def test_cli_docs_fails_outside_node(self, temp_dir):
+        """Test docs command fails in non-node directories."""
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(temp_dir)
+            result = runner.invoke(app, ["docs"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 1
+        assert "not a Jataí node" in result.stdout or "not a Jataí node" in result.stderr
+
+    def test_cli_docs_query_without_matches(self, temp_dir):
+        """Test docs query returns a controlled error when there are no matches."""
+        node = Node(temp_dir / "docs_nomatch_node")
+        node.create()
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            result = runner.invoke(app, ["docs", "query-that-should-not-exist-12345"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 1
+        assert "no docs matched" in result.stdout.lower() or "no docs matched" in result.stderr.lower()
+
 
 class TestCLIMaliciousAdversarialScenarios:
     """Malicious/adversarial scenario tests for CLI."""
@@ -343,3 +407,19 @@ class TestCLIMaliciousAdversarialScenarios:
         # Output shouldn't contain full paths to home or sensitive dirs
         # (actual implementation may vary)
         assert result.exit_code == 0
+
+    def test_cli_docs_query_path_traversal_pattern_is_treated_as_plain_text(self, temp_dir):
+        """Test docs query with traversal-like content does not escape docs scope."""
+        node = Node(temp_dir / "docs_traversal_node")
+        node.create()
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            result = runner.invoke(app, ["docs", "../../etc/passwd"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 1
+        assert not any("passwd" in p.name for p in node.inbox_path.glob("*.md"))

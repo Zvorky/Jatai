@@ -299,6 +299,61 @@ class TestDaemonHappyPath:
         assert "collision" in notice_files[0].read_text(encoding="utf-8").lower()
         assert not list(node_b.inbox_path.glob("!_config-migration-error*.md"))
 
+    def test_daemon_auto_onboards_registry_only_node(self, temp_home):
+        registry_path = temp_home / ".jatai"
+        manual_node_path = temp_home / "manual_node"
+
+        registry = Registry(registry_path=registry_path)
+        registry.set_config("INBOX_DIR", "INBOX")
+        registry.set_config("OUTBOX_DIR", "OUTBOX")
+        registry.add_node("manual_node", str(manual_node_path))
+        registry.save()
+
+        daemon = JataiDaemon(registry_path=registry_path, pid_path=temp_home / ".jatai.pid")
+        nodes = daemon.load_registered_nodes()
+
+        assert len(nodes) == 1
+        assert manual_node_path.exists()
+        assert (manual_node_path / "INBOX").exists()
+        assert (manual_node_path / "OUTBOX").exists()
+        assert (manual_node_path / ".jatai").exists()
+        hello = manual_node_path / "INBOX" / "!helloworld.md"
+        assert hello.exists()
+        assert "Welcome to Jatai" in hello.read_text(encoding="utf-8")
+
+    def test_daemon_auto_onboarding_respects_custom_dirs(self, temp_home):
+        registry_path = temp_home / ".jatai"
+        manual_node_path = temp_home / "custom_dirs_node"
+
+        registry = Registry(registry_path=registry_path)
+        registry.set_config("INBOX_DIR", "messages/in")
+        registry.set_config("OUTBOX_DIR", "messages/out")
+        registry.add_node("custom_dirs_node", str(manual_node_path))
+        registry.save()
+
+        daemon = JataiDaemon(registry_path=registry_path, pid_path=temp_home / ".jatai.pid")
+        nodes = daemon.load_registered_nodes()
+
+        assert len(nodes) == 1
+        assert (manual_node_path / "messages" / "in").exists()
+        assert (manual_node_path / "messages" / "out").exists()
+
+    def test_daemon_auto_onboarding_skips_invalid_overlap(self, temp_home):
+        registry_path = temp_home / ".jatai"
+        manual_node_path = temp_home / "invalid_overlap_node"
+
+        registry = Registry(registry_path=registry_path)
+        registry.set_config("INBOX_DIR", "same")
+        registry.set_config("OUTBOX_DIR", "same")
+        registry.add_node("invalid_overlap_node", str(manual_node_path))
+        registry.save()
+
+        daemon = JataiDaemon(registry_path=registry_path, pid_path=temp_home / ".jatai.pid")
+        nodes = daemon.load_registered_nodes()
+
+        assert nodes == []
+        assert not (manual_node_path / ".jatai").exists()
+
 
 class TestDaemonExclusivity:
     """Singleton/PID lock behavior tests."""
