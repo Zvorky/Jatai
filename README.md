@@ -25,6 +25,15 @@ python3 -m venv venv
 pip install -e .
 ```
 
+Add the following entries to your project's `.gitignore` to avoid committing Jataí artifacts:
+
+```gitignore
+# Jataí
+INBOX/
+OUTBOX/
+# .jatai # Settings, you may want to synchronize them
+```
+
 ## **🐝 Usage (The File-System Way)**
 
 Current implementation status: core modules, basic CLI, daemon lifecycle, startup scan, watchdog-based routing, 5-state prefix handling, exponential retry management, global logging, local config override handling, soft-delete/hot-reload monitoring, and prefix hot-swap rollback are available for local development and testing.

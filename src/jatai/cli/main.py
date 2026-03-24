@@ -207,7 +207,11 @@ def stop() -> None:
 def run() -> None:
     """Entrypoint for console_scripts supporting `jatai [path]` alias."""
     args = sys.argv[1:]
-    if args and not args[0].startswith("-") and args[0] not in KNOWN_COMMANDS:
+    if not args:
+        # No arguments: show help until TUI is implemented.
+        app(["--help"])
+        return
+    if not args[0].startswith("-") and args[0] not in KNOWN_COMMANDS:
         _initialize_node(args[0])
         return
     app()

@@ -73,7 +73,7 @@ Adding convenience commands and storage management.
 - [ ] Implement `jatai remove` (CLI wrapper for renaming to `._jatai`).
 - [ ] Implement **Garbage Collection (Auto-Remove):** Background daemon logic to delete `_` prefixed files based on config thresholds.
 - [ ] Implement `jatai clear [--read] [--sent]` manual CLI command.
-- [ ] Build the interactive TUI (invoked by `jatai` with no arguments).
+- [ ] Build the interactive TUI (invoked by `jatai` with no arguments). **[TEMP]** Until TUI is ready, bare `jatai` (no args) is aliased to `jatai --help`.
 
 ## **Phase 7: Advanced / Future Expansion (Post-Core)**
 

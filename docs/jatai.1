@@ -1,0 +1,101 @@
+.TH JATAI 1 "2026-03-23" "0.4.2" "Jataí Manual"
+.SH NAME
+jatai \- local file-system message bus for scripts and agents
+.SH SYNOPSIS
+.B jatai
+[\fICOMMAND\fR] [\fIOPTIONS\fR] [\fIARGS\fR]
+.br
+.B jatai
+[\fIPATH\fR]
+.SH DESCRIPTION
+.B Jataí
+is a local micro-email and messaging bus that routes files between nodes on the
+file system. Each node is a directory containing an INBOX and an OUTBOX. Files
+dropped into an OUTBOX are delivered to the INBOXes of all registered nodes.
+The background daemon watches for new files and handles delivery, retries, and
+error reporting via filename prefix conventions.
+.PP
+Invoking
+.B jatai
+with no arguments displays this help summary. The interactive TUI is not yet
+available and will replace this behaviour in a future release.
+.SH COMMANDS
+.TP
+.B jatai [\fIPATH\fR]
+Shorthand for \fBjatai init\fR \fIPATH\fR. When \fIPATH\fR is provided and is
+not a known sub-command, the directory at \fIPATH\fR is initialised as a new
+Jataí node.
+.TP
+.B jatai init [\fIPATH\fR]
+Initialise a Jataí node at \fIPATH\fR (defaults to the current working
+directory). Creates the INBOX and OUTBOX directories, writes a local
+\fI.jatai\fR configuration file, and registers the node in the global
+registry at \fI~/.jatai\fR.
+.TP
+.B jatai status
+Show the status of the Jataí node in the current directory: INBOX and OUTBOX
+file counts.
+.TP
+.B jatai start
+Start the Jataí background daemon. The daemon watches all registered node
+OUTBOXes and delivers files to their destination INBOXes. Auto-start is
+registered for the current login session.
+.TP
+.B jatai stop
+Stop the running Jataí daemon.
+.SH FILES
+.TP
+.I ~/.jatai
+Global registry and configuration file (YAML).
+.TP
+.I ~/.jatai.pid
+PID file written by the daemon while it is running.
+.TP
+.I ~/.jatai.log
+Log file produced by the daemon.
+.TP
+.I ~/.retry
+Persistent retry-state file (JSON) tracking exponential back-off counters.
+.TP
+.I <NODE>/.jatai
+Local node configuration file (YAML). Overrides global defaults for that node.
+.TP
+.I <NODE>/._jatai
+Soft-delete marker. When present the node is considered disabled without
+removing its configuration.
+.TP
+.I <NODE>/.jatai.bkp
+Automatic backup of the previous local configuration, used for rollback when a
+configuration change causes a prefix collision.
+.SH FILE PREFIX CONVENTIONS
+Jataí uses filename prefixes to encode delivery state:
+.TP
+.B (no prefix)
+File is pending delivery.
+.TP
+.B _
+File was delivered successfully (processed).
+.TP
+.B !
+Partial or total error \(em delivery failed after all retries.
+.TP
+.B !!
+Fatal error \(em unrecoverable delivery failure.
+.SH ENVIRONMENT
+.TP
+.B JATAI_REGISTRY
+Override the default path to the global registry file (not yet implemented).
+.SH EXIT STATUS
+.TP
+.B 0
+Success.
+.TP
+.B 1
+Operational error (node not found, daemon already running, etc.).
+.SH BUGS
+Report bugs at \fIhttps://github.com/zvorky/jatai/issues\fR
+.SH AUTHOR
+Enzo \(oqZvorky\(cq Zavorski Delevatti
+.SH SEE ALSO
+.BR watchdog (1),
+.BR filelock (1)
