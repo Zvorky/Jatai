@@ -62,7 +62,7 @@ The "File-System First" user experience.
 - [x] Define and document that README "File Structure" must list only non-ignored system files, allowing `docs/` as the only documentation directory, while excluding governance/project documentation files.
 - [x] Implement Auto-Onboarding: Daemon detects paths added manually to `~/.jatai` and generates missing folders.
 - [x] Add `!helloworld.md` file drop to newly created INBOXes.
-- [ ] Create the `docs/` folder structure (markdown files in subfolders).
+- [x] Create the `docs/` folder structure (markdown files in subfolders).
 - [ ] Implement `jatai docs` to drop a category index file.
 - [ ] Implement `jatai docs [query]` to copy matching markdown files directly to the local INBOX.
 
