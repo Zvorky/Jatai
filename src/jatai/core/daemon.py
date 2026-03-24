@@ -402,6 +402,29 @@ class JataiDaemon:
         self.retry_state.save()
         return result
 
+    def onboard_registered_nodes(self) -> None:
+        """Auto-create folders for nodes added manually to the global registry."""
+        try:
+            registry = self._load_registry()
+        except FileNotFoundError:
+            return
+
+        for node_data in registry.nodes.values():
+            node = Node(Path(node_data["path"]))
+            if not node.node_path.exists():
+                continue
+            try:
+                onboarded = node.onboard(global_config=registry.global_config)
+            except Exception as exc:
+                self.logger.warning(
+                    "Auto-onboarding failed for node=%s reason=%s",
+                    node.node_path,
+                    exc,
+                )
+                continue
+            if onboarded:
+                self.logger.info("Auto-onboarded node=%s", node.node_path)
+
     def startup_scan(self) -> None:
         nodes = self.load_active_nodes()
         for node in nodes:
@@ -447,6 +470,7 @@ class JataiDaemon:
         self.install_signal_handlers()
         self.acquire_singleton()
         try:
+            self.onboard_registered_nodes()
             self.startup_scan()
             self.setup_watchdog()
             while not self.stop_event.wait(self.POLL_INTERVAL_SECONDS):

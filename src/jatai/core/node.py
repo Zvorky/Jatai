@@ -19,6 +19,37 @@ class Node:
     OUTBOX_DIRNAME = "OUTBOX"
     PREFIX_KEYS = ("PREFIX_PROCESSED", "PREFIX_ERROR")
 
+    HELLOWORLD_FILENAME = "!helloworld.md"
+    HELLOWORLD_CONTENT = """\
+# Welcome to Jataí 🐝
+
+This file was automatically dropped into your INBOX as part of onboarding.
+
+## What is Jataí?
+
+Jataí is a local file-system message bus. It connects scripts and AI agents
+using standardized INBOX/OUTBOX folders, without complex APIs or sockets.
+
+## How it works
+
+- Drop a file into your **OUTBOX** and Jataí routes it to all other nodes.
+- Files arrive in the **INBOX** folders of all registered nodes.
+- File prefixes indicate message state:
+  - `_file` = delivered / processed
+  - `!file` or `!_file` = delivery error (retry pending)
+  - `!!file` or `!!_file` = fatal error (max retries reached)
+
+## Getting started
+
+1. Initialize a node: `jatai init [path]`
+2. Start the daemon:  `jatai start`
+3. Check node status: `jatai status`
+4. Browse docs:       `jatai docs`
+5. See all commands:  `jatai --help`
+
+Happy messaging! 🐝
+"""
+
     def __init__(self, node_path: Path):
         """
         Initialize a Node instance.
@@ -323,6 +354,36 @@ class Node:
             raise
 
         return bool(rename_plan)
+
+    def drop_helloworld(self) -> Optional[Path]:
+        """Drop the !helloworld.md tutorial file into the INBOX if not already present."""
+        self.inbox_path.mkdir(parents=True, exist_ok=True)
+        target = self.inbox_path / self.HELLOWORLD_FILENAME
+        if target.exists():
+            return None
+        target.write_text(self.HELLOWORLD_CONTENT, encoding="utf-8")
+        return target
+
+    def onboard(
+        self,
+        global_config: Optional[Dict[str, Any]] = None,
+        inbox_path: Optional[Path] = None,
+        outbox_path: Optional[Path] = None,
+    ) -> bool:
+        """Create missing node structure (INBOX, OUTBOX, .jatai) and drop helloworld.
+
+        Returns True if the node was newly created/onboarded, False if it already existed.
+        """
+        if self.is_enabled() or self.is_disabled():
+            return False
+
+        self.create(
+            global_config=global_config,
+            inbox_path=inbox_path,
+            outbox_path=outbox_path,
+        )
+        self.drop_helloworld()
+        return True
 
     def drop_error_notice(self, message: str, error_prefix: Optional[str] = None) -> Path:
         """Write an error notice into the INBOX for manual inspection."""

@@ -21,7 +21,7 @@ app = typer.Typer(
     help="Jataí 🐝 - The local micro-email and messaging bus for your file system.",
 )
 
-KNOWN_COMMANDS = {"init", "status", "start", "stop", "_daemon-run"}
+KNOWN_COMMANDS = {"init", "status", "start", "stop", "_daemon-run", "docs", "list", "send", "read", "unread", "config", "remove", "clear"}
 
 
 def _to_path(node_path: Path, raw_value: str) -> Path:
@@ -78,6 +78,7 @@ def _initialize_node(path: Optional[str] = None) -> None:
             inbox_path=inbox_path,
             outbox_path=outbox_path,
         )
+        node.drop_helloworld()
         typer.echo(f"✓ Initialized node at {node_path}")
         typer.echo(f"  INBOX:  {node.inbox_path}")
         typer.echo(f"  OUTBOX: {node.outbox_path}")

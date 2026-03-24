@@ -300,8 +300,97 @@ class TestDaemonHappyPath:
         assert not list(node_b.inbox_path.glob("!_config-migration-error*.md"))
 
 
+class TestDaemonAutoOnboarding:
+    """Auto-onboarding tests for paths added manually to the registry."""
+
+    def test_onboard_registered_nodes_creates_missing_structure(self, temp_home):
+        """Daemon auto-creates INBOX/OUTBOX/.jatai for manually added registry entries."""
+        registry_path = temp_home / ".jatai"
+        node_path = temp_home / "manual_node"
+        node_path.mkdir()
+
+        registry = Registry(registry_path=registry_path)
+        registry.add_node("manual_node", str(node_path))
+        registry.save()
+
+        daemon = JataiDaemon(
+            registry_path=registry_path,
+            pid_path=temp_home / ".jatai.pid",
+            log_path=temp_home / ".jatai.log",
+        )
+        daemon.onboard_registered_nodes()
+
+        assert (node_path / "INBOX").exists()
+        assert (node_path / "OUTBOX").exists()
+        assert (node_path / ".jatai").exists()
+
+    def test_onboard_registered_nodes_drops_helloworld(self, temp_home):
+        """Daemon drops !helloworld.md into INBOX of newly onboarded nodes."""
+        registry_path = temp_home / ".jatai"
+        node_path = temp_home / "manual_node"
+        node_path.mkdir()
+
+        registry = Registry(registry_path=registry_path)
+        registry.add_node("manual_node", str(node_path))
+        registry.save()
+
+        daemon = JataiDaemon(
+            registry_path=registry_path,
+            pid_path=temp_home / ".jatai.pid",
+            log_path=temp_home / ".jatai.log",
+        )
+        daemon.onboard_registered_nodes()
+
+        helloworld = node_path / "INBOX" / "!helloworld.md"
+        assert helloworld.exists()
+        assert "Jataí" in helloworld.read_text(encoding="utf-8")
+
+    def test_onboard_registered_nodes_skips_already_initialized(self, temp_home):
+        """Daemon does not overwrite an already initialized node."""
+        registry_path = temp_home / ".jatai"
+        node = register_node(registry_path, "existing_node", temp_home / "existing_node")
+        existing_config = node.local_config_path.read_text(encoding="utf-8")
+
+        daemon = JataiDaemon(
+            registry_path=registry_path,
+            pid_path=temp_home / ".jatai.pid",
+            log_path=temp_home / ".jatai.log",
+        )
+        daemon.onboard_registered_nodes()
+
+        assert node.local_config_path.read_text(encoding="utf-8") == existing_config
+
+    def test_onboard_registered_nodes_skips_nonexistent_paths(self, temp_home):
+        """Daemon silently skips registry entries whose root path does not exist."""
+        registry_path = temp_home / ".jatai"
+        ghost_path = temp_home / "ghost_node"
+
+        registry = Registry(registry_path=registry_path)
+        registry.add_node("ghost", str(ghost_path))
+        registry.save()
+
+        daemon = JataiDaemon(
+            registry_path=registry_path,
+            pid_path=temp_home / ".jatai.pid",
+            log_path=temp_home / ".jatai.log",
+        )
+        # Should not raise
+        daemon.onboard_registered_nodes()
+
+        assert not ghost_path.exists()
+
+    def test_onboard_registered_nodes_tolerates_no_registry(self, temp_home):
+        """Daemon handles missing registry file gracefully during onboarding."""
+        daemon = JataiDaemon(
+            registry_path=temp_home / ".jatai",
+            pid_path=temp_home / ".jatai.pid",
+            log_path=temp_home / ".jatai.log",
+        )
+        # Should not raise
+        daemon.onboard_registered_nodes()
+
+
 class TestDaemonExclusivity:
-    """Singleton/PID lock behavior tests."""
 
     def test_daemon_rejects_duplicate_singleton(self, temp_home):
         pid_path = temp_home / ".jatai.pid"

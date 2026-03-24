@@ -225,6 +225,55 @@ class TestNodeHappyPath:
         assert node.list_inbox() == []
         assert node.list_outbox() == []
 
+    def test_node_drop_helloworld_creates_file(self, temp_dir):
+        """Test that drop_helloworld creates !helloworld.md in INBOX."""
+        node_path = temp_dir / "my_node"
+        node = Node(node_path)
+        node.create()
+
+        result = node.drop_helloworld()
+
+        assert result is not None
+        assert result.name == "!helloworld.md"
+        assert result.exists()
+        content = result.read_text(encoding="utf-8")
+        assert "Jataí" in content
+
+    def test_node_drop_helloworld_skips_if_already_present(self, temp_dir):
+        """Test that drop_helloworld returns None if !helloworld.md already exists."""
+        node_path = temp_dir / "my_node"
+        node = Node(node_path)
+        node.create()
+
+        node.drop_helloworld()
+        result = node.drop_helloworld()
+
+        assert result is None
+
+    def test_node_onboard_creates_structure_and_drops_helloworld(self, temp_dir):
+        """Test that onboard creates all folders and drops !helloworld.md."""
+        node_path = temp_dir / "new_node"
+        node_path.mkdir()
+        node = Node(node_path)
+
+        created = node.onboard()
+
+        assert created is True
+        assert node.inbox_path.exists()
+        assert node.outbox_path.exists()
+        assert node.local_config_path.exists()
+        assert (node.inbox_path / "!helloworld.md").exists()
+
+    def test_node_onboard_skips_existing_node(self, temp_dir):
+        """Test that onboard returns False if node is already initialized."""
+        node_path = temp_dir / "existing_node"
+        node = Node(node_path)
+        node.create()
+
+        created = node.onboard()
+
+        assert created is False
+
 
 class TestNodeErrorFailureScenarios:
     """Error and failure scenario tests for Node."""
