@@ -79,6 +79,7 @@ Adding convenience commands and storage management.
 - [x] Add `--inbox` option to `jatai log` (latest/all) to export rendered output into current node INBOX.
 - [x] Implement `jatai list`, `jatai send`, `jatai read`, `jatai unread`.
 - [x] Implement `jatai config` to read/write settings via CLI.
+- [ ] Implement `jatai config get [key]` with optional `-G|--global` scope and optional `-i|--inbox` export.
 - [x] Implement `jatai remove` (CLI wrapper for renaming to `._jatai`).
 - [x] Implement **Garbage Collection (Auto-Remove):** Background daemon logic to delete `_` prefixed files based on config thresholds.
 - [x] Implement `jatai clear [--read] [--sent]` manual CLI command.

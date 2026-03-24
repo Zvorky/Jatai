@@ -68,4 +68,10 @@ This document details the Architecture Decision Records (ADR) for the Jataí pro
   * `-f` ↔ `--foreground` : Run daemon in foreground (diagnostic/hidden use).
   * `-G` ↔ `--global` : Operate on global configuration (uppercase to emphasize significance).
 * **Restriction:** Config key arguments (positional, not flags) are explicitly excluded from short-option mapping to maintain clarity and prevent future key-name ambiguity.
+* **Config Retrieval Extension (specified):** Add explicit retrieval subcommand via `jatai config get [key]` with the following behavior:
+  * Default scope is local node config.
+  * `-G` / `--global` switches retrieval scope to global config.
+  * `-i` / `--inbox` exports rendered retrieval output into current node INBOX.
+  * Optional `key` returns only the requested key value from the selected scope.
+  * Missing key in selected scope must return a clear error (for example, `INBOX_DIR` in global scope when absent).
 * **Scope:** All future CLI development must follow this policy for consistency.

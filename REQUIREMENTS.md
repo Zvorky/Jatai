@@ -85,4 +85,10 @@ Jataí dictates message state via filename prefixes. Base prefixes are configura
   * `-a` = `--all`, `-i` = `--inbox`, `-m` = `--move`, `-r` = `--read`, `-s` = `--sent`, `-f` = `--foreground`, `-G` = `--global`.
   * Config key arguments (positional) explicitly exclude short-option mapping.
   * (See ADR 13 for full policy and rationale).
+* **Config Retrieval Subcommand:** `jatai config get [key]` must be supported.
+  * Default retrieval scope is local node config.
+  * `-G` / `--global` switches retrieval to global config.
+  * `-i` / `--inbox` exports retrieved output to the current node INBOX.
+  * `key` is optional; when present, only that key is returned from selected scope.
+  * If a requested key does not exist in selected scope, command must fail with a clear error message.
 *(Refer to the README for the full CLI command table).*
