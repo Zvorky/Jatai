@@ -19,6 +19,9 @@ Invoking
 .B jatai
 with no arguments opens the interactive TUI when running in an interactive
 terminal. In non-interactive execution, it displays the CLI help summary.
+.PP
+Current TUI menu actions cover status, docs/log retrieval, list/send/read/unread,
+config get/set, remove, clear, daemon start/stop, help, and quit.
 .SH COMMANDS
 .TP
 .B jatai [\fIPATH\fR]
@@ -70,6 +73,10 @@ Mark an INBOX file as unread by removing the success prefix.
 .B jatai config [\fIKEY\fR] [\fIVALUE\fR] [\fB-G\fR|\fB--global\fR]
 Read or write configuration values. \fB--global\fR targets global registry config.
 Config keys are positional arguments.
+.TP
+.B jatai config get [\fIKEY\fR] [\fB-G\fR|\fB--global\fR] [\fB-i\fR|\fB--inbox\fR]
+Read-only config retrieval. Defaults to local scope, switches to global with
+\fB--global\fR, and can export output to current node INBOX with \fB--inbox\fR.
 .TP
 .B jatai remove [\fIPATH\fR]
 Soft-delete a node by renaming \fI.jatai\fR to \fI._jatai\fR.

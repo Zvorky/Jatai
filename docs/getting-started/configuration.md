@@ -46,6 +46,8 @@ contents but continues watching the root for reactivation.
 | `MAX_RETRIES` | `3` | global / local | Maximum delivery attempts before transitioning to fatal prefix |
 | `INBOX_DIR` | `INBOX` | global / local | Subdirectory name or absolute path for the node's incoming folder |
 | `OUTBOX_DIR` | `OUTBOX` | global / local | Subdirectory name or absolute path for the node's outgoing folder |
+| `GC_MAX_READ_FILES` | `0` | global / local | Maximum number of `_`-prefixed files to keep in INBOX. `0` disables auto-cleanup |
+| `GC_MAX_SENT_FILES` | `0` | global / local | Maximum number of `_`-prefixed files to keep in OUTBOX. `0` disables auto-cleanup |
 
 ### Relative vs absolute paths for INBOX/OUTBOX
 
@@ -109,6 +111,39 @@ Policy note:
 
 - `-G` is the canonical short option for `--global`.
 - Config keys are positional arguments and do not use short-option aliases.
+
+### Read-only retrieval with `config get`
+
+```bash
+# Show full local config
+jatai config get
+
+# Show a local key
+jatai config get MAX_RETRIES
+
+# Show full global config
+jatai config get -G
+
+# Export retrieval output to current node INBOX
+jatai config get PREFIX_PROCESSED -i
+```
+
+`config get` is the safe read-only form for config inspection.
+
+## Automatic garbage collection
+
+The daemon enforces file count limits on processed (`_`-prefixed) history files.
+This prevents INBOX and OUTBOX from growing unbounded over time.
+
+- `GC_MAX_READ_FILES`: caps the number of `_`-prefixed files retained in INBOX.
+- `GC_MAX_SENT_FILES`: caps the number of `_`-prefixed files retained in OUTBOX.
+
+When the limit is exceeded, the oldest processed files (by modification time) are
+deleted automatically during the startup scan and on every delivery cycle.
+
+Set either key to `0` (the default) to disable auto-cleanup for that location.
+
+See [Garbage Collection](../operations/garbage-collection.md) for the full reference.
 
 ## Example: per-node retry tuning
 

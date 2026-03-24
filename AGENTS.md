@@ -43,6 +43,9 @@ This file defines mandatory rules for any agent executing development tasks in t
 13. Every pending architecture/requirements decision that implies implementation work must be represented in `ToDo.md` as explicit actionable task(s) before implementation starts.
    - Do not leave ADR/REQUIREMENTS implementation implications implicit.
    - Add missing tasks immediately when a pending requirement/ADR is identified.
+14. After implementing any code/behavior change, the agent must update all affected user-facing documentation under `docs/` before creating a commit.
+   - Documentation in `docs/` must reflect the implemented behavior, command surface, options, and examples.
+   - This documentation update is mandatory for code commits and must happen before the commit step.
 
 ## Architecture & Requirements Governance
 
@@ -70,6 +73,7 @@ When reviewing pending ADR/requirement items:
 - Locate related tasks in `ToDo.md`.
 - Execute implementation without deciding architecture/requirements without authorization.
 - Update `ToDo.md` and `README.md`.
+- Ensure user-facing `docs/` content is updated to match implemented behavior before committing.
 - Ensure "File Structure" section is updated in `README.md` with only non-ignored system files (excluding project governance/documentation files).
 - Ensure pending ADR/requirements implications are reflected as explicit actionable tasks in `ToDo.md`.
 - Classify the pending commit by asking: "Is this commit code or documentation?"

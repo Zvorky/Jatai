@@ -129,11 +129,15 @@ OUTBOX/
 
 ## Next steps
 
-- [Configuration reference](configuration.md) — customize prefixes, retry logic, and folder names
+- [Configuration reference](configuration.md) — customize prefixes, retry logic, folder names, and garbage collection limits
 - [Prefix states](../operations/prefix-states.md) — understand what `_`, `!`, `!!` mean
 - [Retry and health](../operations/retry-and-health.md) — how failures are handled
+- [Garbage collection](../operations/garbage-collection.md) — manual and automatic cleanup of processed files
 - [CLI reference](../operations/cli-reference.md) — full command-line reference
 
-> Running `jatai` with no arguments opens the interactive TUI in a terminal session. In non-interactive usage, the same command prints the CLI help summary.
-
-> The current TUI implementation is still minimal and is scheduled for a broader Textual-based refactor so it can cover the full CLI workflow.
+> Running `jatai` with no arguments opens the interactive TUI in a terminal
+> session. In non-interactive usage (scripts, cron), the same command prints the
+> CLI help summary.
+>
+> The current TUI is a menu-driven interface that covers the full CLI command set.
+> A richer Textual-based TUI is planned for a future release.

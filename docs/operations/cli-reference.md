@@ -177,6 +177,35 @@ jatai config -G MAX_RETRIES 5
 
 Config keys are positional arguments and intentionally do not have short-option aliases.
 
+### `jatai config get [key] [-G|--global] [-i|--inbox]`
+
+Read-only config retrieval for local/global scope.
+
+```bash
+# Show full local config
+jatai config get
+
+# Show one local key
+jatai config get MAX_RETRIES
+
+# Show full global config
+jatai config get -G
+
+# Show one global key
+jatai config get MAX_RETRIES -G
+
+# Export rendered output to current node INBOX
+jatai config get -i
+jatai config get PREFIX_PROCESSED -i
+```
+
+Behavior:
+
+- default scope is local node config
+- `-G|--global` switches scope to global registry config
+- `-i|--inbox` exports output into the current node INBOX
+- missing key returns a clear error
+
 ---
 
 ### `jatai remove [path]`
@@ -221,9 +250,12 @@ Canonical mapping:
 
 ---
 
-## Future-facing notes
+## Interactive TUI
 
-The current command surface already includes the Phase 6 CLI toolbox.
-Running `jatai` with no arguments opens the interactive TUI in an interactive terminal session. In non-interactive execution, `jatai` without arguments prints the CLI help summary.
+Running `jatai` with no arguments in an interactive terminal opens the
+menu-driven TUI. In non-interactive execution (scripts, cron jobs), `jatai`
+without arguments prints the CLI help summary instead.
 
-The interactive TUI is still intentionally minimal and is planned to be expanded to cover the full CLI workflow.
+The TUI covers all CLI workflow actions:
+`status`, `docs`, `log`, `list`, `send`, `read`, `unread`, `config get/set`,
+`remove`, `clear`, and daemon `start`/`stop`.

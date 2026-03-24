@@ -47,7 +47,7 @@ Current implementation status: core modules, basic CLI, daemon lifecycle, startu
 7. **Observability already implemented in core:** Global daemon log file output to `~/.jatai.log` is active.
 8. **Configuration reactivity already implemented in core:** Local `.jatai` overrides are applied over global defaults, `._jatai` nodes are ignored while their roots remain monitored, and reactivation via rename is handled by the daemon.
 9. **Prefix migration safety already implemented in core:** Prefix changes trigger historical file renames; collisions restore the previous config from `.jatai.bkp` and drop an error notice into the node INBOX.
-10. **Onboarding and docs already implemented in core/CLI:** Registry-only nodes are auto-created by the daemon (including `!helloworld.md` in new INBOXes), `jatai docs` drops a docs index in the current INBOX, and `jatai docs [query]` copies matching markdown docs into the local INBOX.
+10. **Onboarding and docs already implemented in core/CLI:** Registry-only nodes are auto-created by the daemon (including `!helloworld.md` in new INBOXes), `jatai docs` renders documentation in terminal by default, and `jatai docs [query]` renders matching markdown docs in terminal by default (`-i|--inbox` exports to files).
 
 ## **🛠️ CLI & TUI Toolbox**
 
@@ -58,7 +58,8 @@ Current implementation status: core modules, basic CLI, daemon lifecycle, startu
 | `jatai start` | Starts the daemon and registers it for OS auto-start. Fails safely if already running. |
 | `jatai stop` | Stops the background daemon. |
 | `jatai status` | Returns file counters for the current node. |
-| `jatai config [-G\|--global] <key> <val>` | Sets a configuration parameter locally or globally. |
+| `jatai config [-G\|--global] [key] [value]` | Reads/writes configuration in local/global scope. |
+| `jatai config get [key] [-G\|--global] [-i\|--inbox]` | Read-only config retrieval (single key or full scope), optionally exported to current node INBOX. |
 | `jatai list [addrs\|inbox\|outbox]` | Lists files in current node (inbox/outbox) or all nodes (addrs). |
 | `jatai send <file> [-m\|--move]` | Copies (or moves) an external file into the local OUTBOX. |
 | `jatai read <file>` | Renames a file in the INBOX, adding the success prefix. |
@@ -68,6 +69,18 @@ Current implementation status: core modules, basic CLI, daemon lifecycle, startu
 | `jatai log` | Prints the latest log content in terminal (use `-i\|--inbox` to export). |
 | `jatai log -a\|--all` | Prints the complete log output in terminal (use `-i\|--inbox` to export). |
 | `jatai docs [query]` | Prints matching documentation in terminal by default (use `-i\|--inbox` to export file(s)). |
+
+### TUI Workflow (current alpha)
+
+`jatai` in an interactive terminal opens a menu-driven TUI that exposes the same handlers as CLI commands:
+
+- `status`, `start`, `stop`
+- `docs` (index/query), `log` (latest/all)
+- `list`, `send`, `read`, `unread`
+- `config get`, `config set` (local/global, optional INBOX export for get)
+- `remove`, `clear`, `help`, `quit`
+
+This keeps command behavior consistent between interactive and non-interactive usage.
 
 ### CLI Short-Option Policy (ADR 13)
 
@@ -124,7 +137,7 @@ Config keys are positional arguments (for example, `PREFIX_PROCESSED`) and inten
 └── docs/                           # Runtime in-band documentation and manual page
     ├── jatai.1                    # Manual page used by the system CLI
     ├── getting-started/           # Quickstart, configuration reference
-    ├── operations/                # CLI reference, prefix states, retry & health
+    ├── operations/                # CLI reference, prefix states, retry & health, garbage collection
     ├── security/                  # Safe usage and hardening notes
     └── development/               # Repository structure and debug guides
 ```
