@@ -343,3 +343,207 @@ class TestCLIMaliciousAdversarialScenarios:
         # Output shouldn't contain full paths to home or sensitive dirs
         # (actual implementation may vary)
         assert result.exit_code == 0
+
+
+class TestCLIListSendReadUnread:
+    """Tests for list, send, read, and unread CLI commands."""
+
+    def test_cli_list_addrs_no_registry(self, temp_home):
+        """list addrs shows empty message when no nodes registered."""
+        result = runner.invoke(app, ["list", "addrs"])
+        assert result.exit_code == 0
+        assert "no nodes" in result.stdout.lower()
+
+    def test_cli_list_addrs_with_nodes(self, temp_home):
+        """list addrs shows all registered nodes."""
+        node_path = str(temp_home / "node_a")
+        runner.invoke(app, ["init", node_path])
+
+        result = runner.invoke(app, ["list", "addrs"])
+
+        assert result.exit_code == 0
+        assert "node_a" in result.stdout
+
+    def test_cli_list_inbox(self, temp_dir):
+        """list inbox shows files in the INBOX."""
+        import os
+        node_path = temp_dir / "node"
+        node = Node(node_path)
+        node.create()
+        (node.inbox_path / "msg1.txt").write_text("hi")
+
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node_path)
+            result = runner.invoke(app, ["list", "inbox"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 0
+        assert "msg1.txt" in result.stdout
+
+    def test_cli_list_outbox(self, temp_dir):
+        """list outbox shows files in the OUTBOX."""
+        import os
+        node_path = temp_dir / "node"
+        node = Node(node_path)
+        node.create()
+        (node.outbox_path / "send.txt").write_text("data")
+
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node_path)
+            result = runner.invoke(app, ["list", "outbox"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 0
+        assert "send.txt" in result.stdout
+
+    def test_cli_list_both_by_default(self, temp_dir):
+        """list with no argument shows both INBOX and OUTBOX."""
+        import os
+        node_path = temp_dir / "node"
+        node = Node(node_path)
+        node.create()
+
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node_path)
+            result = runner.invoke(app, ["list"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 0
+        assert "INBOX" in result.stdout
+        assert "OUTBOX" in result.stdout
+
+    def test_cli_send_copies_file_to_outbox(self, temp_dir):
+        """send copies an external file to the local OUTBOX."""
+        import os
+        node_path = temp_dir / "node"
+        node = Node(node_path)
+        node.create()
+
+        source = temp_dir / "report.txt"
+        source.write_text("report content")
+
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node_path)
+            result = runner.invoke(app, ["send", str(source)])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 0
+        assert "report.txt" in result.stdout
+        assert (node.outbox_path / "report.txt").exists()
+        assert source.exists()  # Original still there (copy mode)
+
+    def test_cli_send_move_removes_original(self, temp_dir):
+        """send --move moves the file to OUTBOX and removes the original."""
+        import os
+        node_path = temp_dir / "node"
+        node = Node(node_path)
+        node.create()
+
+        source = temp_dir / "to_move.txt"
+        source.write_text("content")
+
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node_path)
+            result = runner.invoke(app, ["send", str(source), "--move"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 0
+        assert (node.outbox_path / "to_move.txt").exists()
+        assert not source.exists()
+
+    def test_cli_send_missing_file(self, temp_dir):
+        """send fails gracefully when source file does not exist."""
+        import os
+        node_path = temp_dir / "node"
+        Node(node_path).create()
+
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node_path)
+            result = runner.invoke(app, ["send", str(temp_dir / "ghost.txt")])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 1
+
+    def test_cli_read_marks_inbox_file_as_read(self, temp_dir):
+        """read adds the success prefix to an INBOX file."""
+        import os
+        node_path = temp_dir / "node"
+        node = Node(node_path)
+        node.create()
+        (node.inbox_path / "message.txt").write_text("hello")
+
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node_path)
+            result = runner.invoke(app, ["read", "message.txt"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 0
+        assert (node.inbox_path / "_message.txt").exists()
+        assert not (node.inbox_path / "message.txt").exists()
+
+    def test_cli_read_already_marked(self, temp_dir):
+        """read fails gracefully when file already has the success prefix."""
+        import os
+        node_path = temp_dir / "node"
+        node = Node(node_path)
+        node.create()
+        (node.inbox_path / "_message.txt").write_text("hello")
+
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node_path)
+            result = runner.invoke(app, ["read", "_message.txt"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 1
+
+    def test_cli_unread_removes_success_prefix(self, temp_dir):
+        """unread removes the success prefix from an INBOX file."""
+        import os
+        node_path = temp_dir / "node"
+        node = Node(node_path)
+        node.create()
+        (node.inbox_path / "_message.txt").write_text("hello")
+
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node_path)
+            result = runner.invoke(app, ["unread", "_message.txt"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 0
+        assert (node.inbox_path / "message.txt").exists()
+        assert not (node.inbox_path / "_message.txt").exists()
+
+    def test_cli_unread_file_without_prefix(self, temp_dir):
+        """unread fails gracefully when file has no success prefix."""
+        import os
+        node_path = temp_dir / "node"
+        node = Node(node_path)
+        node.create()
+        (node.inbox_path / "pending.txt").write_text("hello")
+
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node_path)
+            result = runner.invoke(app, ["unread", "pending.txt"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 1

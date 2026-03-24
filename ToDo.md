@@ -70,7 +70,7 @@ The "File-System First" user experience.
 
 Adding convenience commands and storage management.
 
-- [ ] Implement `jatai list`, `jatai send`, `jatai read`, `jatai unread`.
+- [x] Implement `jatai list`, `jatai send`, `jatai read`, `jatai unread`.
 - [ ] Implement `jatai config` to read/write settings via CLI.
 - [ ] Implement `jatai remove` (CLI wrapper for renaming to `._jatai`).
 - [ ] Implement **Garbage Collection (Auto-Remove):** Background daemon logic to delete `_` prefixed files based on config thresholds.

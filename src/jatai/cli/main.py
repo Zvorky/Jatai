@@ -13,7 +13,9 @@ from typing import Optional
 
 from jatai.core.autostart import AutoStartRegistrar
 from jatai.core.daemon import AlreadyRunningError, JataiDaemon
+from jatai.core.delivery import Delivery
 from jatai.core.docs import deliver_docs
+from jatai.core.prefix import Prefix
 from jatai.core.registry import Registry
 from jatai.core.node import Node
 
@@ -204,6 +206,175 @@ def stop() -> None:
 
     typer.echo("✗ Failed to stop daemon within timeout", err=True)
     raise typer.Exit(code=1)
+
+
+@app.command(name="list")
+def list_cmd(
+    target: Optional[str] = typer.Argument(
+        None,
+        help="What to list: 'addrs' (all nodes), 'inbox', or 'outbox'",
+    ),
+) -> None:
+    """List registered nodes or files in the local INBOX/OUTBOX."""
+    if target == "addrs" or target == "nodes":
+        try:
+            registry = Registry()
+            registry.load()
+        except FileNotFoundError:
+            typer.echo("(no nodes registered)")
+            return
+
+        nodes = registry.list_nodes()
+        if not nodes:
+            typer.echo("(no nodes registered)")
+            return
+
+        for name, path in nodes.items():
+            typer.echo(f"{name}: {path}")
+        return
+
+    node_path = Path.cwd()
+    node = Node(node_path)
+
+    if not node.is_enabled():
+        typer.echo("✗ Current directory is not a Jataí node", err=True)
+        raise typer.Exit(code=1)
+
+    try:
+        node.load_config()
+    except Exception as e:
+        typer.echo(f"✗ Error loading node config: {e}", err=True)
+        raise typer.Exit(code=1)
+
+    show_inbox = target in (None, "inbox")
+    show_outbox = target in (None, "outbox")
+
+    if show_inbox:
+        files = sorted(node.list_inbox())
+        typer.echo(f"INBOX ({len(files)} file(s)):")
+        for f in files:
+            typer.echo(f"  {f.name}")
+
+    if show_outbox:
+        files = sorted(node.list_outbox())
+        typer.echo(f"OUTBOX ({len(files)} file(s)):")
+        for f in files:
+            typer.echo(f"  {f.name}")
+
+
+@app.command()
+def send(
+    file: str = typer.Argument(..., help="Path to the file to send"),
+    move: bool = typer.Option(False, "--move", help="Move the file instead of copying it"),
+) -> None:
+    """Copy (or move) a file into the local OUTBOX."""
+    node_path = Path.cwd()
+    node = Node(node_path)
+
+    if not node.is_enabled():
+        typer.echo("✗ Current directory is not a Jataí node", err=True)
+        raise typer.Exit(code=1)
+
+    source = Path(file).resolve()
+    if not source.exists():
+        typer.echo(f"✗ File not found: {file}", err=True)
+        raise typer.Exit(code=1)
+
+    if not source.is_file():
+        typer.echo(f"✗ Not a file: {file}", err=True)
+        raise typer.Exit(code=1)
+
+    try:
+        node.load_config()
+        delivery = Delivery(source, node.outbox_path)
+        dest = delivery.deliver()
+        if move:
+            source.unlink(missing_ok=True)
+            typer.echo(f"✓ Moved to OUTBOX: {dest.name}")
+        else:
+            typer.echo(f"✓ Sent to OUTBOX: {dest.name}")
+    except Exception as e:
+        typer.echo(f"✗ Error sending file: {e}", err=True)
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def read(
+    file: str = typer.Argument(..., help="Filename (in INBOX) to mark as read"),
+) -> None:
+    """Mark an INBOX file as read by adding the success prefix."""
+    node_path = Path.cwd()
+    node = Node(node_path)
+
+    if not node.is_enabled():
+        typer.echo("✗ Current directory is not a Jataí node", err=True)
+        raise typer.Exit(code=1)
+
+    try:
+        node.load_config()
+    except Exception as e:
+        typer.echo(f"✗ Error loading node config: {e}", err=True)
+        raise typer.Exit(code=1)
+
+    # Accept filename or full path
+    file_path = Path(file)
+    if not file_path.is_absolute():
+        file_path = node.inbox_path / file_path.name
+
+    if not file_path.exists():
+        typer.echo(f"✗ File not found in INBOX: {file}", err=True)
+        raise typer.Exit(code=1)
+
+    try:
+        success_prefix = str(node.get_config("PREFIX_PROCESSED", "_"))
+        prefix = Prefix(success_prefix=success_prefix)
+        new_path = prefix.add_success_prefix(file_path)
+        typer.echo(f"✓ Marked as read: {new_path.name}")
+    except ValueError as e:
+        typer.echo(f"✗ {e}", err=True)
+        raise typer.Exit(code=1)
+    except Exception as e:
+        typer.echo(f"✗ Error: {e}", err=True)
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def unread(
+    file: str = typer.Argument(..., help="Filename (in INBOX) to mark as unread"),
+) -> None:
+    """Remove the success prefix from an INBOX file (mark as unread)."""
+    node_path = Path.cwd()
+    node = Node(node_path)
+
+    if not node.is_enabled():
+        typer.echo("✗ Current directory is not a Jataí node", err=True)
+        raise typer.Exit(code=1)
+
+    try:
+        node.load_config()
+    except Exception as e:
+        typer.echo(f"✗ Error loading node config: {e}", err=True)
+        raise typer.Exit(code=1)
+
+    file_path = Path(file)
+    if not file_path.is_absolute():
+        file_path = node.inbox_path / file_path.name
+
+    if not file_path.exists():
+        typer.echo(f"✗ File not found in INBOX: {file}", err=True)
+        raise typer.Exit(code=1)
+
+    try:
+        success_prefix = str(node.get_config("PREFIX_PROCESSED", "_"))
+        prefix = Prefix(success_prefix=success_prefix)
+        new_path = prefix.remove_success_prefix(file_path)
+        typer.echo(f"✓ Marked as unread: {new_path.name}")
+    except ValueError as e:
+        typer.echo(f"✗ {e}", err=True)
+        raise typer.Exit(code=1)
+    except Exception as e:
+        typer.echo(f"✗ Error: {e}", err=True)
+        raise typer.Exit(code=1)
 
 
 @app.command()
