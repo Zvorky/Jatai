@@ -35,7 +35,8 @@ jatai status
 
 Output example:
 ```
-Node: /home/user/my-project
+Node:   /home/user/my-project
+Config: /home/user/my-project/.jatai
 INBOX:  3 file(s)
 OUTBOX: 1 file(s)
 ```
@@ -129,6 +130,13 @@ jatai list inbox
 jatai list outbox
 ```
 
+When using `addrs`, output starts with the registry source path:
+
+```text
+# registry: /home/user/.jatai
+my-node: /home/user/my-node
+```
+
 ---
 
 ### `jatai send <file> [-m|--move]`
@@ -178,6 +186,14 @@ jatai config -G MAX_RETRIES 5
 
 Config keys are positional arguments and intentionally do not have short-option aliases.
 
+When reading config values (`jatai config`, `jatai config KEY`, or global variants),
+terminal output includes a source header:
+
+```text
+# source: /home/user/my-node/.jatai
+MAX_RETRIES=5
+```
+
 ### `jatai config get [key] [-G|--global] [-i|--inbox]`
 
 Read-only config retrieval for local/global scope.
@@ -206,6 +222,10 @@ Behavior:
 - `-G|--global` switches scope to global registry config
 - `-i|--inbox` exports output into the current node INBOX
 - missing key returns a clear error
+
+When printing to terminal (without `--inbox`), output starts with `# source: ...`
+showing the exact config file used. INBOX exports keep only the rendered config
+content.
 
 ---
 
@@ -258,13 +278,16 @@ Running `jatai` with no arguments in an interactive terminal opens the
 `jatai` without arguments prints the CLI help summary instead.
 
 The TUI exposes all CLI commands through a two-pane layout:
-- Left pane: scrollable command menu (15 actions, keyboard or mouse selection)
+- Left pane: scrollable command menu (17 actions, keyboard or mouse selection)
 - Right pane: command output display
 
 Actions available in the TUI:
-`status`, `docs index`, `docs query`, `log latest`, `log all`, `list`,
+`init node`, `status`, `docs index`, `docs query`, `log latest`, `log all`, `list`,
 `send file`, `read file`, `unread file`, `config get`, `config set`,
-`remove node`, `clear processed`, `start daemon`, `stop daemon`.
+`remove node`, `clear processed`, `start daemon`, `stop daemon`, `browse nodes`.
+
+`browse nodes` reads registered entries from `~/.jatai` and changes the current
+working directory to the selected node.
 
 Press `Q` to quit. The TUI opens modal input dialogs for commands that require
 parameters (e.g. query text, file paths, config keys).

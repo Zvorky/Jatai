@@ -86,6 +86,7 @@ Adding convenience commands and storage management.
 - [x] Implement `jatai clear [--read] [--sent]` manual CLI command.
 - [x] Build the interactive TUI (invoked by `jatai` with no arguments).
 - [x] Refactor the TUI with Textual so it exposes all current CLI commands through an efficient interactive workflow.
+- [x] Surface filesystem config origins in terminal output (`status`, `config`, `config get`, `list addrs`) and add alpha TUI node browsing/navigation between registered directories.
 
 ## **Phase 7: Advanced / Future Expansion (Post-Core)**
 

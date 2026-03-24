@@ -1,7 +1,7 @@
 # **Jataí 🐝**
 **The local micro-email and messaging bus for your file system. Connect scripts and AI agents instantly using a zero-config drop-folder pattern. Jataí uses OS file events to route data across directories via standardized INBOX/OUTBOX folders, without complex APIs or sockets. Drop a file, and it's delivered!**
 
-**Version:** `0.6.4` (_Alpha_) · **Author:** Zvorky
+**Version:** `0.6.5` (_Alpha_) · **Author:** Zvorky
 
 ## **🎯 Philosophy & Goal**
 
@@ -57,10 +57,10 @@ Current implementation status: core modules, basic CLI, daemon lifecycle, startu
 | `jatai init [path]` | Initializes a node. Note: `jatai [path]` works as a direct alias. |
 | `jatai start` | Starts the daemon and registers it for OS auto-start. Fails safely if already running. |
 | `jatai stop` | Stops the background daemon. |
-| `jatai status` | Returns file counters for the current node. |
+| `jatai status` | Returns node path, local config path, and file counters for the current node. |
 | `jatai config [-G\|--global] [key] [value]` | Reads/writes configuration in local/global scope. |
-| `jatai config get [key] [-G\|--global] [-i\|--inbox]` | Read-only config retrieval (single key or full scope), optionally exported to current node INBOX. |
-| `jatai list [addrs\|inbox\|outbox]` | Lists files in current node (inbox/outbox) or all nodes (addrs). |
+| `jatai config get [key] [-G\|--global] [-i\|--inbox]` | Read-only config retrieval (single key or full scope); terminal mode shows source config path, and `--inbox` exports to current node INBOX. |
+| `jatai list [addrs\|inbox\|outbox]` | Lists files in current node (inbox/outbox) or all nodes (addrs); `addrs` output shows global registry path. |
 | `jatai send <file> [-m\|--move]` | Copies (or moves) an external file into the local OUTBOX. |
 | `jatai read <file>` | Renames a file in the INBOX, adding the success prefix. |
 | `jatai unread <file>` | Removes the success prefix from a file in the INBOX. |
@@ -75,6 +75,7 @@ Current implementation status: core modules, basic CLI, daemon lifecycle, startu
 `jatai` in an interactive terminal opens a menu-driven TUI that exposes the same handlers as CLI commands:
 
 - `status`, `start`, `stop`
+- `init`, `browse nodes` (navigate current working directory to a registered node)
 - `docs` (index/query), `log` (latest/all)
 - `list`, `send`, `read`, `unread`
 - `config get`, `config set` (local/global, optional INBOX export for get)

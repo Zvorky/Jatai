@@ -73,6 +73,8 @@ jatai status
 ```
 
 Shows the count of files in `INBOX` and `OUTBOX` for the current node.
+The output also shows the active local config file path (`.jatai`) so operators
+can quickly confirm which directory and config are active.
 
 ## Auto-onboarding
 
@@ -140,4 +142,6 @@ OUTBOX/
 > command prints the CLI help summary.
 >
 > The TUI provides a two-pane layout: a scrollable command menu on the left and
-> a live output display on the right. It covers the full CLI command set.
+> a live output display on the right. It covers the full CLI command set,
+> including node initialization and alpha directory navigation between
+> registered nodes.

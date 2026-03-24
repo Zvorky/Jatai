@@ -238,9 +238,11 @@ def _config_get(
         except FileNotFoundError:
             pass
         config_data = registry.global_config
+        config_path = registry.registry_path
     else:
         node = _load_node_from_cwd()
         config_data = node.local_config
+        config_path = node.local_config_path
 
     try:
         rendered = _format_config_output(config_data, key)
@@ -249,6 +251,7 @@ def _config_get(
         raise typer.Exit(code=1)
 
     if not inbox:
+        typer.echo(f"# source: {config_path}")
         typer.echo(rendered, nl=False)
         return
 
@@ -300,7 +303,8 @@ def status() -> None:
         inbox_files = node.list_inbox()
         outbox_files = node.list_outbox()
 
-        typer.echo(f"Node: {node.node_path}")
+        typer.echo(f"Node:   {node.node_path}")
+        typer.echo(f"Config: {node.local_config_path}")
         typer.echo(f"INBOX:  {len(inbox_files)} file(s)")
         typer.echo(f"OUTBOX: {len(outbox_files)} file(s)")
 
@@ -462,6 +466,7 @@ def list_command(
             typer.echo("✗ Error: global registry not found", err=True)
             raise typer.Exit(code=1)
 
+        typer.echo(f"# registry: {registry.registry_path}")
         for name, data in sorted(registry.nodes.items()):
             typer.echo(f"{name}: {data.get('path', '')}")
         return
@@ -590,6 +595,7 @@ def config(
             pass
 
         if key is None:
+            typer.echo(f"# source: {registry.registry_path}")
             typer.echo(yaml.safe_dump(registry.global_config, sort_keys=True), nl=False)
             return
 
@@ -597,6 +603,7 @@ def config(
             if key not in registry.global_config:
                 typer.echo(f"✗ Error: unknown global config key: {key}", err=True)
                 raise typer.Exit(code=1)
+            typer.echo(f"# source: {registry.registry_path}")
             typer.echo(f"{key}={registry.global_config[key]}")
             return
 
@@ -612,6 +619,7 @@ def config(
         raise typer.Exit(code=1)
 
     if key is None:
+        typer.echo(f"# source: {node.local_config_path}")
         typer.echo(yaml.safe_dump(node.local_config, sort_keys=True), nl=False)
         return
 
@@ -619,6 +627,7 @@ def config(
         if key not in node.local_config:
             typer.echo(f"✗ Error: unknown local config key: {key}", err=True)
             raise typer.Exit(code=1)
+        typer.echo(f"# source: {node.local_config_path}")
         typer.echo(f"{key}={node.local_config[key]}")
         return
 

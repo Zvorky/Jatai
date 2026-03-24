@@ -452,8 +452,9 @@ class TestCLIMaliciousAdversarialScenarios:
         assert result.exit_code == 0
         assert (actual_path / "INBOX").exists() or (link_path / "INBOX").exists()
 
-    def test_cli_rapid_fire_commands(self, temp_dir, temp_home):
+    def test_cli_rapid_fire_commands(self, temp_dir, temp_home, monkeypatch):
         """Test rapid sequential CLI commands."""
+        monkeypatch.setenv("HOME", str(temp_home))
         for i in range(10):
             node_path = str(temp_dir / f"node_{i}")
             result = runner.invoke(app, ["init", node_path])
@@ -684,6 +685,84 @@ class TestCLIPhase6Toolbox:
         finally:
             os.chdir(old_cwd)
 
+    def test_cli_status_shows_config_path(self, temp_dir, temp_home, monkeypatch):
+        monkeypatch.setenv("HOME", str(temp_home))
+        node = Node(temp_dir / "status_path_node")
+        node.create()
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            result = runner.invoke(app, ["status"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 0
+        assert "Config:" in result.stdout
+        assert ".jatai" in result.stdout
+
+    def test_cli_list_addrs_shows_registry_path(self, temp_dir, temp_home, monkeypatch):
+        monkeypatch.setenv("HOME", str(temp_home))
+        node = Node(temp_dir / "addrs_path_node")
+        node.create()
+        registry = Registry()
+        try:
+            registry.load()
+        except FileNotFoundError:
+            pass
+        registry.add_node(node.node_path.name, str(node.node_path))
+        registry.save()
+
+        result = runner.invoke(app, ["list", "addrs"])
+        assert result.exit_code == 0
+        assert "# registry:" in result.stdout
+
+    def test_cli_config_local_full_dump_shows_source(self, temp_dir, temp_home, monkeypatch):
+        monkeypatch.setenv("HOME", str(temp_home))
+        node = Node(temp_dir / "cfg_source_node")
+        node.create()
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            result = runner.invoke(app, ["config"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 0
+        assert "# source:" in result.stdout
+
+    def test_cli_config_global_full_dump_shows_source(self, temp_dir, temp_home, monkeypatch):
+        monkeypatch.setenv("HOME", str(temp_home))
+        registry = Registry()
+        try:
+            registry.load()
+        except FileNotFoundError:
+            pass
+        registry.save()
+
+        result = runner.invoke(app, ["config", "--global"])
+        assert result.exit_code == 0
+        assert "# source:" in result.stdout
+
+    def test_cli_config_get_local_shows_source(self, temp_dir, temp_home, monkeypatch):
+        monkeypatch.setenv("HOME", str(temp_home))
+        node = Node(temp_dir / "cfg_get_src_node")
+        node.create()
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            result = runner.invoke(app, ["config", "get"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 0
+        assert "# source:" in result.stdout
+
 
 class TestCLITUI:
     """Interactive TUI behavior tests."""
@@ -824,7 +903,7 @@ class TestCLITUI:
     def test_jatai_app_has_expected_menu_item_count(self):
         from jatai.tui import MENU_ITEMS
 
-        assert len(MENU_ITEMS) == 16
+        assert len(MENU_ITEMS) == 17
 
     def test_jatai_app_menu_item_keys_are_unique(self):
         from jatai.tui import MENU_ITEMS
@@ -866,3 +945,20 @@ class TestCLITUI:
 
         assert captured.get("fn") == cli_main.log
         assert captured.get("args") == (True, False)
+
+    def test_jatai_app_dispatch_browse_nodes_pushes_screen(self, monkeypatch):
+        from jatai.tui import JataiApp
+
+        pushed = {}
+        app = JataiApp()
+        app.push_screen = lambda screen, cb=None: pushed.update({"screen": screen, "cb": cb})
+
+        class _FakeRegistry:
+            nodes = {}
+            def load(self):
+                pass
+
+        monkeypatch.setattr("jatai.core.registry.Registry", _FakeRegistry)
+        app._dispatch("b")
+
+        assert "screen" in pushed
