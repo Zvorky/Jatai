@@ -277,6 +277,7 @@ How to use:
             self.observer.unschedule_all()
 
         registered_nodes = self.load_registered_nodes()
+        active_count = 0
         for node in registered_nodes:
             self.observer.schedule(
                 JataiNodeConfigHandler(self, node.node_path),
@@ -294,8 +295,11 @@ How to use:
                 recursive=False,
             )
             self._update_node_cache(node)
+            active_count += 1
+        self.logger.info("Watchdog watching active_nodes=%s registered_nodes=%s", active_count, len(registered_nodes))
 
     def handle_node_config_change(self, node_path: Path) -> None:
+        self.logger.info("Config change detected node=%s", node_path)
         node = Node(node_path)
         previous_config = self.node_config_cache.get(node.node_path)
 
@@ -319,13 +323,18 @@ How to use:
                 for key in Node.PREFIX_KEYS
             )
             if prefix_keys_changed:
+                self.logger.info("Prefix migration started node=%s", node_path)
                 node.backup_current_config(previous_config)
                 try:
                     node.migrate_prefix_history(previous_config, node.local_config)
+                    self.logger.info("Prefix migration completed node=%s", node_path)
                 except Exception as exc:
                     node.write_config(previous_config)
                     node.local_config = dict(previous_config)
                     node.apply_effective_config(registry.global_config)
+                    self.logger.warning(
+                        "Prefix rollback triggered node=%s reason=%s", node_path, exc
+                    )
                     node.drop_error_notice(
                         f"Prefix migration aborted and configuration restored.\n\nReason: {exc}\n",
                         error_prefix=str(previous_config.get("PREFIX_ERROR", "!_")),
@@ -333,8 +342,10 @@ How to use:
 
         if node.is_enabled() and not node.is_disabled():
             self._update_node_cache(node)
+            self.logger.info("Node active node=%s", node_path)
         else:
             self._remove_node_cache(node.node_path)
+            self.logger.info("Node disabled node=%s", node_path)
 
         self._refresh_observer_watches()
 
@@ -475,8 +486,10 @@ How to use:
 
     def startup_scan(self) -> None:
         nodes = self.load_active_nodes()
+        self.logger.info("Startup scan begin nodes=%s", len(nodes))
         for node in nodes:
             self.process_pending_outbox(node, nodes)
+        self.logger.info("Startup scan complete")
 
     def process_pending_outbox(self, node: Node, nodes: List[Node]) -> None:
         prefix = Prefix(
@@ -498,6 +511,7 @@ How to use:
                 self.retry_state.save()
                 if not due:
                     continue
+                self.logger.info("Retry due for file=%s", file_path)
                 pending_path = prefix.to_pending(file_path)
                 self.broadcast_file(node, pending_path, nodes)
 
@@ -517,6 +531,7 @@ How to use:
     def run(self) -> None:
         self.install_signal_handlers()
         self.acquire_singleton()
+        self.logger.info("Daemon starting pid=%s registry=%s", os.getpid(), self.registry_path)
         try:
             self.startup_scan()
             self.setup_watchdog()
@@ -525,6 +540,7 @@ How to use:
         finally:
             self.shutdown_watchdog()
             self.release_singleton()
+            self.logger.info("Daemon stopped")
 
     def stop(self) -> None:
         self.stop_event.set()
