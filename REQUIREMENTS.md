@@ -79,12 +79,16 @@ Jataí dictates message state via filename prefixes. Base prefixes are configura
 ## **9. CLI and TUI (The Toolbox)**
 
 * **Initialization:** `jatai init [path]` handles node setup. `jatai [path]` acts as a direct alias.
+* **Default no-argument behavior:** Running `jatai` with no arguments in an interactive terminal must open the TUI. In non-interactive execution, `jatai` with no arguments must print the CLI help summary.
 * **Operational Retrieval:** `jatai log` and `jatai log --all` (`-a`) must be available.
 * **Output Mode Policy:** `docs` and `log` are terminal-first and only write files when `--inbox` is explicitly requested.
 * **Canonical Short-Option Mapping:** All optional flags must support abbreviated forms:
   * `-a` = `--all`, `-i` = `--inbox`, `-m` = `--move`, `-r` = `--read`, `-s` = `--sent`, `-f` = `--foreground`, `-G` = `--global`.
   * Config key arguments (positional) explicitly exclude short-option mapping.
   * (See ADR 13 for full policy and rationale).
+* **TUI Framework:** The interactive TUI must be implemented with **Textual**.
+* **TUI Coverage:** The TUI must provide operator access to all CLI capabilities through interactive views and actions, without reducing the existing CLI command surface.
+* **TUI Consistency Rule:** TUI actions must reuse the same underlying application logic as the CLI commands rather than maintaining separate behavior paths.
 * **Config Retrieval Subcommand:** `jatai config get [key]` must be supported.
   * Default retrieval scope is local node config.
   * `-G` / `--global` switches retrieval to global config.

@@ -84,6 +84,7 @@ Adding convenience commands and storage management.
 - [x] Implement **Garbage Collection (Auto-Remove):** Background daemon logic to delete `_` prefixed files based on config thresholds.
 - [x] Implement `jatai clear [--read] [--sent]` manual CLI command.
 - [x] Build the interactive TUI (invoked by `jatai` with no arguments).
+- [ ] Refactor the TUI with Textual so it exposes all current CLI commands through an efficient interactive workflow.
 
 ## **Phase 7: Advanced / Future Expansion (Post-Core)**
 

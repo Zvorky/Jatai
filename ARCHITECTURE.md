@@ -75,3 +75,17 @@ This document details the Architecture Decision Records (ADR) for the Jataí pro
   * Optional `key` returns only the requested key value from the selected scope.
   * Missing key in selected scope must return a clear error (for example, `INBOX_DIR` in global scope when absent).
 * **Scope:** All future CLI development must follow this policy for consistency.
+
+## **14. TUI Architecture and Default Launch Behavior**
+* **Context:** The current TUI bootstrap is intentionally minimal and does not yet provide a coherent operator workflow across the existing CLI surface. Jataí is file-system first, but operators still need a productive terminal control plane for inspection, configuration, and operational actions.
+* **Decision:** The canonical TUI stack for Jataí must be **Textual**.
+  * **Why Textual:** It supports structured multi-pane terminal applications, background workers, keyboard-first navigation, reactive state updates, and automated UI testing while remaining compatible with Jataí's terminal-first operating model.
+  * **Rejected alternatives:**
+    * `prompt_toolkit`: strong for prompts and line-oriented flows, but too low-level for a full multi-view operations console.
+    * `urwid`: mature, but less ergonomic for modern reactive layouts, styling, and testability.
+* **Interaction model:**
+  * Running `jatai` with no arguments in an interactive terminal must open the TUI.
+  * Running `jatai` with no arguments in a non-interactive context must print the CLI help summary instead of attempting to open the TUI.
+* **Command coverage rule:** The TUI must expose all existing CLI capabilities through discoverable screens, actions, or dialogs, including status, start/stop, docs, log, list, send, read, unread, config, remove, clear, and future CLI additions.
+* **Implementation rule:** The TUI must not reimplement core behavior independently. It must orchestrate the same application services and command handlers used by the regular CLI so terminal and TUI behavior remain aligned.
+* **File-system first constraint:** The TUI is an operator layer, not the primary system interface. It must surface filesystem state clearly and never obscure the underlying INBOX/OUTBOX and prefix-based workflow.

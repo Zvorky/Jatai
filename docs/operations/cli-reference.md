@@ -224,4 +224,6 @@ Canonical mapping:
 ## Future-facing notes
 
 The current command surface already includes the Phase 6 CLI toolbox.
-The interactive TUI is still intentionally minimal and will continue to evolve.
+Running `jatai` with no arguments opens the interactive TUI in an interactive terminal session. In non-interactive execution, `jatai` without arguments prints the CLI help summary.
+
+The interactive TUI is still intentionally minimal and is planned to be expanded to cover the full CLI workflow.

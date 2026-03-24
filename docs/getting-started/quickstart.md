@@ -134,4 +134,6 @@ OUTBOX/
 - [Retry and health](../operations/retry-and-health.md) — how failures are handled
 - [CLI reference](../operations/cli-reference.md) — full command-line reference
 
-> The interactive TUI currently exists as a minimal bootstrap and will evolve over the next phases.
+> Running `jatai` with no arguments opens the interactive TUI in a terminal session. In non-interactive usage, the same command prints the CLI help summary.
+
+> The current TUI implementation is still minimal and is scheduled for a broader Textual-based refactor so it can cover the full CLI workflow.

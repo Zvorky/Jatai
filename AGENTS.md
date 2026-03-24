@@ -36,6 +36,10 @@ This file defines mandatory rules for any agent executing development tasks in t
 11. User-facing documentation under `docs/` must not reference ADRs or architecture/requirements governance artifacts.
    - Do NOT reference `ARCHITECTURE.md`, `REQUIREMENTS.md`, or ADR identifiers (for example, `ADR 13`) inside `docs/`.
    - Keep `docs/` focused on end-user operation and behavior; governance/design rationale belongs to developer-facing files.
+12. Before creating any commit, the agent must explicitly classify it by asking: **"Is this commit code or documentation?"**
+   - If the commit is **documentation-only**, no version bump is required.
+   - If the commit includes **any code, tests, packaging, dependency, tooling, schema, or behavior change**, it is a **code commit** and the version bump must happen before the commit.
+   - Mixed commits (code + documentation) are treated as **code commits**.
 
 ## Architecture & Requirements Governance
 
@@ -60,8 +64,9 @@ Whenever `ARCHITECTURE.md` or `REQUIREMENTS.md` are changed:
 - Execute implementation without deciding architecture/requirements without authorization.
 - Update `ToDo.md` and `README.md`.
 - Ensure "File Structure" section is updated in `README.md` with only non-ignored system files (excluding project governance/documentation files).
-- Update `pyproject.toml` version using `MAJOR.PHASE.ITERATION` before report/commit.
-- Run `tools/set_version <new_version>` and verify all version citations were updated correctly.
+- Classify the pending commit by asking: "Is this commit code or documentation?"
+- For code commits, update `pyproject.toml` version using `MAJOR.PHASE.ITERATION` before report/commit.
+- For code commits, run `tools/set_version <new_version>` and verify all version citations were updated correctly.
 - Report changes and pending items to the user.
 
 ## Language Requirements
@@ -182,6 +187,13 @@ Versioning must strictly follow this scheme:
 - **ITERATION:** Incremented on each commit iteration for the same phase (patch-like counter).
 - **Source of truth:** Update `pyproject.toml` `[project].version` before reporting and committing.
 
+Commit classification gate:
+
+- Before creating any commit, the agent must explicitly ask itself: **"Is this commit code or documentation?"**
+- **Documentation-only commit:** Changes limited to documentation/governance text with no source, test, packaging, dependency, script, schema, or runtime-behavior impact. No version bump is required.
+- **Code commit:** Any commit that changes source code, tests, packaging metadata, dependencies, scripts, schemas, operational behavior, or mixes code with documentation. A version bump is required before the commit.
+- When uncertain, classify the commit as a **code commit** and perform the bump.
+
 Branch flow constraints:
 
 - Work normally happens in `dev`.
@@ -201,6 +213,9 @@ The workflow in this section applies to implementation tasks tied to `ToDo.md`. 
    - Do NOT commit code that violates established architecture without explicit user authorization.
 
 2. **Update project version before report/commit:**
+   - First classify the pending commit by asking: **"Is this commit code or documentation?"**
+   - If the answer is **documentation-only**, skip the version bump and continue with the remaining applicable workflow steps.
+   - If the answer is **code** (or mixed code + documentation), the version bump is mandatory before the commit.
    - Apply the `MAJOR.PHASE.ITERATION` rule from this document.
    - Keep `MAJOR` unchanged unless the user explicitly requested a major bump.
    - Set `PHASE` to the current `ToDo.md` phase being executed.
