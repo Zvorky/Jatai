@@ -592,3 +592,51 @@ class TestCLIConfig:
             os.chdir(old_cwd)
 
         assert result.exit_code == 1
+
+
+class TestCLIRemove:
+    """Tests for jatai remove command."""
+
+    def test_cli_remove_disables_current_node(self, temp_dir):
+        """remove disables the current directory's node."""
+        import os
+        node_path = temp_dir / "node"
+        node = Node(node_path)
+        node.create()
+
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node_path)
+            result = runner.invoke(app, ["remove"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 0
+        assert not node.local_config_path.exists()
+        assert node.disabled_config_path.exists()
+
+    def test_cli_remove_with_explicit_path(self, temp_dir):
+        """remove accepts an explicit path."""
+        node_path = temp_dir / "node"
+        node = Node(node_path)
+        node.create()
+
+        result = runner.invoke(app, ["remove", str(node_path)])
+
+        assert result.exit_code == 0
+        assert node.disabled_config_path.exists()
+
+    def test_cli_remove_not_a_node(self, temp_dir):
+        """remove fails when path is not a Jataí node."""
+        result = runner.invoke(app, ["remove", str(temp_dir)])
+        assert result.exit_code == 1
+
+    def test_cli_remove_already_disabled(self, temp_dir):
+        """remove fails gracefully when node is already disabled."""
+        node_path = temp_dir / "node"
+        node = Node(node_path)
+        node.create()
+        node.disable()
+
+        result = runner.invoke(app, ["remove", str(node_path)])
+        assert result.exit_code == 1

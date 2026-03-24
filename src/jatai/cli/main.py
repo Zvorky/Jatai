@@ -209,6 +209,30 @@ def stop() -> None:
 
 
 @app.command()
+def remove(
+    path: Optional[str] = typer.Argument(None, help="Path to the node to disable (default: current directory)"),
+) -> None:
+    """Disable a node by renaming .jatai to ._jatai (soft-delete)."""
+    node_path = Path(path).resolve() if path else Path.cwd()
+    node = Node(node_path)
+
+    if not node.is_enabled():
+        if node.is_disabled():
+            typer.echo(f"✗ Node is already disabled: {node_path}", err=True)
+        else:
+            typer.echo(f"✗ Not a Jataí node: {node_path}", err=True)
+        raise typer.Exit(code=1)
+
+    try:
+        node.disable()
+        typer.echo(f"✓ Node disabled (soft-deleted): {node_path}")
+        typer.echo(f"  Config renamed to: {node.disabled_config_path.name}")
+    except Exception as e:
+        typer.echo(f"✗ Error disabling node: {e}", err=True)
+        raise typer.Exit(code=1)
+
+
+@app.command()
 def config(
     key: str = typer.Argument(..., help="Configuration key to set"),
     value: str = typer.Argument(..., help="Value to assign"),
