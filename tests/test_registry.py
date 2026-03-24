@@ -36,6 +36,8 @@ class TestRegistryHappyPath:
             "MAX_RETRIES",
             "INBOX_DIR",
             "OUTBOX_DIR",
+            "GC_MAX_READ_FILES",
+            "GC_MAX_SENT_FILES",
         }
         assert set(registry.DEFAULT_CONFIG.keys()) == expected_keys
 

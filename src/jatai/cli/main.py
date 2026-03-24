@@ -9,11 +9,14 @@ import subprocess
 import sys
 import time
 import typer
+import yaml
 from pathlib import Path
 from typing import List, Optional
 
 from jatai.core.autostart import AutoStartRegistrar
 from jatai.core.daemon import AlreadyRunningError, JataiDaemon
+from jatai.core.delivery import Delivery
+from jatai.core.prefix import Prefix
 from jatai.core.registry import Registry
 from jatai.core.node import Node
 
@@ -22,7 +25,15 @@ app = typer.Typer(
     help="Jataí 🐝 - The local micro-email and messaging bus for your file system.",
 )
 
-KNOWN_COMMANDS = {"init", "status", "start", "stop", "docs", "_daemon-run"}
+KNOWN_COMMANDS = {
+    "init",
+    "status",
+    "start",
+    "stop",
+    "docs",
+    "log",
+    "_daemon-run",
+}
 DOCS_ROOT = Path(__file__).resolve().parents[3] / "docs"
 
 
@@ -150,6 +161,50 @@ def _safe_copy_to_inbox(source: Path, inbox_path: Path) -> Path:
         counter += 1
 
 
+def _export_text_to_inbox(node: Node, content: str, base_name: str) -> Path:
+    node.inbox_path.mkdir(parents=True, exist_ok=True)
+    target = node.inbox_path / base_name
+    if not target.exists():
+        target.write_text(content, encoding="utf-8")
+        return target
+
+    stem = target.stem
+    suffix = target.suffix
+    index = 1
+    while True:
+        candidate = node.inbox_path / f"{stem}-{index}{suffix}"
+        if not candidate.exists():
+            candidate.write_text(content, encoding="utf-8")
+            return candidate
+        index += 1
+
+
+def _render_docs_terminal(matches: List[Path]) -> str:
+    blocks: List[str] = []
+    for path in matches:
+        rel = path.relative_to(DOCS_ROOT).as_posix()
+        content = path.read_text(encoding="utf-8")
+        blocks.append(f"# {rel}\n\n{content.strip()}\n")
+    return "\n---\n\n".join(blocks).strip() + "\n"
+
+
+def _tail_lines(text: str, max_lines: int) -> str:
+    lines = text.splitlines()
+    if len(lines) <= max_lines:
+        return text if text.endswith("\n") else text + "\n"
+    clipped = lines[-max_lines:]
+    return "\n".join(clipped) + "\n"
+
+
+def _coerce_config_value(raw_value: str):
+    lowered = raw_value.lower()
+    if lowered in {"true", "false"}:
+        return lowered == "true"
+    if raw_value.isdigit() or (raw_value.startswith("-") and raw_value[1:].isdigit()):
+        return int(raw_value)
+    return raw_value
+
+
 def _spawn_daemon_process() -> subprocess.Popen:
     """Spawn the background daemon process detached from the current terminal."""
     return subprocess.Popen(
@@ -257,13 +312,16 @@ def stop() -> None:
 @app.command()
 def docs(
     query: Optional[str] = typer.Argument(None, help="Optional query to match local docs."),
+    inbox: bool = typer.Option(False, "--inbox", help="Export docs content to current node INBOX."),
 ) -> None:
-    """Copy local docs index or matching docs into the current node INBOX."""
-    try:
-        node = _load_node_from_cwd()
-    except Exception as e:
-        typer.echo(f"✗ Error: {e}", err=True)
-        raise typer.Exit(code=1)
+    """Show docs in terminal by default, or export them to INBOX with --inbox."""
+    node: Optional[Node] = None
+    if inbox:
+        try:
+            node = _load_node_from_cwd()
+        except Exception as e:
+            typer.echo(f"✗ Error: {e}", err=True)
+            raise typer.Exit(code=1)
 
     docs_files = _docs_markdown_files()
     if not docs_files:
@@ -271,9 +329,13 @@ def docs(
         raise typer.Exit(code=1)
 
     if query is None:
-        target = node.inbox_path / "!docs-index.md"
-        target.write_text(_render_docs_index(docs_files), encoding="utf-8")
-        typer.echo(f"✓ Docs index dropped at {target}")
+        content = _render_docs_index(docs_files)
+        if inbox:
+            assert node is not None
+            target = _export_text_to_inbox(node, content, "!docs-index.md")
+            typer.echo(f"✓ Docs index dropped at {target}")
+        else:
+            typer.echo(content, nl=False)
         return
 
     normalized = query.strip().lower()
@@ -287,16 +349,291 @@ def docs(
         typer.echo(f"✗ Error: no docs matched '{query}'", err=True)
         raise typer.Exit(code=1)
 
-    for match in matches:
-        _safe_copy_to_inbox(match, node.inbox_path)
-    typer.echo(f"✓ Copied {len(matches)} docs to {node.inbox_path}")
+    if inbox:
+        assert node is not None
+        for match in matches:
+            _safe_copy_to_inbox(match, node.inbox_path)
+        typer.echo(f"✓ Copied {len(matches)} docs to {node.inbox_path}")
+        return
+
+    typer.echo(_render_docs_terminal(matches), nl=False)
+
+
+@app.command()
+def log(
+    all_logs: bool = typer.Option(False, "--all", "-a", help="Show full log output."),
+    inbox: bool = typer.Option(False, "--inbox", help="Export log output to current node INBOX."),
+) -> None:
+    """Show daemon logs in terminal, with optional export to INBOX."""
+    log_path = Path.home() / ".jatai.log"
+    if not log_path.exists():
+        typer.echo(f"✗ Error: log file not found at {log_path}", err=True)
+        raise typer.Exit(code=1)
+
+    full_text = log_path.read_text(encoding="utf-8")
+    rendered = full_text if all_logs else _tail_lines(full_text, 40)
+
+    if inbox:
+        try:
+            node = _load_node_from_cwd()
+        except Exception as e:
+            typer.echo(f"✗ Error: {e}", err=True)
+            raise typer.Exit(code=1)
+        base_name = "!log-all.txt" if all_logs else "!log-latest.txt"
+        target = _export_text_to_inbox(node, rendered, base_name)
+        typer.echo(f"✓ Log exported to {target}")
+        return
+
+    typer.echo(rendered, nl=False)
+
+
+@app.command(name="list")
+def list_command(
+    scope: str = typer.Argument("inbox", help="One of: addrs, inbox, outbox"),
+) -> None:
+    """List known node addresses or files from INBOX/OUTBOX."""
+    normalized = scope.strip().lower()
+    if normalized == "addrs":
+        registry = Registry()
+        try:
+            registry.load()
+        except FileNotFoundError:
+            typer.echo("✗ Error: global registry not found", err=True)
+            raise typer.Exit(code=1)
+
+        for name, data in sorted(registry.nodes.items()):
+            typer.echo(f"{name}: {data.get('path', '')}")
+        return
+
+    try:
+        node = _load_node_from_cwd()
+    except Exception as e:
+        typer.echo(f"✗ Error: {e}", err=True)
+        raise typer.Exit(code=1)
+
+    if normalized == "inbox":
+        files = sorted(node.list_inbox())
+    elif normalized == "outbox":
+        files = sorted(node.list_outbox())
+    else:
+        typer.echo("✗ Error: scope must be one of addrs, inbox, outbox", err=True)
+        raise typer.Exit(code=1)
+
+    for file_path in files:
+        typer.echo(file_path.name)
+
+
+@app.command()
+def send(
+    file_path: str = typer.Argument(..., help="Path to external file to send via OUTBOX."),
+    move: bool = typer.Option(False, "--move", help="Move instead of copy after enqueue."),
+) -> None:
+    """Copy or move a file into the current node OUTBOX."""
+    try:
+        node = _load_node_from_cwd()
+    except Exception as e:
+        typer.echo(f"✗ Error: {e}", err=True)
+        raise typer.Exit(code=1)
+
+    source = Path(file_path).expanduser().resolve()
+    if not source.exists() or not source.is_file():
+        typer.echo(f"✗ Error: file not found: {source}", err=True)
+        raise typer.Exit(code=1)
+
+    try:
+        delivered = Delivery(source, node.outbox_path).deliver()
+        if move:
+            source.unlink()
+        typer.echo(f"✓ Enqueued at {delivered}")
+    except Exception as e:
+        typer.echo(f"✗ Error: {e}", err=True)
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def read(
+    file_name: str = typer.Argument(..., help="INBOX file name to mark as read."),
+) -> None:
+    """Mark an INBOX file as read by adding success prefix."""
+    try:
+        node = _load_node_from_cwd()
+    except Exception as e:
+        typer.echo(f"✗ Error: {e}", err=True)
+        raise typer.Exit(code=1)
+
+    target = node.inbox_path / file_name
+    if not target.exists():
+        typer.echo(f"✗ Error: inbox file not found: {target}", err=True)
+        raise typer.Exit(code=1)
+
+    prefix = Prefix(
+        success_prefix=str(node.get_config("PREFIX_PROCESSED", "_")),
+        error_prefix=str(node.get_config("PREFIX_ERROR", "!_")),
+    )
+    try:
+        new_path = prefix.add_success_prefix(target)
+        typer.echo(f"✓ Marked as read: {new_path.name}")
+    except Exception as e:
+        typer.echo(f"✗ Error: {e}", err=True)
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def unread(
+    file_name: str = typer.Argument(..., help="INBOX file name to mark as unread."),
+) -> None:
+    """Mark an INBOX file as unread by removing success prefix."""
+    try:
+        node = _load_node_from_cwd()
+    except Exception as e:
+        typer.echo(f"✗ Error: {e}", err=True)
+        raise typer.Exit(code=1)
+
+    target = node.inbox_path / file_name
+    if not target.exists():
+        typer.echo(f"✗ Error: inbox file not found: {target}", err=True)
+        raise typer.Exit(code=1)
+
+    prefix = Prefix(
+        success_prefix=str(node.get_config("PREFIX_PROCESSED", "_")),
+        error_prefix=str(node.get_config("PREFIX_ERROR", "!_")),
+    )
+    try:
+        new_path = prefix.remove_success_prefix(target)
+        typer.echo(f"✓ Marked as unread: {new_path.name}")
+    except Exception as e:
+        typer.echo(f"✗ Error: {e}", err=True)
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def config(
+    key: Optional[str] = typer.Argument(None, help="Config key."),
+    value: Optional[str] = typer.Argument(None, help="Config value to set."),
+    global_scope: bool = typer.Option(False, "--global", help="Operate on global registry config."),
+) -> None:
+    """Read or write configuration values."""
+    if global_scope:
+        registry = Registry()
+        try:
+            registry.load()
+        except FileNotFoundError:
+            pass
+
+        if key is None:
+            typer.echo(yaml.safe_dump(registry.global_config, sort_keys=True), nl=False)
+            return
+
+        if value is None:
+            if key not in registry.global_config:
+                typer.echo(f"✗ Error: unknown global config key: {key}", err=True)
+                raise typer.Exit(code=1)
+            typer.echo(f"{key}={registry.global_config[key]}")
+            return
+
+        registry.set_config(key, _coerce_config_value(value))
+        registry.save()
+        typer.echo(f"✓ Updated global config: {key}")
+        return
+
+    try:
+        node = _load_node_from_cwd()
+    except Exception as e:
+        typer.echo(f"✗ Error: {e}", err=True)
+        raise typer.Exit(code=1)
+
+    if key is None:
+        typer.echo(yaml.safe_dump(node.local_config, sort_keys=True), nl=False)
+        return
+
+    if value is None:
+        if key not in node.local_config:
+            typer.echo(f"✗ Error: unknown local config key: {key}", err=True)
+            raise typer.Exit(code=1)
+        typer.echo(f"{key}={node.local_config[key]}")
+        return
+
+    node.set_config(key, _coerce_config_value(value))
+    typer.echo(f"✓ Updated local config: {key}")
+
+
+@app.command()
+def remove(
+    path: Optional[str] = typer.Argument(None, help="Node path to soft-delete (defaults to current directory)."),
+) -> None:
+    """Soft-delete a node by renaming .jatai to ._jatai."""
+    node_path = Path(path).resolve() if path else Path.cwd()
+    node = Node(node_path)
+    try:
+        node.disable()
+        typer.echo(f"✓ Disabled node at {node.node_path}")
+    except Exception as e:
+        typer.echo(f"✗ Error: {e}", err=True)
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def clear(
+    read: bool = typer.Option(False, "--read", help="Clear processed files from INBOX."),
+    sent: bool = typer.Option(False, "--sent", help="Clear processed files from OUTBOX."),
+) -> None:
+    """Clear processed history files from INBOX and/or OUTBOX."""
+    try:
+        node = _load_node_from_cwd()
+    except Exception as e:
+        typer.echo(f"✗ Error: {e}", err=True)
+        raise typer.Exit(code=1)
+
+    if not read and not sent:
+        read = True
+        sent = True
+
+    success_prefix = str(node.get_config("PREFIX_PROCESSED", "_"))
+    removed = 0
+
+    if read:
+        for file_path in node.list_inbox():
+            if file_path.name.startswith(success_prefix):
+                file_path.unlink()
+                removed += 1
+
+    if sent:
+        for file_path in node.list_outbox():
+            if file_path.name.startswith(success_prefix):
+                file_path.unlink()
+                removed += 1
+
+    typer.echo(f"✓ Removed {removed} processed file(s)")
+
+
+def _run_tui() -> None:
+    """Minimal interactive TUI bootstrap for phase 6."""
+    typer.echo("Jatai TUI (alpha)")
+    typer.echo("1) status  2) docs  3) help  q) quit")
+    while True:
+        choice = typer.prompt("Select", default="q").strip().lower()
+        if choice in {"q", "quit", "exit"}:
+            typer.echo("Bye.")
+            return
+        if choice == "1":
+            status()
+            continue
+        if choice == "2":
+            docs(None, False)
+            continue
+        if choice == "3":
+            app(["--help"])
+            continue
+        typer.echo("Unknown option")
 
 
 def run() -> None:
     """Entrypoint for console_scripts supporting `jatai [path]` alias."""
     args = sys.argv[1:]
     if not args:
-        # No arguments: show help until TUI is implemented.
+        if sys.stdin.isatty() and sys.stdout.isatty():
+            _run_tui()
+            return
         app(["--help"])
         return
     if not args[0].startswith("-") and args[0] not in KNOWN_COMMANDS:
