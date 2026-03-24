@@ -40,6 +40,9 @@ This file defines mandatory rules for any agent executing development tasks in t
    - If the commit is **documentation-only**, no version bump is required.
    - If the commit includes **any code, tests, packaging, dependency, tooling, schema, or behavior change**, it is a **code commit** and the version bump must happen before the commit.
    - Mixed commits (code + documentation) are treated as **code commits**.
+13. Every pending architecture/requirements decision that implies implementation work must be represented in `ToDo.md` as explicit actionable task(s) before implementation starts.
+   - Do not leave ADR/REQUIREMENTS implementation implications implicit.
+   - Add missing tasks immediately when a pending requirement/ADR is identified.
 
 ## Architecture & Requirements Governance
 
@@ -57,6 +60,10 @@ Whenever `ARCHITECTURE.md` or `REQUIREMENTS.md` are changed:
 3. Keep the list ordered by phase and priority.
 4. Explicitly inform the user about created/updated tasks.
 
+When reviewing pending ADR/requirement items:
+
+5. If an ADR/requirement defines behavior that is not fully implemented yet, add explicit implementation task(s) to `ToDo.md` even when no file in `ARCHITECTURE.md` or `REQUIREMENTS.md` was changed in that turn.
+
 ## Quick Operational Checklist
 
 - Read `ARCHITECTURE.md` and `REQUIREMENTS.md`.
@@ -64,6 +71,7 @@ Whenever `ARCHITECTURE.md` or `REQUIREMENTS.md` are changed:
 - Execute implementation without deciding architecture/requirements without authorization.
 - Update `ToDo.md` and `README.md`.
 - Ensure "File Structure" section is updated in `README.md` with only non-ignored system files (excluding project governance/documentation files).
+- Ensure pending ADR/requirements implications are reflected as explicit actionable tasks in `ToDo.md`.
 - Classify the pending commit by asking: "Is this commit code or documentation?"
 - For code commits, update `pyproject.toml` version using `MAJOR.PHASE.ITERATION` before report/commit.
 - For code commits, run `tools/set_version <new_version>` and verify all version citations were updated correctly.

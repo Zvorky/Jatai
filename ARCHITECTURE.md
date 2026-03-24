@@ -89,3 +89,13 @@ This document details the Architecture Decision Records (ADR) for the Jataí pro
 * **Command coverage rule:** The TUI must expose all existing CLI capabilities through discoverable screens, actions, or dialogs, including status, start/stop, docs, log, list, send, read, unread, config, remove, clear, and future CLI additions.
 * **Implementation rule:** The TUI must not reimplement core behavior independently. It must orchestrate the same application services and command handlers used by the regular CLI so terminal and TUI behavior remain aligned.
 * **File-system first constraint:** The TUI is an operator layer, not the primary system interface. It must surface filesystem state clearly and never obscure the underlying INBOX/OUTBOX and prefix-based workflow.
+
+## **15. System-Generated INBOX Artifact Prefix Policy**
+* **Context:** Jataí writes some files directly into INBOX as system-generated artifacts (for example onboarding files, exported operational snapshots, or internal notices). These files must be visually distinguishable from user-delivered payload files.
+* **Decision:** Any file created by Jataí itself inside an INBOX without originating from another node delivery flow must use filename prefix `!`.
+* **Examples in scope:**
+  * auto-onboarding welcome files;
+  * daemon/system notice files;
+  * CLI-generated exports to INBOX (for example docs/log/config exports).
+* **Out of scope:** Files delivered from other nodes through normal OUTBOX → INBOX routing are not affected by this rule.
+* **Goal:** Preserve operator clarity by making system-originated artifacts immediately recognizable in the filesystem-first workflow.
