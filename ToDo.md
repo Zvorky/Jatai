@@ -63,8 +63,8 @@ The "File-System First" user experience.
 - [x] Implement Auto-Onboarding: Daemon detects paths added manually to `~/.jatai` and generates missing folders.
 - [x] Add `!helloworld.md` file drop to newly created INBOXes.
 - [x] Create the `docs/` folder structure (markdown files in subfolders).
-- [ ] Implement `jatai docs` to drop a category index file.
-- [ ] Implement `jatai docs [query]` to copy matching markdown files directly to the local INBOX.
+- [x] Implement `jatai docs` to drop a category index file.
+- [x] Implement `jatai docs [query]` to copy matching markdown files directly to the local INBOX.
 
 ## **Phase 6: Extended CLI Toolbox, TUI & Garbage Collection**
 

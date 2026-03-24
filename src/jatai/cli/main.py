@@ -13,6 +13,7 @@ from typing import Optional
 
 from jatai.core.autostart import AutoStartRegistrar
 from jatai.core.daemon import AlreadyRunningError, JataiDaemon
+from jatai.core.docs import deliver_docs
 from jatai.core.registry import Registry
 from jatai.core.node import Node
 
@@ -203,6 +204,36 @@ def stop() -> None:
 
     typer.echo("✗ Failed to stop daemon within timeout", err=True)
     raise typer.Exit(code=1)
+
+
+@app.command()
+def docs(
+    query: Optional[str] = typer.Argument(None, help="Search query for documentation topics"),
+) -> None:
+    """Fetch documentation into the local node INBOX."""
+    node_path = Path.cwd()
+    node = Node(node_path)
+
+    if not node.is_enabled():
+        typer.echo("✗ Current directory is not a Jataí node", err=True)
+        raise typer.Exit(code=1)
+
+    try:
+        node.load_config()
+        delivered = deliver_docs(query=query, inbox_path=node.inbox_path)
+    except Exception as e:
+        typer.echo(f"✗ Error delivering docs: {e}", err=True)
+        raise typer.Exit(code=1)
+
+    if not delivered:
+        if query:
+            typer.echo(f"✗ No documentation found matching '{query}'", err=True)
+        else:
+            typer.echo("✗ No documentation files found", err=True)
+        raise typer.Exit(code=1)
+
+    for path in delivered:
+        typer.echo(f"✓ {path.name} → {node.inbox_path}")
 
 
 def run() -> None:
