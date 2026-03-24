@@ -208,6 +208,44 @@ def stop() -> None:
     raise typer.Exit(code=1)
 
 
+@app.command()
+def config(
+    key: str = typer.Argument(..., help="Configuration key to set"),
+    value: str = typer.Argument(..., help="Value to assign"),
+    global_flag: bool = typer.Option(False, "--global", help="Write to the global ~/.jatai config"),
+) -> None:
+    """Set a configuration value in the local node or global registry."""
+    if global_flag:
+        try:
+            registry = Registry()
+            try:
+                registry.load()
+            except FileNotFoundError:
+                pass
+            registry.set_config(key, value)
+            registry.save()
+            typer.echo(f"✓ Global config updated: {key} = {value}")
+        except Exception as e:
+            typer.echo(f"✗ Error updating global config: {e}", err=True)
+            raise typer.Exit(code=1)
+        return
+
+    node_path = Path.cwd()
+    node = Node(node_path)
+
+    if not node.is_enabled():
+        typer.echo("✗ Current directory is not a Jataí node", err=True)
+        raise typer.Exit(code=1)
+
+    try:
+        node.load_config()
+        node.set_config(key, value)
+        typer.echo(f"✓ Node config updated: {key} = {value}")
+    except Exception as e:
+        typer.echo(f"✗ Error updating node config: {e}", err=True)
+        raise typer.Exit(code=1)
+
+
 @app.command(name="list")
 def list_cmd(
     target: Optional[str] = typer.Argument(

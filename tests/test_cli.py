@@ -547,3 +547,48 @@ class TestCLIListSendReadUnread:
             os.chdir(old_cwd)
 
         assert result.exit_code == 1
+
+
+class TestCLIConfig:
+    """Tests for jatai config command."""
+
+    def test_cli_config_sets_local_value(self, temp_dir):
+        """config sets a value in the local .jatai file."""
+        import os
+        node_path = temp_dir / "node"
+        node = Node(node_path)
+        node.create()
+
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node_path)
+            result = runner.invoke(app, ["config", "RETRY_DELAY_BASE", "120"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 0
+        node.load_config()
+        assert node.get_config("RETRY_DELAY_BASE") == "120"
+
+    def test_cli_config_sets_global_value(self, temp_home):
+        """config --global sets a value in the global registry."""
+        result = runner.invoke(app, ["config", "--global", "MAX_RETRIES", "5"])
+
+        assert result.exit_code == 0
+        assert "Global config updated" in result.stdout
+
+        registry = Registry(registry_path=temp_home / ".jatai")
+        registry.load()
+        assert str(registry.global_config.get("MAX_RETRIES")) == "5"
+
+    def test_cli_config_not_in_node(self, temp_dir):
+        """config fails when run outside a Jataí node."""
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(temp_dir)
+            result = runner.invoke(app, ["config", "KEY", "val"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 1
