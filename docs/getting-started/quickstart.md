@@ -40,6 +40,9 @@ my-project/
 └── .jatai       ← local configuration
 ```
 
+Jataí also drops `!helloworld.md` into `INBOX/` as the first onboarding
+message for the node.
+
 ## Starting the daemon
 
 The daemon watches all registered nodes and routes files in real time:
@@ -82,6 +85,10 @@ If you manually add a path to the global registry (`~/.jatai`) without running
 `jatai init`, Jataí creates the missing structure automatically the next time the
 daemon starts. A `!helloworld.md` tutorial file is dropped in the new node's
 `INBOX` on first onboarding.
+
+If `.jatai` is manually deleted from an existing registered node directory,
+daemon maintenance creates `._jatai` to keep the node in soft-delete state
+instead of silently recreating it as active.
 
 ## Reading documentation and logs in-band
 

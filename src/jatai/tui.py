@@ -425,15 +425,30 @@ class JataiApp(App):
 
         elif key == "b":
             from jatai.core.registry import Registry as _Registry
+
+            def _node_path_from_data(data: object) -> str:
+                # Backward compatibility: legacy registries may map names directly to strings.
+                if isinstance(data, dict):
+                    path_value = data.get("path", "")
+                elif isinstance(data, str):
+                    path_value = data
+                else:
+                    path_value = ""
+                return str(path_value).strip()
+
             try:
                 _reg = _Registry()
                 _reg.load()
                 _nodes = [
-                    (name, data.get("path", ""))
+                    (name, _node_path_from_data(data))
                     for name, data in sorted(_reg.nodes.items())
+                    if _node_path_from_data(data)
                 ]
             except FileNotFoundError:
                 _nodes = []
+            except Exception as exc:
+                _nodes = []
+                self._output(f"✗ Unable to read registry for browsing: {exc}")
 
             def _on_browse(result: Optional[str]) -> None:
                 if result is not None:

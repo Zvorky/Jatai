@@ -338,6 +338,22 @@ class TestDaemonHappyPath:
         assert (manual_node_path / "messages" / "in").exists()
         assert (manual_node_path / "messages" / "out").exists()
 
+    def test_daemon_missing_local_config_creates_softdelete_marker(self, temp_home):
+        registry_path = temp_home / ".jatai"
+        node = register_node(registry_path, "node_a", temp_home / "node_a")
+
+        # Simulate user deleting local config manually.
+        node.local_config_path.unlink()
+        assert not node.local_config_path.exists()
+        assert not node.disabled_config_path.exists()
+
+        daemon = JataiDaemon(registry_path=registry_path, pid_path=temp_home / ".jatai.pid")
+        nodes = daemon.load_registered_nodes()
+
+        assert len(nodes) == 1
+        assert not node.local_config_path.exists()
+        assert node.disabled_config_path.exists()
+
     def test_daemon_auto_onboarding_skips_invalid_overlap(self, temp_home):
         registry_path = temp_home / ".jatai"
         manual_node_path = temp_home / "invalid_overlap_node"

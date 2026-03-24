@@ -34,6 +34,17 @@ class TestCLIHappyPath:
         assert (Path(node_path) / "INBOX").exists()
         assert (Path(node_path) / "OUTBOX").exists()
 
+    def test_cli_init_drops_helloworld_into_inbox(self, temp_dir, temp_home):
+        """Test init drops !helloworld.md tutorial into node INBOX."""
+        node_path = Path(temp_dir / "hello_node")
+
+        result = runner.invoke(app, ["init", str(node_path)])
+
+        assert result.exit_code == 0
+        hello_file = node_path / "INBOX" / "!helloworld.md"
+        assert hello_file.exists()
+        assert "Welcome" in hello_file.read_text(encoding="utf-8")
+
     def test_cli_init_current_directory(self, temp_dir, temp_home):
         """Test initializing current directory as node using init alias."""
         # Pass temp_dir as explicit path argument instead of using cwd
@@ -962,3 +973,43 @@ class TestCLITUI:
         app._dispatch("b")
 
         assert "screen" in pushed
+
+    def test_jatai_app_dispatch_browse_nodes_with_legacy_string_paths(self, monkeypatch):
+        from jatai.tui import JataiApp
+
+        pushed = {}
+        app = JataiApp()
+        app.push_screen = lambda screen, cb=None: pushed.update({"screen": screen, "cb": cb})
+
+        class _FakeRegistry:
+            def __init__(self):
+                self.nodes = {"legacy": "/tmp/legacy_node", "bad": None}
+
+            def load(self):
+                pass
+
+        monkeypatch.setattr("jatai.core.registry.Registry", _FakeRegistry)
+        app._dispatch("b")
+
+        assert "screen" in pushed
+
+    def test_jatai_app_dispatch_browse_nodes_registry_error_does_not_crash(self, monkeypatch):
+        from jatai.tui import JataiApp
+
+        pushed = {}
+        outputs = []
+        app = JataiApp()
+        app.push_screen = lambda screen, cb=None: pushed.update({"screen": screen, "cb": cb})
+        app._output = lambda text: outputs.append(text)
+
+        class _FakeRegistry:
+            nodes = {}
+
+            def load(self):
+                raise RuntimeError("broken registry")
+
+        monkeypatch.setattr("jatai.core.registry.Registry", _FakeRegistry)
+        app._dispatch("b")
+
+        assert "screen" in pushed
+        assert any("Unable to read registry" in text for text in outputs)

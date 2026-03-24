@@ -44,6 +44,18 @@ KNOWN_COMMANDS = {
 DOCS_ROOT = Path(__file__).resolve().parents[3] / "docs"
 
 
+def _drop_helloworld_tutorial(node: Node) -> None:
+    """Drop !helloworld.md in node INBOX for newly initialized nodes."""
+    source = DOCS_ROOT / "helloworld.md"
+    if not source.exists():
+        return
+    node.inbox_path.mkdir(parents=True, exist_ok=True)
+    target = node.inbox_path / "!helloworld.md"
+    if target.exists():
+        return
+    shutil.copy2(source, target)
+
+
 def _to_path(node_path: Path, raw_value: str) -> Path:
     """Convert INBOX/OUTBOX config values into absolute paths."""
     candidate = Path(raw_value)
@@ -98,6 +110,7 @@ def _initialize_node(path: Optional[str] = None) -> None:
             inbox_path=inbox_path,
             outbox_path=outbox_path,
         )
+        _drop_helloworld_tutorial(node)
         typer.echo(f"✓ Initialized node at {node_path}")
         typer.echo(f"  INBOX:  {node.inbox_path}")
         typer.echo(f"  OUTBOX: {node.outbox_path}")

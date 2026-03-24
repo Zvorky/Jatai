@@ -1,7 +1,7 @@
 # **Jataí 🐝**
 **The local micro-email and messaging bus for your file system. Connect scripts and AI agents instantly using a zero-config drop-folder pattern. Jataí uses OS file events to route data across directories via standardized INBOX/OUTBOX folders, without complex APIs or sockets. Drop a file, and it's delivered!**
 
-**Version:** `0.6.5` (_Alpha_) · **Author:** Zvorky
+**Version:** `0.6.6` (_Alpha_) · **Author:** Zvorky
 
 ## **🎯 Philosophy & Goal**
 
@@ -48,13 +48,14 @@ Current implementation status: core modules, basic CLI, daemon lifecycle, startu
 8. **Configuration reactivity already implemented in core:** Local `.jatai` overrides are applied over global defaults, `._jatai` nodes are ignored while their roots remain monitored, and reactivation via rename is handled by the daemon.
 9. **Prefix migration safety already implemented in core:** Prefix changes trigger historical file renames; collisions restore the previous config from `.jatai.bkp` and drop an error notice into the node INBOX.
 10. **Onboarding and docs already implemented in core/CLI:** Registry-only nodes are auto-created by the daemon (including `!helloworld.md` in new INBOXes), `jatai docs` renders documentation in terminal by default, and `jatai docs [query]` renders matching markdown docs in terminal by default (`-i|--inbox` exports to files).
+11. **Manual local-config deletion safety:** If `.jatai` is manually deleted from an existing registered node directory, daemon maintenance creates `._jatai` as a soft-delete marker instead of silently recreating and reactivating the node.
 
 ## **🛠️ CLI & TUI Toolbox**
 
 | Command | Action |
 | :---- | :---- |
 | `jatai` | Opens the interactive Text User Interface (TUI) when run in an interactive terminal; otherwise prints CLI help. |
-| `jatai init [path]` | Initializes a node. Note: `jatai [path]` works as a direct alias. |
+| `jatai init [path]` | Initializes a node, registers it globally, and drops `!helloworld.md` into INBOX. Note: `jatai [path]` works as a direct alias. |
 | `jatai start` | Starts the daemon and registers it for OS auto-start. Fails safely if already running. |
 | `jatai stop` | Stops the background daemon. |
 | `jatai status` | Returns node path, local config path, and file counters for the current node. |

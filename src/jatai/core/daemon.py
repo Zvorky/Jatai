@@ -174,6 +174,24 @@ How to use:
 
         has_any_local_config = node.local_config_path.exists() or node.disabled_config_path.exists()
         if not has_any_local_config:
+            # If node directory already exists but config was removed manually,
+            # preserve filesystem state and mark as soft-deleted instead of recreating as active.
+            if node.node_path.exists() and any(node.node_path.iterdir()):
+                softdelete_config = {
+                    "node_path": str(node.node_path),
+                    "INBOX_DIR": str(inbox_path),
+                    "OUTBOX_DIR": str(outbox_path),
+                }
+                for key in ("PREFIX_PROCESSED", "PREFIX_ERROR", "RETRY_DELAY_BASE", "MAX_RETRIES"):
+                    if key in effective:
+                        softdelete_config[key] = effective[key]
+                node.write_config(softdelete_config, node.disabled_config_path)
+                self.logger.info(
+                    "Detected missing local config; created soft-delete marker at %s",
+                    node.disabled_config_path,
+                )
+                return
+
             node.create(global_config=effective, inbox_path=inbox_path, outbox_path=outbox_path)
             self._drop_helloworld(node)
             self.logger.info("Auto-onboarded node at %s", node.node_path)

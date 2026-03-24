@@ -18,9 +18,14 @@ Creates:
 - `INBOX/` — incoming messages
 - `OUTBOX/` — messages to broadcast
 - `.jatai` — local configuration file
+- `INBOX/!helloworld.md` — onboarding tutorial
 
 Registers the node in the global registry (`~/.jatai`). Fails with a friendly
 message if `INBOX_DIR` and `OUTBOX_DIR` would resolve to the same path.
+
+If a user manually deletes `.jatai` from an already registered node directory,
+daemon maintenance writes `._jatai` as a soft-delete marker rather than
+silently recreating and reactivating the node.
 
 ---
 

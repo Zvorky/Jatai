@@ -87,6 +87,7 @@ Adding convenience commands and storage management.
 - [x] Build the interactive TUI (invoked by `jatai` with no arguments).
 - [x] Refactor the TUI with Textual so it exposes all current CLI commands through an efficient interactive workflow.
 - [x] Surface filesystem config origins in terminal output (`status`, `config`, `config get`, `list addrs`) and add alpha TUI node browsing/navigation between registered directories.
+- [x] Fix onboarding edge-cases: create `._jatai` soft-delete marker when local `.jatai` is manually removed, and ensure `!helloworld.md` is dropped during `jatai init` node registration.
 
 ## **Phase 7: Advanced / Future Expansion (Post-Core)**
 

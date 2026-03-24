@@ -1,4 +1,4 @@
-.TH JATAI 1 "2026-03-23" "0.6.5" "Jataí Manual"
+.TH JATAI 1 "2026-03-23" "0.6.6" "Jataí Manual"
 .SH NAME
 jatai \- local file-system message bus for scripts and agents
 .SH SYNOPSIS
@@ -33,8 +33,8 @@ Jataí node.
 .B jatai init [\fIPATH\fR]
 Initialise a Jataí node at \fIPATH\fR (defaults to the current working
 directory). Creates the INBOX and OUTBOX directories, writes a local
-\fI.jatai\fR configuration file, and registers the node in the global
-registry at \fI~/.jatai\fR.
+\fI.jatai\fR configuration file, drops \fI!helloworld.md\fR into INBOX,
+and registers the node in the global registry at \fI~/.jatai\fR.
 .TP
 .B jatai status
 Show the status of the Jataí node in the current directory: node path,
@@ -85,6 +85,10 @@ the rendered config payload.
 .TP
 .B jatai remove [\fIPATH\fR]
 Soft-delete a node by renaming \fI.jatai\fR to \fI._jatai\fR.
+.PP
+If \fI.jatai\fR is manually deleted from an existing registered node directory,
+daemon maintenance writes \fI._jatai\fR to preserve soft-delete semantics
+instead of silently recreating an active node.
 .TP
 .B jatai clear [\fB-r\fR|\fB--read\fR] [\fB-s\fR|\fB--sent\fR]
 Clear processed history files from INBOX and/or OUTBOX.
