@@ -279,21 +279,28 @@ How to use:
         registered_nodes = self.load_registered_nodes()
         active_count = 0
         for node in registered_nodes:
-            self.observer.schedule(
-                JataiNodeConfigHandler(self, node.node_path),
-                str(node.node_path),
-                recursive=False,
-            )
+            try:
+                self.observer.schedule(
+                    JataiNodeConfigHandler(self, node.node_path),
+                    str(node.node_path),
+                    recursive=False,
+                )
+            except Exception as exc:
+                self.logger.warning("Cannot watch node_path=%s reason=%s", node.node_path, exc)
 
         for node in registered_nodes:
             if node.is_disabled() or not node.is_enabled():
                 self._remove_node_cache(node.node_path)
                 continue
-            self.observer.schedule(
-                JataiWatchdogHandler(self, node.node_path),
-                str(node.outbox_path),
-                recursive=False,
-            )
+            try:
+                self.observer.schedule(
+                    JataiWatchdogHandler(self, node.node_path),
+                    str(node.outbox_path),
+                    recursive=False,
+                )
+            except Exception as exc:
+                self.logger.warning("Cannot watch outbox_path=%s reason=%s", node.outbox_path, exc)
+                continue
             self._update_node_cache(node)
             active_count += 1
         self.logger.info("Watchdog watching active_nodes=%s registered_nodes=%s", active_count, len(registered_nodes))

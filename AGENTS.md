@@ -131,6 +131,7 @@ When the agent is working exclusively on development tooling under `tools/` (wit
 
 4. **Capture and record results:**
    - Include command invocations and their output in the `OUTBOX/` report.
+   - Add a dedicated manual testing summary in the report covering: tested scopes, observed errors/failures, and an overall assessment.
    - Note any discrepancy between documented and actual behavior.
    - If a command fails or behaves unexpectedly, fix the implementation before proceeding.
 
@@ -180,6 +181,7 @@ The workflow in this section applies to implementation tasks tied to `ToDo.md`. 
 3. **Create a comprehensive .md report** in the `OUTBOX/` directory containing:
    - Summary of changes made.
    - Test results from `pytest.log`.
+   - Manual testing summary (tested scopes, errors/failures found, and overall validation view).
    - Files modified/created.
    - Tasks completed in `ToDo.md`.
    - Any breaking changes or migration notes.

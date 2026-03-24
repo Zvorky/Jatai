@@ -18,7 +18,7 @@ runner = CliRunner()
 class TestCLIHappyPath:
     """Happy path tests for CLI."""
 
-    def test_cli_init_with_path(self, temp_dir):
+    def test_cli_init_with_path(self, temp_dir, temp_home):
         """Test initializing a node via CLI with explicit path."""
         node_path = str(temp_dir / "test_node")
 
@@ -34,7 +34,7 @@ class TestCLIHappyPath:
         assert (Path(node_path) / "INBOX").exists()
         assert (Path(node_path) / "OUTBOX").exists()
 
-    def test_cli_init_current_directory(self, temp_dir):
+    def test_cli_init_current_directory(self, temp_dir, temp_home):
         """Test initializing current directory as node using init alias."""
         # Pass temp_dir as explicit path argument instead of using cwd
         result = runner.invoke(app, ["init", str(temp_dir)])
@@ -141,7 +141,7 @@ class TestCLIHappyPath:
         assert state["killed"] is True
         assert "Daemon stopped" in result.stdout
 
-    def test_cli_root_alias_path(self, temp_dir, monkeypatch):
+    def test_cli_root_alias_path(self, temp_dir, temp_home, monkeypatch):
         """Test `jatai [path]` alias using run() entrypoint."""
         node_path = temp_dir / "alias_node"
         monkeypatch.setattr("sys.argv", ["jatai", str(node_path)])
@@ -329,7 +329,7 @@ class TestCLIErrorFailureScenarios:
 class TestCLIMaliciousAdversarialScenarios:
     """Malicious/adversarial scenario tests for CLI."""
 
-    def test_cli_init_path_traversal(self, temp_dir):
+    def test_cli_init_path_traversal(self, temp_dir, temp_home):
         """Test init with path traversal attempt."""
         traversal_path = str(temp_dir / "node" / "../../../etc/jatai")
 
@@ -339,7 +339,7 @@ class TestCLIMaliciousAdversarialScenarios:
         assert result.exit_code in [0, 1]
         assert ".." not in Path(result.stdout).name if result.stdout else True
 
-    def test_cli_unicode_in_path(self, temp_dir):
+    def test_cli_unicode_in_path(self, temp_dir, temp_home):
         """Test init with unicode characters in path."""
         unicode_path = str(temp_dir / "节点_🐝")
 
@@ -348,7 +348,7 @@ class TestCLIMaliciousAdversarialScenarios:
         assert result.exit_code == 0
         assert Path(unicode_path).exists()
 
-    def test_cli_very_long_path(self, temp_dir):
+    def test_cli_very_long_path(self, temp_dir, temp_home):
         """Test init with very long path."""
         long_path = temp_dir / ("a" * 100) / ("b" * 100) / "node"
 
@@ -357,7 +357,7 @@ class TestCLIMaliciousAdversarialScenarios:
         # Should succeed on most systems
         assert result.exit_code in [0, 1]
 
-    def test_cli_injection_attempt_in_arguments(self, temp_dir):
+    def test_cli_injection_attempt_in_arguments(self, temp_dir, temp_home):
         """Test that CLI doesn't execute shell injections."""
         # Attempt shell injection through a path argument
         injection_path = str(temp_dir / "; echo hacked &")
@@ -368,7 +368,7 @@ class TestCLIMaliciousAdversarialScenarios:
         assert result.exit_code in [0, 1, 2]  # OK if rejected or accepted as path
         # Most important: code should not have executed the injection
 
-    def test_cli_output_escaping(self, temp_dir):
+    def test_cli_output_escaping(self, temp_dir, temp_home):
         """Test that CLI output is properly escaped."""
         # Create path with special characters
         path_with_special = str(temp_dir / "node\necho hacked")
@@ -378,7 +378,7 @@ class TestCLIMaliciousAdversarialScenarios:
         # Output should not execute injected commands
         assert "hacked" not in result.stdout or "\n" in result.stdout
 
-    def test_cli_symlink_targets(self, temp_dir):
+    def test_cli_symlink_targets(self, temp_dir, temp_home):
         """Test init with symlink paths."""
         import os
 
@@ -393,7 +393,7 @@ class TestCLIMaliciousAdversarialScenarios:
         assert result.exit_code == 0
         assert (actual_path / "INBOX").exists() or (link_path / "INBOX").exists()
 
-    def test_cli_rapid_fire_commands(self, temp_dir):
+    def test_cli_rapid_fire_commands(self, temp_dir, temp_home):
         """Test rapid sequential CLI commands."""
         for i in range(10):
             node_path = str(temp_dir / f"node_{i}")
