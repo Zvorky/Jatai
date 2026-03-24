@@ -4,10 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jatai"
-version = "0.1.0"
+version = "0.4.2"
 description = "Local file-system message bus for scripts and agents"
 readme = "README.md"
 requires-python = ">=3.8"
+authors = [
+    { name = "Enzo 'Zvorky' Zavorski Delevatti" },
+]
 dependencies = [
     "typer==0.12.3",
     "click==8.1.7",
@@ -23,6 +26,9 @@ dev = [
 
 [project.scripts]
 jatai = "jatai.cli.main:run"
+
+[project.urls]
+Homepage = "https://github.com/zvorky/jatai"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

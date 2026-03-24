@@ -1,6 +1,8 @@
 # **Jataí 🐝**
 **The local micro-email and messaging bus for your file system. Connect scripts and AI agents instantly using a zero-config drop-folder pattern. Jataí uses OS file events to route data across directories via standardized INBOX/OUTBOX folders, without complex APIs or sockets. Drop a file, and it's delivered!**
 
+**Version:** `0.4.2` (_Alpha_)
+
 ## **🎯 Philosophy & Goal**
 
 The main objective of Jataí is to eliminate the need for complex network setups (REST APIs, WebSockets, Localhost Ports) when making local scripts or AI agents talk to each other.

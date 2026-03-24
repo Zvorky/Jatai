@@ -23,6 +23,9 @@ This file defines mandatory rules for any agent executing development tasks in t
    - Update versions when upgrading packages.
    - Remove dependencies no longer in use.
    - Maintain consistency with code changes.
+9. Keep all explicit project version citations synchronized whenever the version changes:
+   - Update all version references in code and documentation in the same change set.
+   - At minimum, keep `pyproject.toml`, `src/jatai/__init__.py`, and `README.md` aligned with the same current version.
 
 ## Architecture & Requirements Governance
 
@@ -46,6 +49,8 @@ Whenever `ARCHITECTURE.md` or `REQUIREMENTS.md` are changed:
 - Execute implementation without deciding architecture/requirements without authorization.
 - Update `ToDo.md` and `README.md`.
 - Ensure "File Structure" section is updated in `README.md`.
+- Update `pyproject.toml` version using `MAJOR.PHASE.ITERATION` before report/commit.
+- Synchronize every explicit version citation in code/docs to the same current version.
 - Report changes and pending items to the user.
 
 ## Language Requirements
@@ -90,6 +95,23 @@ This ensures consistency, maintainability, and accessibility across the entire c
 - Tests must verify **side effects:** File system changes, state modifications, external calls.
 - Use descriptive test names: `test_<function>_<scenario>_<expected_outcome>()` pattern.
 
+## Project Versioning Policy
+
+Versioning must strictly follow this scheme:
+
+- **Format:** `MAJOR.PHASE.ITERATION`
+- **Current channel:** While in `alpha`, versions stay in `0.x.x`.
+- **MAJOR:** Updated **only** when explicitly requested by the user (manual decision).
+- **PHASE:** Must match the current implementation phase in `ToDo.md` (e.g., if current phase is 4, use `0.4.x`).
+- **ITERATION:** Incremented on each commit iteration for the same phase (patch-like counter).
+- **Source of truth:** Update `pyproject.toml` `[project].version` before reporting and committing.
+
+Branch flow constraints:
+
+- Work normally happens in `dev`.
+- Merging stable changes into `main` is only allowed when explicitly requested by the user.
+- The agent must not trigger merge/release actions to `main` without that explicit request.
+
 ## Git Workflow & Final Reporting
 
 ### After All Tests Pass
@@ -100,14 +122,22 @@ This ensures consistency, maintainability, and accessibility across the entire c
    - If deviations exist, document them in the report or update ARCHITECTURE/REQUIREMENTS as needed.
    - Do NOT commit code that violates established architecture without explicit user authorization.
 
-2. **Create a comprehensive .md report** in the `OUTBOX/` directory containing:
+2. **Update project version before report/commit:**
+   - Apply the `MAJOR.PHASE.ITERATION` rule from this document.
+   - Keep `MAJOR` unchanged unless the user explicitly requested a major bump.
+   - Set `PHASE` to the current `ToDo.md` phase being executed.
+   - Increment `ITERATION` for each new commit in that same phase.
+   - Persist the new version in `pyproject.toml` before creating the report and commit.
+   - Synchronize every explicit version citation across code and docs in the same change.
+
+3. **Create a comprehensive .md report** in the `OUTBOX/` directory containing:
    - Summary of changes made.
    - Test results from `pytest.log`.
    - Files modified/created.
    - Tasks completed in `ToDo.md`.
    - Any breaking changes or migration notes.
 
-3. **Commit your changes** to git:
+4. **Commit your changes** to git:
    ```bash
    git add <modified files>
    git commit -m "<clear commit message describing changes>"
@@ -118,7 +148,7 @@ This ensures consistency, maintainability, and accessibility across the entire c
    - **Commit messages must be short and direct.** If needed, split into multiple atomic commits rather than creating large messages.
    - Each commit should clearly describe a single logical change or feature.
 
-3. **Exclude pytest.log from git** if not already in `.gitignore`:
+5. **Exclude pytest.log from git** if not already in `.gitignore`:
    - The `pytest.log` file is for local validation only and should not be committed.
 
 ### Final User Summary

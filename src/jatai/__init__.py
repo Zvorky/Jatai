@@ -5,5 +5,5 @@ A zero-config drop-folder pattern for connecting scripts and AI agents
 using standardized INBOX/OUTBOX folders and OS file events.
 """
 
-__version__ = "0.1.0"
-__author__ = "Jataí Contributors"
+__version__ = "0.4.2"
+__author__ = "Enzo 'Zvorky' Zavorski Delevatti (https://github.com/zvorky)"
