@@ -6,9 +6,9 @@ import logging
 import os
 import signal
 import threading
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
-from typing import Tuple
+from typing import Dict, List, Optional, Tuple
 
 from filelock import FileLock, Timeout
 from watchdog.events import FileCreatedEvent, FileMovedEvent, FileSystemEventHandler
@@ -78,6 +78,18 @@ class JataiDaemon:
 
     POLL_INTERVAL_SECONDS = 0.2
     LOCK_TIMEOUT_SECONDS = 2
+    HELLOWORLD_FILENAME = "!helloworld.md"
+    HELLOWORLD_CONTENT = """# Welcome to Jatai
+
+This node was auto-onboarded from the global registry.
+
+How to use:
+
+1. Drop files into OUTBOX to broadcast.
+2. Read files from INBOX.
+3. Use `jatai status` to inspect this node.
+4. Use `jatai docs` to receive documentation files in INBOX.
+"""
 
     def __init__(
         self,
@@ -114,6 +126,62 @@ class JataiDaemon:
         registry = Registry(self.registry_path)
         registry.load()
         return registry
+
+    def _resolve_configured_path(self, node: Node, configured_value: object, fallback_name: str) -> Path:
+        if not configured_value:
+            return node.node_path / fallback_name
+        candidate = Path(str(configured_value))
+        if candidate.is_absolute():
+            return candidate
+        return node.node_path / candidate
+
+    def _drop_helloworld(self, node: Node) -> None:
+        inbox = node.inbox_path
+        inbox.mkdir(parents=True, exist_ok=True)
+        hello_path = inbox / self.HELLOWORLD_FILENAME
+        if hello_path.exists():
+            return
+        hello_path.write_text(
+            self.HELLOWORLD_CONTENT + f"\nGenerated at: {datetime.now(timezone.utc).isoformat()}\n",
+            encoding="utf-8",
+        )
+
+    def _ensure_node_onboarded(
+        self,
+        node: Node,
+        node_data: Dict[str, object],
+        global_config: Dict[str, object],
+    ) -> None:
+        effective = dict(global_config)
+        for key in (
+            "PREFIX_PROCESSED",
+            "PREFIX_ERROR",
+            "RETRY_DELAY_BASE",
+            "MAX_RETRIES",
+            "INBOX_DIR",
+            "OUTBOX_DIR",
+        ):
+            if key in node_data:
+                effective[key] = node_data[key]
+
+        inbox_path = self._resolve_configured_path(node, effective.get("INBOX_DIR"), Node.INBOX_DIRNAME)
+        outbox_path = self._resolve_configured_path(node, effective.get("OUTBOX_DIR"), Node.OUTBOX_DIRNAME)
+        Node.validate_inbox_outbox_overlap(inbox_path, outbox_path)
+
+        if not node.node_path.exists():
+            node.node_path.mkdir(parents=True, exist_ok=True)
+
+        has_any_local_config = node.local_config_path.exists() or node.disabled_config_path.exists()
+        if not has_any_local_config:
+            node.create(global_config=effective, inbox_path=inbox_path, outbox_path=outbox_path)
+            self._drop_helloworld(node)
+            self.logger.info("Auto-onboarded node at %s", node.node_path)
+            return
+
+        inbox_path.mkdir(parents=True, exist_ok=True)
+        outbox_path.mkdir(parents=True, exist_ok=True)
+        node.inbox_path = inbox_path
+        node.outbox_path = outbox_path
 
     @property
     def pid_lock_path(self) -> Path:
@@ -175,7 +243,10 @@ class JataiDaemon:
         nodes: List[Node] = []
         for node_data in registry.nodes.values():
             node = Node(Path(node_data["path"]))
-            if not node.node_path.exists():
+            try:
+                self._ensure_node_onboarded(node, node_data, registry.global_config)
+            except Exception as exc:
+                self.logger.warning("Failed to onboard node=%s reason=%s", node.node_path, exc)
                 continue
             try:
                 node.load_any_config()
@@ -206,25 +277,36 @@ class JataiDaemon:
             self.observer.unschedule_all()
 
         registered_nodes = self.load_registered_nodes()
+        active_count = 0
         for node in registered_nodes:
-            self.observer.schedule(
-                JataiNodeConfigHandler(self, node.node_path),
-                str(node.node_path),
-                recursive=False,
-            )
+            try:
+                self.observer.schedule(
+                    JataiNodeConfigHandler(self, node.node_path),
+                    str(node.node_path),
+                    recursive=False,
+                )
+            except Exception as exc:
+                self.logger.warning("Cannot watch node_path=%s reason=%s", node.node_path, exc)
 
         for node in registered_nodes:
             if node.is_disabled() or not node.is_enabled():
                 self._remove_node_cache(node.node_path)
                 continue
-            self.observer.schedule(
-                JataiWatchdogHandler(self, node.node_path),
-                str(node.outbox_path),
-                recursive=False,
-            )
+            try:
+                self.observer.schedule(
+                    JataiWatchdogHandler(self, node.node_path),
+                    str(node.outbox_path),
+                    recursive=False,
+                )
+            except Exception as exc:
+                self.logger.warning("Cannot watch outbox_path=%s reason=%s", node.outbox_path, exc)
+                continue
             self._update_node_cache(node)
+            active_count += 1
+        self.logger.info("Watchdog watching active_nodes=%s registered_nodes=%s", active_count, len(registered_nodes))
 
     def handle_node_config_change(self, node_path: Path) -> None:
+        self.logger.info("Config change detected node=%s", node_path)
         node = Node(node_path)
         previous_config = self.node_config_cache.get(node.node_path)
 
@@ -248,13 +330,18 @@ class JataiDaemon:
                 for key in Node.PREFIX_KEYS
             )
             if prefix_keys_changed:
+                self.logger.info("Prefix migration started node=%s", node_path)
                 node.backup_current_config(previous_config)
                 try:
                     node.migrate_prefix_history(previous_config, node.local_config)
+                    self.logger.info("Prefix migration completed node=%s", node_path)
                 except Exception as exc:
                     node.write_config(previous_config)
                     node.local_config = dict(previous_config)
                     node.apply_effective_config(registry.global_config)
+                    self.logger.warning(
+                        "Prefix rollback triggered node=%s reason=%s", node_path, exc
+                    )
                     node.drop_error_notice(
                         f"Prefix migration aborted and configuration restored.\n\nReason: {exc}\n",
                         error_prefix=str(previous_config.get("PREFIX_ERROR", "!_")),
@@ -262,8 +349,10 @@ class JataiDaemon:
 
         if node.is_enabled() and not node.is_disabled():
             self._update_node_cache(node)
+            self.logger.info("Node active node=%s", node_path)
         else:
             self._remove_node_cache(node.node_path)
+            self.logger.info("Node disabled node=%s", node_path)
 
         self._refresh_observer_watches()
 
@@ -404,8 +493,10 @@ class JataiDaemon:
 
     def startup_scan(self) -> None:
         nodes = self.load_active_nodes()
+        self.logger.info("Startup scan begin nodes=%s", len(nodes))
         for node in nodes:
             self.process_pending_outbox(node, nodes)
+        self.logger.info("Startup scan complete")
 
     def process_pending_outbox(self, node: Node, nodes: List[Node]) -> None:
         prefix = Prefix(
@@ -427,6 +518,7 @@ class JataiDaemon:
                 self.retry_state.save()
                 if not due:
                     continue
+                self.logger.info("Retry due for file=%s", file_path)
                 pending_path = prefix.to_pending(file_path)
                 self.broadcast_file(node, pending_path, nodes)
 
@@ -446,6 +538,7 @@ class JataiDaemon:
     def run(self) -> None:
         self.install_signal_handlers()
         self.acquire_singleton()
+        self.logger.info("Daemon starting pid=%s registry=%s", os.getpid(), self.registry_path)
         try:
             self.startup_scan()
             self.setup_watchdog()
@@ -454,6 +547,7 @@ class JataiDaemon:
         finally:
             self.shutdown_watchdog()
             self.release_singleton()
+            self.logger.info("Daemon stopped")
 
     def stop(self) -> None:
         self.stop_event.set()

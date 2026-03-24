@@ -39,6 +39,7 @@ This file defines mandatory rules for any agent executing development tasks in t
 1. The agent must not make architecture or requirements decisions on its own.
 2. If there is ambiguity, conflict, or lack of definition, the agent must ask the user how to proceed before implementing.
 3. Exception: Only decide on its own when the user explicitly requests it.
+4. Tasks tagged `[ARCH]` in `ToDo.md` are **not implementation tasks** — they represent open architecture decisions. The agent must **never implement** an `[ARCH]` task; instead, it must present the question or decision point directly to the user and wait for explicit direction before proceeding.
 
 ## ARCHITECTURE/REQUIREMENTS → ToDo Synchronization Rule
 
@@ -67,6 +68,14 @@ Whenever `ARCHITECTURE.md` or `REQUIREMENTS.md` are changed:
 This ensures consistency, maintainability, and accessibility across the entire codebase for any contributor or maintainer.
 
 ## Testing Requirements & Validation Before Task Completion
+
+### Scope Exception for Development Tools (`tools/`)
+
+When the agent is working exclusively on development tooling under `tools/` (without implementing product/runtime tasks from `ToDo.md`):
+
+1. The task-completion workflow in this document (automated test gate, `pytest.log`, OUTBOX report, task completion tracking, and mandatory commit flow) does **not** apply.
+2. Instead, the agent must perform **safe manual validation** of the modified tool/script, documenting command(s) executed and observed behavior in the final user summary.
+3. Manual validation must avoid unsafe/destructive side effects (for example, no irreversible deletes outside isolated test paths).
 
 ### Mandatory Test Coverage
 
@@ -102,6 +111,36 @@ This ensures consistency, maintainability, and accessibility across the entire c
 - Tests must verify **side effects:** File system changes, state modifications, external calls.
 - Use descriptive test names: `test_<function>_<scenario>_<expected_outcome>()` pattern.
 
+### Manual Testing Protocol
+
+**After automated tests pass**, perform an end-to-end manual validation:
+
+1. **Install the project** following the instructions in `README.md` exactly (e.g., `pip install -e .` or the documented install command).
+
+2. **Set up a test environment** using at least two node addresses under `/tmp/`, for example:
+   ```bash
+   export JATAI_TEST_A=/tmp/jatai_test_a
+   export JATAI_TEST_B=/tmp/jatai_test_b
+   mkdir -p "$JATAI_TEST_A" "$JATAI_TEST_B"
+   ```
+
+3. **Run every documented command** from `README.md` (and any other user-facing documentation):
+   - Execute each command against the test nodes.
+   - Capture the full terminal output (stdout + stderr).
+   - Verify behavior matches the documented description.
+
+4. **Capture and record results:**
+   - Include command invocations and their output in the `OUTBOX/` report.
+   - Add a dedicated manual testing summary in the report covering: tested scopes, observed errors/failures, and an overall assessment.
+   - Note any discrepancy between documented and actual behavior.
+   - If a command fails or behaves unexpectedly, fix the implementation before proceeding.
+
+5. **Clean up after manual tests:**
+   ```bash
+   rm -rf "$JATAI_TEST_A" "$JATAI_TEST_B"
+   ```
+   All files and directories created during manual testing under `/tmp/` must be deleted before the final commit.
+
 ## Project Versioning Policy
 
 Versioning must strictly follow this scheme:
@@ -120,6 +159,8 @@ Branch flow constraints:
 - The agent must not trigger merge/release actions to `main` without that explicit request.
 
 ## Git Workflow & Final Reporting
+
+The workflow in this section applies to implementation tasks tied to `ToDo.md`. For changes scoped exclusively to development tools under `tools/`, follow the exception defined in **"Scope Exception for Development Tools (`tools/`)"**.
 
 ### After All Tests Pass
 
@@ -140,6 +181,7 @@ Branch flow constraints:
 3. **Create a comprehensive .md report** in the `OUTBOX/` directory containing:
    - Summary of changes made.
    - Test results from `pytest.log`.
+   - Manual testing summary (tested scopes, errors/failures found, and overall validation view).
    - Files modified/created.
    - Tasks completed in `ToDo.md`.
    - Any breaking changes or migration notes.

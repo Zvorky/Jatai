@@ -1,7 +1,7 @@
 # **Jataí 🐝**
 **The local micro-email and messaging bus for your file system. Connect scripts and AI agents instantly using a zero-config drop-folder pattern. Jataí uses OS file events to route data across directories via standardized INBOX/OUTBOX folders, without complex APIs or sockets. Drop a file, and it's delivered!**
 
-**Version:** `0.4.2` (_Alpha_) · **Author:** Zvorky
+**Version:** `0.5.1` (_Alpha_) · **Author:** Zvorky
 
 ## **🎯 Philosophy & Goal**
 
@@ -36,7 +36,7 @@ OUTBOX/
 
 ## **🐝 Usage (The File-System Way)**
 
-Current implementation status: core modules, basic CLI, daemon lifecycle, startup scan, watchdog-based routing, 5-state prefix handling, exponential retry management, global logging, local config override handling, soft-delete/hot-reload monitoring, and prefix hot-swap rollback are available for local development and testing.
+Current implementation status: core modules, basic CLI, daemon lifecycle, startup scan, watchdog-based routing, 5-state prefix handling, exponential retry management, global logging, local config override handling, soft-delete/hot-reload monitoring, prefix hot-swap rollback, auto-onboarding from the global registry, and in-band docs delivery are available for local development and testing.
 
 1. **Initialize a Node (current command):** `jatai init ./my-folder`
 2. **Initialize via Alias (current command):** `jatai ./my-folder`
@@ -47,14 +47,11 @@ Current implementation status: core modules, basic CLI, daemon lifecycle, startu
 7. **Observability already implemented in core:** Global daemon log file output to `~/.jatai.log` is active.
 8. **Configuration reactivity already implemented in core:** Local `.jatai` overrides are applied over global defaults, `._jatai` nodes are ignored while their roots remain monitored, and reactivation via rename is handled by the daemon.
 9. **Prefix migration safety already implemented in core:** Prefix changes trigger historical file renames; collisions restore the previous config from `.jatai.bkp` and drop an error notice into the node INBOX.
+10. **Onboarding and docs already implemented in core/CLI:** Registry-only nodes are auto-created by the daemon (including `!helloworld.md` in new INBOXes), `jatai docs` drops a docs index in the current INBOX, and `jatai docs [query]` copies matching markdown docs into the local INBOX.
 
-The command surface in the sections below remains the product target roadmap, not a statement that every command is already available.
+The command surface in the sections below mixes implemented commands and product targets for upcoming phases.
 
 ## **🛠️ CLI & TUI Toolbox**
-
-*Target command surface (planned and in-progress).*
-
-$PLANNED / TODO$
 
 | Command | Action |
 | :---- | :---- |
@@ -70,13 +67,15 @@ $PLANNED / TODO$
 | `jatai unread <file>` | Removes the success prefix from a file in the INBOX. |
 | `jatai remove [path]` | Disables the node (current dir by default). Safeguarded against global origin. |
 | `jatai clear [inbox\|outbox]` | Clears processed files (`_`) in both folders or a specific one. |
-| `jatai docs [query]` | Fetches deep documentation from docs/ into the INBOX. |
+| `jatai log` | Prints the latest log content in terminal (use `--inbox` to export). |
+| `jatai log --all` / `jatai log -a` | Prints the complete log output in terminal (use `--inbox` to export). |
+| `jatai docs [query]` | Prints matching documentation in terminal by default (use `--inbox` to export file(s)). |
 
 ## **🏗️ Architecture & Requirements**
 
 * [**Architecture Decision Records (ADR)**](ARCHITECTURE.md)
 * [**Technical Requirements**](REQUIREMENTS.md)
-* **Deep Documentation:** Planned to be stored in the `docs/` folder (can be fetched via jatai docs).
+* **Deep Documentation:** Stored in the `docs/` folder (can be fetched via `jatai docs` and `jatai docs [query]`).
 
 ## **🗂️ File Structure**
 
@@ -110,7 +109,12 @@ $PLANNED / TODO$
 ├── pyproject.toml                 # Packaging metadata and console_scripts entrypoint
 ├── pytest.ini                     # Pytest configuration
 ├── .gitignore                     # Git ignore rules
-└── docs/jatai.1                   # Manual page used by the system CLI
+└── docs/                           # Runtime in-band documentation and manual page
+    ├── jatai.1                    # Manual page used by the system CLI
+    ├── getting-started/           # Quickstart, configuration reference
+    ├── operations/                # CLI reference, prefix states, retry & health
+    ├── security/                  # Safe usage and hardening notes
+    └── development/               # Repository structure and debug guides
 ```
 
 ## **🚀 Future Ideas & Roadmap**

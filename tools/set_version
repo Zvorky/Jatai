@@ -11,7 +11,6 @@ import argparse
 import re
 from pathlib import Path
 
-CURRENT_VERSION = "0.4.2"
 ROOT_DIR = Path(__file__).resolve().parents[1]
 
 # Keep this list aligned with any new version citations.
@@ -30,7 +29,7 @@ VERSION_TARGETS: dict[str, list[dict[str, str]]] = {
     ],
     "README.md": [
         {
-            "pattern": r"(?m)^\*\*Version:\*\* `\d+\.\d+\.\d+` \(_Alpha_\).*$",
+            "pattern": r"(?m)^\*\*Version:\*\* `(?P<version>\d+\.\d+\.\d+)` \(_Alpha_\).*$",
             "replacement": "**Version:** `{version}` (_Alpha_) · **Author:** Zvorky",
         }
     ],
@@ -40,13 +39,22 @@ VERSION_TARGETS: dict[str, list[dict[str, str]]] = {
             "replacement": ".TH JATAI 1 \"{date}\" \"{version}\" \"Jataí Manual\"",
         }
     ],
-    "tools/set_version": [
-        {
-            "pattern": r"(?m)^CURRENT_VERSION = \"\d+\.\d+\.\d+\"$",
-            "replacement": "CURRENT_VERSION = \"{version}\"",
-        }
-    ],
 }
+
+
+def read_current_version_from_readme() -> str:
+    readme_path = ROOT_DIR / "README.md"
+    if not readme_path.exists():
+        raise FileNotFoundError("README.md not found while reading current version reference.")
+
+    text = readme_path.read_text(encoding="utf-8")
+    readme_pattern = VERSION_TARGETS["README.md"][0]["pattern"]
+    match = re.search(readme_pattern, text)
+    if not match:
+        raise RuntimeError("Could not parse current version from README.md")
+    if "version" not in match.groupdict() or not match.group("version"):
+        raise RuntimeError("README version pattern must define a 'version' named capture group")
+    return str(match.group("version"))
 
 
 def replace_one(text: str, pattern: str, replacement: str, version: str) -> tuple[str, int]:
@@ -85,12 +93,17 @@ def main() -> int:
     if not re.fullmatch(r"\d+\.\d+\.\d+", args.new_version):
         raise SystemExit("Invalid version format. Use MAJOR.PHASE.ITERATION (e.g. 0.4.3).")
 
+    current_version = read_current_version_from_readme()
+
     changed = 0
     for rel_path, specs in VERSION_TARGETS.items():
         file_path = ROOT_DIR / rel_path
         if not file_path.exists():
             raise FileNotFoundError(f"Version target file not found: {rel_path}")
         changed += update_file(file_path, specs, args.new_version)
+
+    if args.new_version == current_version:
+        print(f"Version already set to {args.new_version} (from README reference).")
 
     print(f"Updated version to {args.new_version} in {len(VERSION_TARGETS)} files ({changed} replacements).")
     print("Verify with: rg --line-number --fixed-strings \"" + args.new_version + "\"")

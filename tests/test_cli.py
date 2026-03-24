@@ -18,7 +18,7 @@ runner = CliRunner()
 class TestCLIHappyPath:
     """Happy path tests for CLI."""
 
-    def test_cli_init_with_path(self, temp_dir):
+    def test_cli_init_with_path(self, temp_dir, temp_home):
         """Test initializing a node via CLI with explicit path."""
         node_path = str(temp_dir / "test_node")
 
@@ -34,7 +34,7 @@ class TestCLIHappyPath:
         assert (Path(node_path) / "INBOX").exists()
         assert (Path(node_path) / "OUTBOX").exists()
 
-    def test_cli_init_current_directory(self, temp_dir):
+    def test_cli_init_current_directory(self, temp_dir, temp_home):
         """Test initializing current directory as node using init alias."""
         # Pass temp_dir as explicit path argument instead of using cwd
         result = runner.invoke(app, ["init", str(temp_dir)])
@@ -141,7 +141,7 @@ class TestCLIHappyPath:
         assert state["killed"] is True
         assert "Daemon stopped" in result.stdout
 
-    def test_cli_root_alias_path(self, temp_dir, monkeypatch):
+    def test_cli_root_alias_path(self, temp_dir, temp_home, monkeypatch):
         """Test `jatai [path]` alias using run() entrypoint."""
         node_path = temp_dir / "alias_node"
         monkeypatch.setattr("sys.argv", ["jatai", str(node_path)])
@@ -151,6 +151,41 @@ class TestCLIHappyPath:
         assert node_path.exists()
         assert (node_path / "INBOX").exists()
         assert (node_path / "OUTBOX").exists()
+
+    def test_cli_docs_without_query_drops_index(self, temp_dir):
+        """Test docs command without query creates category index in INBOX."""
+        node = Node(temp_dir / "docs_node")
+        node.create()
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            result = runner.invoke(app, ["docs"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 0
+        index_path = node.inbox_path / "!docs-index.md"
+        assert index_path.exists()
+        assert "Jatai Documentation Index" in index_path.read_text(encoding="utf-8")
+
+    def test_cli_docs_with_query_copies_matching_files(self, temp_dir):
+        """Test docs command with query copies matching docs to INBOX."""
+        node = Node(temp_dir / "docs_query_node")
+        node.create()
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            result = runner.invoke(app, ["docs", "retry"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 0
+        copied = list(node.inbox_path.glob("*retry*.md"))
+        assert copied
 
 
 class TestCLIErrorFailureScenarios:
@@ -261,11 +296,40 @@ class TestCLIErrorFailureScenarios:
         assert (node_path / "shared" / "INBOX").exists()
         assert (node_path / "shared" / "OUTBOX").exists()
 
+    def test_cli_docs_fails_outside_node(self, temp_dir):
+        """Test docs command fails in non-node directories."""
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(temp_dir)
+            result = runner.invoke(app, ["docs"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 1
+        assert "not a Jataí node" in result.stdout or "not a Jataí node" in result.stderr
+
+    def test_cli_docs_query_without_matches(self, temp_dir):
+        """Test docs query returns a controlled error when there are no matches."""
+        node = Node(temp_dir / "docs_nomatch_node")
+        node.create()
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            result = runner.invoke(app, ["docs", "query-that-should-not-exist-12345"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 1
+        assert "no docs matched" in result.stdout.lower() or "no docs matched" in result.stderr.lower()
+
 
 class TestCLIMaliciousAdversarialScenarios:
     """Malicious/adversarial scenario tests for CLI."""
 
-    def test_cli_init_path_traversal(self, temp_dir):
+    def test_cli_init_path_traversal(self, temp_dir, temp_home):
         """Test init with path traversal attempt."""
         traversal_path = str(temp_dir / "node" / "../../../etc/jatai")
 
@@ -275,7 +339,7 @@ class TestCLIMaliciousAdversarialScenarios:
         assert result.exit_code in [0, 1]
         assert ".." not in Path(result.stdout).name if result.stdout else True
 
-    def test_cli_unicode_in_path(self, temp_dir):
+    def test_cli_unicode_in_path(self, temp_dir, temp_home):
         """Test init with unicode characters in path."""
         unicode_path = str(temp_dir / "节点_🐝")
 
@@ -284,7 +348,7 @@ class TestCLIMaliciousAdversarialScenarios:
         assert result.exit_code == 0
         assert Path(unicode_path).exists()
 
-    def test_cli_very_long_path(self, temp_dir):
+    def test_cli_very_long_path(self, temp_dir, temp_home):
         """Test init with very long path."""
         long_path = temp_dir / ("a" * 100) / ("b" * 100) / "node"
 
@@ -293,7 +357,7 @@ class TestCLIMaliciousAdversarialScenarios:
         # Should succeed on most systems
         assert result.exit_code in [0, 1]
 
-    def test_cli_injection_attempt_in_arguments(self, temp_dir):
+    def test_cli_injection_attempt_in_arguments(self, temp_dir, temp_home):
         """Test that CLI doesn't execute shell injections."""
         # Attempt shell injection through a path argument
         injection_path = str(temp_dir / "; echo hacked &")
@@ -304,7 +368,7 @@ class TestCLIMaliciousAdversarialScenarios:
         assert result.exit_code in [0, 1, 2]  # OK if rejected or accepted as path
         # Most important: code should not have executed the injection
 
-    def test_cli_output_escaping(self, temp_dir):
+    def test_cli_output_escaping(self, temp_dir, temp_home):
         """Test that CLI output is properly escaped."""
         # Create path with special characters
         path_with_special = str(temp_dir / "node\necho hacked")
@@ -314,7 +378,7 @@ class TestCLIMaliciousAdversarialScenarios:
         # Output should not execute injected commands
         assert "hacked" not in result.stdout or "\n" in result.stdout
 
-    def test_cli_symlink_targets(self, temp_dir):
+    def test_cli_symlink_targets(self, temp_dir, temp_home):
         """Test init with symlink paths."""
         import os
 
@@ -329,7 +393,7 @@ class TestCLIMaliciousAdversarialScenarios:
         assert result.exit_code == 0
         assert (actual_path / "INBOX").exists() or (link_path / "INBOX").exists()
 
-    def test_cli_rapid_fire_commands(self, temp_dir):
+    def test_cli_rapid_fire_commands(self, temp_dir, temp_home):
         """Test rapid sequential CLI commands."""
         for i in range(10):
             node_path = str(temp_dir / f"node_{i}")
@@ -343,3 +407,19 @@ class TestCLIMaliciousAdversarialScenarios:
         # Output shouldn't contain full paths to home or sensitive dirs
         # (actual implementation may vary)
         assert result.exit_code == 0
+
+    def test_cli_docs_query_path_traversal_pattern_is_treated_as_plain_text(self, temp_dir):
+        """Test docs query with traversal-like content does not escape docs scope."""
+        node = Node(temp_dir / "docs_traversal_node")
+        node.create()
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            result = runner.invoke(app, ["docs", "../../etc/passwd"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 1
+        assert not any("passwd" in p.name for p in node.inbox_path.glob("*.md"))

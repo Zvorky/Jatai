@@ -299,6 +299,61 @@ class TestDaemonHappyPath:
         assert "collision" in notice_files[0].read_text(encoding="utf-8").lower()
         assert not list(node_b.inbox_path.glob("!_config-migration-error*.md"))
 
+    def test_daemon_auto_onboards_registry_only_node(self, temp_home):
+        registry_path = temp_home / ".jatai"
+        manual_node_path = temp_home / "manual_node"
+
+        registry = Registry(registry_path=registry_path)
+        registry.set_config("INBOX_DIR", "INBOX")
+        registry.set_config("OUTBOX_DIR", "OUTBOX")
+        registry.add_node("manual_node", str(manual_node_path))
+        registry.save()
+
+        daemon = JataiDaemon(registry_path=registry_path, pid_path=temp_home / ".jatai.pid")
+        nodes = daemon.load_registered_nodes()
+
+        assert len(nodes) == 1
+        assert manual_node_path.exists()
+        assert (manual_node_path / "INBOX").exists()
+        assert (manual_node_path / "OUTBOX").exists()
+        assert (manual_node_path / ".jatai").exists()
+        hello = manual_node_path / "INBOX" / "!helloworld.md"
+        assert hello.exists()
+        assert "Welcome to Jatai" in hello.read_text(encoding="utf-8")
+
+    def test_daemon_auto_onboarding_respects_custom_dirs(self, temp_home):
+        registry_path = temp_home / ".jatai"
+        manual_node_path = temp_home / "custom_dirs_node"
+
+        registry = Registry(registry_path=registry_path)
+        registry.set_config("INBOX_DIR", "messages/in")
+        registry.set_config("OUTBOX_DIR", "messages/out")
+        registry.add_node("custom_dirs_node", str(manual_node_path))
+        registry.save()
+
+        daemon = JataiDaemon(registry_path=registry_path, pid_path=temp_home / ".jatai.pid")
+        nodes = daemon.load_registered_nodes()
+
+        assert len(nodes) == 1
+        assert (manual_node_path / "messages" / "in").exists()
+        assert (manual_node_path / "messages" / "out").exists()
+
+    def test_daemon_auto_onboarding_skips_invalid_overlap(self, temp_home):
+        registry_path = temp_home / ".jatai"
+        manual_node_path = temp_home / "invalid_overlap_node"
+
+        registry = Registry(registry_path=registry_path)
+        registry.set_config("INBOX_DIR", "same")
+        registry.set_config("OUTBOX_DIR", "same")
+        registry.add_node("invalid_overlap_node", str(manual_node_path))
+        registry.save()
+
+        daemon = JataiDaemon(registry_path=registry_path, pid_path=temp_home / ".jatai.pid")
+        nodes = daemon.load_registered_nodes()
+
+        assert nodes == []
+        assert not (manual_node_path / ".jatai").exists()
+
 
 class TestDaemonExclusivity:
     """Singleton/PID lock behavior tests."""
@@ -332,3 +387,311 @@ class TestAutoStartRegistration:
         content = service_path.read_text(encoding="utf-8")
         assert "systemd" in str(service_path)
         assert "ExecStart=\"/usr/bin/python3\" -m jatai.cli.main _daemon-run" in content
+
+
+class TestDaemonLogging:
+    """Tests verifying that crucial events are written to the log file."""
+
+    # --- helpers ---
+
+    @staticmethod
+    def _log_text(log_path):
+        return log_path.read_text(encoding="utf-8") if log_path.exists() else ""
+
+    # --- delivery events ---
+
+    def test_log_delivery_succeeded(self, temp_home):
+        registry_path = temp_home / ".jatai"
+        log_path = temp_home / ".jatai.log"
+        node_a = register_node(registry_path, "node_a", temp_home / "node_a")
+        register_node(registry_path, "node_b", temp_home / "node_b")
+        (node_a.outbox_path / "msg.txt").write_text("hello")
+
+        daemon = JataiDaemon(registry_path=registry_path, pid_path=temp_home / ".jatai.pid", log_path=log_path)
+        daemon.startup_scan()
+
+        log = self._log_text(log_path)
+        assert "Delivery succeeded" in log
+        assert "msg.txt" in log
+
+    def test_log_delivery_failed_per_destination(self, temp_home, monkeypatch):
+        registry_path = temp_home / ".jatai"
+        log_path = temp_home / ".jatai.log"
+        node_a = register_node(registry_path, "node_a", temp_home / "node_a")
+        register_node(registry_path, "node_b", temp_home / "node_b")
+        (node_a.outbox_path / "fail.txt").write_text("payload")
+
+        def fail_delivery(_self):
+            raise OSError("disk full")
+
+        monkeypatch.setattr("jatai.core.daemon.Delivery.deliver", fail_delivery)
+
+        daemon = JataiDaemon(
+            registry_path=registry_path, pid_path=temp_home / ".jatai.pid",
+            retry_path=temp_home / ".retry", log_path=log_path,
+        )
+        daemon.startup_scan()
+
+        log = self._log_text(log_path)
+        assert "Delivery failed" in log
+        assert "fail.txt" in log
+        assert "disk full" in log
+
+    def test_log_retry_scheduled(self, temp_home, monkeypatch):
+        registry_path = temp_home / ".jatai"
+        log_path = temp_home / ".jatai.log"
+        node_a = register_node(registry_path, "node_a", temp_home / "node_a")
+        node_a.set_config("MAX_RETRIES", 5)
+        register_node(registry_path, "node_b", temp_home / "node_b")
+        (node_a.outbox_path / "retry.txt").write_text("payload")
+
+        def fail_delivery(_self):
+            raise OSError("transient")
+
+        monkeypatch.setattr("jatai.core.daemon.Delivery.deliver", fail_delivery)
+
+        daemon = JataiDaemon(
+            registry_path=registry_path, pid_path=temp_home / ".jatai.pid",
+            retry_path=temp_home / ".retry", log_path=log_path,
+        )
+        daemon.startup_scan()
+
+        log = self._log_text(log_path)
+        assert "scheduled for retry" in log
+        assert "retry.txt" in log
+
+    def test_log_fatal_retry_limit(self, temp_home, monkeypatch):
+        import json
+        registry_path = temp_home / ".jatai"
+        log_path = temp_home / ".jatai.log"
+        node_a = register_node(registry_path, "node_a", temp_home / "node_a")
+        node_a.set_config("MAX_RETRIES", 2)
+        node_a.set_config("RETRY_DELAY_BASE", 1)
+        register_node(registry_path, "node_b", temp_home / "node_b")
+        (node_a.outbox_path / "fatal.txt").write_text("payload")
+
+        def fail_delivery(_self):
+            raise OSError("always fails")
+
+        monkeypatch.setattr("jatai.core.daemon.Delivery.deliver", fail_delivery)
+
+        daemon = JataiDaemon(
+            registry_path=registry_path, pid_path=temp_home / ".jatai.pid",
+            retry_path=temp_home / ".retry", log_path=log_path,
+        )
+        daemon.startup_scan()
+
+        # force retry to be due
+        retry_data = json.loads((temp_home / ".retry").read_text(encoding="utf-8"))
+        for entry in retry_data.values():
+            entry["next_retry_at"] = 0
+        (temp_home / ".retry").write_text(json.dumps(retry_data), encoding="utf-8")
+
+        daemon.startup_scan()
+
+        log = self._log_text(log_path)
+        assert "fatal retry limit" in log
+        assert "fatal.txt" in log
+
+    # --- retry-due event ---
+
+    def test_log_retry_due_picked_up(self, temp_home, monkeypatch):
+        import json
+        registry_path = temp_home / ".jatai"
+        log_path = temp_home / ".jatai.log"
+        node_a = register_node(registry_path, "node_a", temp_home / "node_a")
+        node_a.set_config("MAX_RETRIES", 5)
+        node_a.set_config("RETRY_DELAY_BASE", 9999)
+        register_node(registry_path, "node_b", temp_home / "node_b")
+        source = node_a.outbox_path / "due.txt"
+        source.write_text("payload")
+
+        attempt = {"count": 0}
+
+        def fail_first_succeed_second(_self):
+            attempt["count"] += 1
+            if attempt["count"] == 1:
+                raise OSError("first fail")
+
+        monkeypatch.setattr("jatai.core.daemon.Delivery.deliver", fail_first_succeed_second)
+
+        daemon = JataiDaemon(
+            registry_path=registry_path, pid_path=temp_home / ".jatai.pid",
+            retry_path=temp_home / ".retry", log_path=log_path,
+        )
+        daemon.startup_scan()
+
+        # force retry due
+        retry_data = json.loads((temp_home / ".retry").read_text(encoding="utf-8"))
+        for entry in retry_data.values():
+            entry["next_retry_at"] = 0
+        (temp_home / ".retry").write_text(json.dumps(retry_data), encoding="utf-8")
+
+        daemon.startup_scan()
+
+        log = self._log_text(log_path)
+        assert "Retry due" in log
+
+    # --- auto-onboarding ---
+
+    def test_log_auto_onboarding(self, temp_home):
+        registry_path = temp_home / ".jatai"
+        log_path = temp_home / ".jatai.log"
+        manual_node_path = temp_home / "manual_node"
+
+        registry = Registry(registry_path=registry_path)
+        registry.set_config("INBOX_DIR", "INBOX")
+        registry.set_config("OUTBOX_DIR", "OUTBOX")
+        registry.add_node("manual_node", str(manual_node_path))
+        registry.save()
+
+        daemon = JataiDaemon(registry_path=registry_path, pid_path=temp_home / ".jatai.pid", log_path=log_path)
+        daemon.load_registered_nodes()
+
+        log = self._log_text(log_path)
+        assert "Auto-onboarded" in log
+        assert str(manual_node_path) in log
+
+    def test_log_onboarding_failure_warning(self, temp_home):
+        registry_path = temp_home / ".jatai"
+        log_path = temp_home / ".jatai.log"
+
+        registry = Registry(registry_path=registry_path)
+        registry.set_config("INBOX_DIR", "same")
+        registry.set_config("OUTBOX_DIR", "same")
+        registry.add_node("bad_node", str(temp_home / "bad_node"))
+        registry.save()
+
+        daemon = JataiDaemon(registry_path=registry_path, pid_path=temp_home / ".jatai.pid", log_path=log_path)
+        daemon.load_registered_nodes()
+
+        log = self._log_text(log_path)
+        assert "Failed to onboard" in log
+        assert "WARNING" in log
+
+    # --- startup scan events ---
+
+    def test_log_startup_scan_begin_and_complete(self, temp_home):
+        registry_path = temp_home / ".jatai"
+        log_path = temp_home / ".jatai.log"
+        register_node(registry_path, "node_a", temp_home / "node_a")
+
+        daemon = JataiDaemon(registry_path=registry_path, pid_path=temp_home / ".jatai.pid", log_path=log_path)
+        daemon.startup_scan()
+
+        log = self._log_text(log_path)
+        assert "Startup scan begin" in log
+        assert "Startup scan complete" in log
+
+    # --- config change / hot-reload events ---
+
+    def test_log_config_change_detected(self, temp_home):
+        registry_path = temp_home / ".jatai"
+        log_path = temp_home / ".jatai.log"
+        node = register_node(registry_path, "node_a", temp_home / "node_a")
+
+        daemon = JataiDaemon(
+            registry_path=registry_path, pid_path=temp_home / ".jatai.pid",
+            log_path=log_path, observer_factory=FakeObserver,
+        )
+        daemon.setup_watchdog()
+        daemon.handle_node_config_change(node.node_path)
+
+        log = self._log_text(log_path)
+        assert "Config change detected" in log
+        assert str(node.node_path) in log
+
+    def test_log_node_active_on_reenable(self, temp_home):
+        registry_path = temp_home / ".jatai"
+        log_path = temp_home / ".jatai.log"
+        node = register_node(registry_path, "node_a", temp_home / "node_a")
+
+        daemon = JataiDaemon(
+            registry_path=registry_path, pid_path=temp_home / ".jatai.pid",
+            log_path=log_path, observer_factory=FakeObserver,
+        )
+        daemon.setup_watchdog()
+        daemon.handle_node_config_change(node.node_path)
+
+        log = self._log_text(log_path)
+        assert "Node active" in log
+
+    def test_log_node_disabled_on_soft_delete(self, temp_home):
+        registry_path = temp_home / ".jatai"
+        log_path = temp_home / ".jatai.log"
+        node = register_node(registry_path, "node_a", temp_home / "node_a")
+        node.disable()
+
+        daemon = JataiDaemon(
+            registry_path=registry_path, pid_path=temp_home / ".jatai.pid",
+            log_path=log_path, observer_factory=FakeObserver,
+        )
+        daemon.setup_watchdog()
+        daemon.handle_node_config_change(node.node_path)
+
+        log = self._log_text(log_path)
+        assert "Node disabled" in log
+
+    def test_log_prefix_migration_started_and_completed(self, temp_home):
+        registry_path = temp_home / ".jatai"
+        log_path = temp_home / ".jatai.log"
+        node = register_node(registry_path, "node_a", temp_home / "node_a")
+
+        daemon = JataiDaemon(
+            registry_path=registry_path, pid_path=temp_home / ".jatai.pid",
+            log_path=log_path, observer_factory=FakeObserver,
+        )
+        daemon.setup_watchdog()
+
+        new_config = dict(node.local_config)
+        new_config["PREFIX_PROCESSED"] = "done_"
+        node.write_config(new_config)
+
+        daemon.handle_node_config_change(node.node_path)
+
+        log = self._log_text(log_path)
+        assert "Prefix migration started" in log
+        assert "Prefix migration completed" in log
+
+    def test_log_prefix_rollback_triggered(self, temp_home):
+        registry_path = temp_home / ".jatai"
+        log_path = temp_home / ".jatai.log"
+        node = register_node(registry_path, "node_a", temp_home / "node_a")
+        register_node(registry_path, "node_b", temp_home / "node_b")
+
+        (node.outbox_path / "_existing.txt").write_text("old")
+        (node.outbox_path / "done_existing.txt").write_text("collision target")
+
+        daemon = JataiDaemon(
+            registry_path=registry_path, pid_path=temp_home / ".jatai.pid",
+            log_path=log_path, observer_factory=FakeObserver,
+        )
+        daemon.setup_watchdog()
+
+        new_config = dict(node.local_config)
+        new_config["PREFIX_PROCESSED"] = "done_"
+        node.write_config(new_config)
+
+        daemon.handle_node_config_change(node.node_path)
+
+        log = self._log_text(log_path)
+        assert "Prefix rollback triggered" in log
+        assert "WARNING" in log
+
+    # --- watchdog setup ---
+
+    def test_log_watchdog_watching_count(self, temp_home):
+        registry_path = temp_home / ".jatai"
+        log_path = temp_home / ".jatai.log"
+        register_node(registry_path, "node_a", temp_home / "node_a")
+        register_node(registry_path, "node_b", temp_home / "node_b")
+
+        daemon = JataiDaemon(
+            registry_path=registry_path, pid_path=temp_home / ".jatai.pid",
+            log_path=log_path, observer_factory=FakeObserver,
+        )
+        daemon.setup_watchdog()
+
+        log = self._log_text(log_path)
+        assert "Watchdog watching" in log
+        assert "active_nodes=2" in log

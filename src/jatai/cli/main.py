@@ -4,12 +4,13 @@ Main CLI module for Jataí using Typer.
 
 import os
 import signal
+import shutil
 import subprocess
 import sys
 import time
 import typer
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from jatai.core.autostart import AutoStartRegistrar
 from jatai.core.daemon import AlreadyRunningError, JataiDaemon
@@ -21,7 +22,8 @@ app = typer.Typer(
     help="Jataí 🐝 - The local micro-email and messaging bus for your file system.",
 )
 
-KNOWN_COMMANDS = {"init", "status", "start", "stop", "_daemon-run"}
+KNOWN_COMMANDS = {"init", "status", "start", "stop", "docs", "_daemon-run"}
+DOCS_ROOT = Path(__file__).resolve().parents[3] / "docs"
 
 
 def _to_path(node_path: Path, raw_value: str) -> Path:
@@ -98,6 +100,54 @@ def _initialize_node(path: Optional[str] = None) -> None:
     except Exception as e:
         typer.echo(f"✗ Error initializing node: {e}", err=True)
         raise typer.Exit(code=1)
+
+
+def _load_node_from_cwd() -> Node:
+    node = Node(Path.cwd())
+    if not node.is_enabled():
+        raise FileNotFoundError("current directory is not a Jataí node")
+    node.load_config()
+    return node
+
+
+def _docs_markdown_files() -> List[Path]:
+    if not DOCS_ROOT.exists():
+        return []
+    return sorted(path for path in DOCS_ROOT.rglob("*.md") if path.is_file())
+
+
+def _render_docs_index(markdown_files: List[Path]) -> str:
+    categories: dict[str, list[str]] = {}
+    for file_path in markdown_files:
+        relative = file_path.relative_to(DOCS_ROOT)
+        category = relative.parts[0] if len(relative.parts) > 1 else "general"
+        categories.setdefault(category, []).append(relative.as_posix())
+
+    lines = ["# Jatai Documentation Index", "", "Available categories and files:", ""]
+    for category in sorted(categories):
+        lines.append(f"## {category}")
+        for doc_path in sorted(categories[category]):
+            lines.append(f"- {doc_path}")
+        lines.append("")
+    return "\n".join(lines).strip() + "\n"
+
+
+def _safe_copy_to_inbox(source: Path, inbox_path: Path) -> Path:
+    inbox_path.mkdir(parents=True, exist_ok=True)
+    destination = inbox_path / source.name
+    if not destination.exists():
+        shutil.copy2(source, destination)
+        return destination
+
+    stem = source.stem
+    suffix = source.suffix
+    counter = 1
+    while True:
+        candidate = inbox_path / f"{stem}-{counter}{suffix}"
+        if not candidate.exists():
+            shutil.copy2(source, candidate)
+            return candidate
+        counter += 1
 
 
 def _spawn_daemon_process() -> subprocess.Popen:
@@ -202,6 +252,44 @@ def stop() -> None:
 
     typer.echo("✗ Failed to stop daemon within timeout", err=True)
     raise typer.Exit(code=1)
+
+
+@app.command()
+def docs(
+    query: Optional[str] = typer.Argument(None, help="Optional query to match local docs."),
+) -> None:
+    """Copy local docs index or matching docs into the current node INBOX."""
+    try:
+        node = _load_node_from_cwd()
+    except Exception as e:
+        typer.echo(f"✗ Error: {e}", err=True)
+        raise typer.Exit(code=1)
+
+    docs_files = _docs_markdown_files()
+    if not docs_files:
+        typer.echo("✗ Error: no markdown docs available in docs/", err=True)
+        raise typer.Exit(code=1)
+
+    if query is None:
+        target = node.inbox_path / "!docs-index.md"
+        target.write_text(_render_docs_index(docs_files), encoding="utf-8")
+        typer.echo(f"✓ Docs index dropped at {target}")
+        return
+
+    normalized = query.strip().lower()
+    matches = [
+        file_path
+        for file_path in docs_files
+        if normalized in file_path.name.lower()
+        or normalized in file_path.relative_to(DOCS_ROOT).as_posix().lower()
+    ]
+    if not matches:
+        typer.echo(f"✗ Error: no docs matched '{query}'", err=True)
+        raise typer.Exit(code=1)
+
+    for match in matches:
+        _safe_copy_to_inbox(match, node.inbox_path)
+    typer.echo(f"✓ Copied {len(matches)} docs to {node.inbox_path}")
 
 
 def run() -> None:
