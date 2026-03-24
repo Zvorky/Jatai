@@ -72,5 +72,20 @@ To inspect the retry state file directly:
 cat ~/.retry
 ```
 
-> **Future:** `jatai status` and `jatai list` commands will surface file counts and
-> delivery states inline in the terminal without needing to read raw files.
+You can also inspect operational output using CLI commands:
+
+```bash
+# Recent log output in terminal
+jatai log
+
+# Full log output in terminal
+jatai log -a
+
+# Export log output to current node INBOX
+jatai log -i
+jatai log -a -i
+
+# Current node file listings
+jatai list inbox
+jatai list outbox
+```

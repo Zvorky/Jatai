@@ -87,11 +87,28 @@ a change is detected:
 
 ## Editing config via CLI
 
-> **Future (Phase 6):** `jatai config [--global] <key> <value>` will allow reading
-> and writing config keys from the terminal without manually editing YAML files.
+`jatai config` is available for reading and writing local or global settings.
 
-Until then, edit `.jatai` or `~/.jatai` directly with any text editor. The daemon
-picks up changes automatically.
+```bash
+# Show local config
+jatai config
+
+# Show global config
+jatai config -G
+
+# Read single key
+jatai config PREFIX_PROCESSED
+jatai config -G PREFIX_PROCESSED
+
+# Write key/value
+jatai config PREFIX_PROCESSED __
+jatai config -G MAX_RETRIES 5
+```
+
+Policy note:
+
+- `-G` is the canonical short option for `--global`.
+- Config keys are positional arguments and do not use short-option aliases.
 
 ## Example: per-node retry tuning
 

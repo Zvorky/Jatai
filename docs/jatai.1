@@ -40,9 +40,65 @@ file counts.
 Start the Jataí background daemon. The daemon watches all registered node
 OUTBOXes and delivers files to their destination INBOXes. Auto-start is
 registered for the current login session.
+.RS
+Short option: \fB-f\fR is available for foreground diagnostic mode (hidden/internal).
+.RE
 .TP
 .B jatai stop
 Stop the running Jataí daemon.
+.TP
+.B jatai docs [\fIQUERY\fR] [\fB-i\fR|\fB--inbox\fR]
+Render docs in terminal by default. With \fB--inbox\fR, export docs content to
+the current node INBOX.
+.TP
+.B jatai log [\fB-a\fR|\fB--all\fR] [\fB-i\fR|\fB--inbox\fR]
+Show daemon logs in terminal. \fB--all\fR shows full output. \fB--inbox\fR exports
+rendered output to current node INBOX.
+.TP
+.B jatai list [\fIaddrs|inbox|outbox\fR]
+List known addresses or files from current node INBOX/OUTBOX.
+.TP
+.B jatai send \fIFILE\fR [\fB-m\fR|\fB--move\fR]
+Copy (or move) an external file into the current node OUTBOX.
+.TP
+.B jatai read \fIFILE\fR
+Mark an INBOX file as read by adding the success prefix.
+.TP
+.B jatai unread \fIFILE\fR
+Mark an INBOX file as unread by removing the success prefix.
+.TP
+.B jatai config [\fIKEY\fR] [\fIVALUE\fR] [\fB-G\fR|\fB--global\fR]
+Read or write configuration values. \fB--global\fR targets global registry config.
+Config keys are positional arguments.
+.TP
+.B jatai remove [\fIPATH\fR]
+Soft-delete a node by renaming \fI.jatai\fR to \fI._jatai\fR.
+.TP
+.B jatai clear [\fB-r\fR|\fB--read\fR] [\fB-s\fR|\fB--sent\fR]
+Clear processed history files from INBOX and/or OUTBOX.
+.SH OPTIONS POLICY
+Canonical short-option mappings:
+.TP
+.B -a
+Equivalent to \fB--all\fR.
+.TP
+.B -i
+Equivalent to \fB--inbox\fR.
+.TP
+.B -m
+Equivalent to \fB--move\fR.
+.TP
+.B -r
+Equivalent to \fB--read\fR.
+.TP
+.B -s
+Equivalent to \fB--sent\fR.
+.TP
+.B -f
+Equivalent to \fB--foreground\fR.
+.TP
+.B -G
+Equivalent to \fB--global\fR.
 .SH FILES
 .TP
 .I ~/.jatai

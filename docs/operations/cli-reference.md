@@ -70,39 +70,158 @@ Sends `SIGTERM` and waits up to 5 seconds for the process to exit.
 
 ---
 
-### `jatai docs [query]`
+### `jatai docs [query] [-i|--inbox]`
 
-Deliver documentation files into the current node's `INBOX/`.
+Show documentation in terminal by default. Optionally export to the current
+node `INBOX/`.
 
 ```bash
-# Drop a docs category index as !docs-index.md in INBOX
+# Print docs category index in terminal
 jatai docs
 
-# Copy docs matching a keyword into INBOX
+# Print matching docs in terminal
 jatai docs retry
 jatai docs configuration
 jatai docs prefix
 jatai docs security
+
+# Export docs index to INBOX
+jatai docs -i
+
+# Export matching docs to INBOX
+jatai docs retry -i
 ```
 
 The query matches against the file name and path (case-insensitive substring).
-All matching `.md` files from the `docs/` tree are copied to the node's `INBOX`.
+With `--inbox`, all matching `.md` files from the `docs/` tree are copied to the
+node's `INBOX`.
 
 ---
 
-## Planned commands (Phase 6+)
+### `jatai log [-a|--all] [-i|--inbox]`
 
-The following commands are planned for upcoming phases. They are not yet implemented.
+Inspect daemon logs in terminal, optionally exporting the rendered output to INBOX.
 
-| Command | Action |
-|---|---|
-| `jatai config [--global] <key> <val>` | Set a config key locally or in the global registry |
-| `jatai list [addrs\|inbox\|outbox]` | List files in node or all registered nodes |
-| `jatai send <file> [--move]` | Copy (or move) a file into the current OUTBOX |
-| `jatai read <file>` | Mark a file in INBOX as read (adds success prefix) |
-| `jatai unread <file>` | Remove the success prefix from an INBOX file |
-| `jatai remove [path]` | Soft-delete a node (rename `.jatai` → `._jatai`) |
-| `jatai clear [inbox\|outbox]` | Delete processed (`_`-prefixed) history files |
+```bash
+# Last log lines in terminal
+jatai log
 
-> **Future:** Bare `jatai` with no arguments will open an interactive TUI. Currently
-> it shows the help screen.
+# Full log output in terminal
+jatai log -a
+
+# Export latest log snapshot to INBOX
+jatai log -i
+
+# Export full log to INBOX
+jatai log -a -i
+```
+
+---
+
+### `jatai list [addrs|inbox|outbox]`
+
+List addresses from global registry or file names from the current node INBOX/OUTBOX.
+
+```bash
+jatai list addrs
+jatai list inbox
+jatai list outbox
+```
+
+---
+
+### `jatai send <file> [-m|--move]`
+
+Enqueue an external file into the current node OUTBOX.
+
+```bash
+# Copy file into OUTBOX
+jatai send /tmp/note.txt
+
+# Move file into OUTBOX (source is deleted)
+jatai send /tmp/note.txt -m
+```
+
+---
+
+### `jatai read <file>` and `jatai unread <file>`
+
+Mark INBOX files as read/unread by adding or removing the success prefix.
+
+```bash
+jatai read message.txt
+jatai unread _message.txt
+```
+
+---
+
+### `jatai config [key] [value] [-G|--global]`
+
+Read or write config values locally (default) or globally.
+
+```bash
+# Show local config
+jatai config
+
+# Show global config
+jatai config -G
+
+# Read a key
+jatai config MAX_RETRIES
+jatai config -G MAX_RETRIES
+
+# Write a key
+jatai config MAX_RETRIES 5
+jatai config -G MAX_RETRIES 5
+```
+
+Config keys are positional arguments and intentionally do not have short-option aliases.
+
+---
+
+### `jatai remove [path]`
+
+Soft-delete a node by renaming `.jatai` to `._jatai`.
+
+```bash
+jatai remove
+jatai remove /path/to/node
+```
+
+---
+
+### `jatai clear [-r|--read] [-s|--sent]`
+
+Clear processed (`_`-prefixed) files from INBOX and/or OUTBOX.
+
+```bash
+# Clear both INBOX and OUTBOX processed history
+jatai clear
+
+# Clear only INBOX processed files
+jatai clear -r
+
+# Clear only OUTBOX processed files
+jatai clear -s
+```
+
+---
+
+## Short-option policy
+
+Canonical mapping:
+
+- `-a` = `--all`
+- `-i` = `--inbox`
+- `-m` = `--move`
+- `-r` = `--read`
+- `-s` = `--sent`
+- `-f` = `--foreground`
+- `-G` = `--global`
+
+---
+
+## Future-facing notes
+
+The current command surface already includes the Phase 6 CLI toolbox.
+The interactive TUI is still intentionally minimal and will continue to evolve.

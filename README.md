@@ -60,16 +60,30 @@ The command surface in the sections below mixes implemented commands and product
 | `jatai start` | Starts the daemon and registers it for OS auto-start. Fails safely if already running. |
 | `jatai stop` | Stops the background daemon. |
 | `jatai status` | Returns file counters for the current node. |
-| `jatai config [--global] <key> <val>` | Sets a configuration parameter locally or globally. |
+| `jatai config [-G\|--global] <key> <val>` | Sets a configuration parameter locally or globally. |
 | `jatai list [addrs\|inbox\|outbox]` | Lists files in current node (inbox/outbox) or all nodes (addrs). |
-| `jatai send <file> [--move]` | Copies (or moves) an external file into the local OUTBOX. |
+| `jatai send <file> [-m\|--move]` | Copies (or moves) an external file into the local OUTBOX. |
 | `jatai read <file>` | Renames a file in the INBOX, adding the success prefix. |
 | `jatai unread <file>` | Removes the success prefix from a file in the INBOX. |
 | `jatai remove [path]` | Disables the node (current dir by default). Safeguarded against global origin. |
-| `jatai clear [inbox\|outbox]` | Clears processed files (`_`) in both folders or a specific one. |
-| `jatai log` | Prints the latest log content in terminal (use `--inbox` to export). |
-| `jatai log --all` / `jatai log -a` | Prints the complete log output in terminal (use `--inbox` to export). |
-| `jatai docs [query]` | Prints matching documentation in terminal by default (use `--inbox` to export file(s)). |
+| `jatai clear [-r\|--read] [-s\|--sent]` | Clears processed files (`_`) in INBOX/OUTBOX (both by default). |
+| `jatai log` | Prints the latest log content in terminal (use `-i\|--inbox` to export). |
+| `jatai log -a\|--all` | Prints the complete log output in terminal (use `-i\|--inbox` to export). |
+| `jatai docs [query]` | Prints matching documentation in terminal by default (use `-i\|--inbox` to export file(s)). |
+
+### CLI Short-Option Policy (ADR 13)
+
+Canonical abbreviated flags:
+
+- `-a` = `--all`
+- `-i` = `--inbox`
+- `-m` = `--move`
+- `-r` = `--read`
+- `-s` = `--sent`
+- `-f` = `--foreground`
+- `-G` = `--global`
+
+Config keys are positional arguments (for example, `PREFIX_PROCESSED`) and intentionally do not use short-option aliases.
 
 ## **🏗️ Architecture & Requirements**
 

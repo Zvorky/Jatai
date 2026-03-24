@@ -33,6 +33,9 @@ This file defines mandatory rules for any agent executing development tasks in t
    - At minimum, keep `pyproject.toml`, `src/jatai/__init__.py`, `README.md`, `docs/jatai.1`, and `tools/set_version` aligned with the same current version.
    - Verify the replacement result after running the script (for example with `rg` and targeted file checks).
 10. Whenever a new explicit project version citation is added in any file, register that file/pattern in `tools/set_version` (`VERSION_TARGETS`) in the same change set.
+11. User-facing documentation under `docs/` must not reference ADRs or architecture/requirements governance artifacts.
+   - Do NOT reference `ARCHITECTURE.md`, `REQUIREMENTS.md`, or ADR identifiers (for example, `ADR 13`) inside `docs/`.
+   - Keep `docs/` focused on end-user operation and behavior; governance/design rationale belongs to developer-facing files.
 
 ## Architecture & Requirements Governance
 
