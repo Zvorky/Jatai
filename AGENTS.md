@@ -39,6 +39,7 @@ This file defines mandatory rules for any agent executing development tasks in t
 1. The agent must not make architecture or requirements decisions on its own.
 2. If there is ambiguity, conflict, or lack of definition, the agent must ask the user how to proceed before implementing.
 3. Exception: Only decide on its own when the user explicitly requests it.
+4. Tasks tagged `[ARCH]` in `ToDo.md` are **not implementation tasks** — they represent open architecture decisions. The agent must **never implement** an `[ARCH]` task; instead, it must present the question or decision point directly to the user and wait for explicit direction before proceeding.
 
 ## ARCHITECTURE/REQUIREMENTS → ToDo Synchronization Rule
 
@@ -101,6 +102,35 @@ This ensures consistency, maintainability, and accessibility across the entire c
 - Tests must cover **boundary conditions:** Off-by-one errors, empty collections, null values, maximum/minimum values.
 - Tests must verify **side effects:** File system changes, state modifications, external calls.
 - Use descriptive test names: `test_<function>_<scenario>_<expected_outcome>()` pattern.
+
+### Manual Testing Protocol
+
+**After automated tests pass**, perform an end-to-end manual validation:
+
+1. **Install the project** following the instructions in `README.md` exactly (e.g., `pip install -e .` or the documented install command).
+
+2. **Set up a test environment** using at least two node addresses under `/tmp/`, for example:
+   ```bash
+   export JATAI_TEST_A=/tmp/jatai_test_a
+   export JATAI_TEST_B=/tmp/jatai_test_b
+   mkdir -p "$JATAI_TEST_A" "$JATAI_TEST_B"
+   ```
+
+3. **Run every documented command** from `README.md` (and any other user-facing documentation):
+   - Execute each command against the test nodes.
+   - Capture the full terminal output (stdout + stderr).
+   - Verify behavior matches the documented description.
+
+4. **Capture and record results:**
+   - Include command invocations and their output in the `OUTBOX/` report.
+   - Note any discrepancy between documented and actual behavior.
+   - If a command fails or behaves unexpectedly, fix the implementation before proceeding.
+
+5. **Clean up after manual tests:**
+   ```bash
+   rm -rf "$JATAI_TEST_A" "$JATAI_TEST_B"
+   ```
+   All files and directories created during manual testing under `/tmp/` must be deleted before the final commit.
 
 ## Project Versioning Policy
 

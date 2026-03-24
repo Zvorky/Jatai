@@ -60,6 +60,10 @@ Jataí dictates message state via filename prefixes. Base prefixes are configura
 ## **6. Observability and Logging**
 
 * Exclusive use of the native logging library (`~/.jatai.log`).
+* CLI retrieval must support:
+  * `jatai log` for latest log output in terminal.
+  * `jatai log --all` (or `jatai log -a`) for complete log output in terminal.
+* Log retrieval commands must support `--inbox` to export the rendered result to current node INBOX.
 
 ## **7. Automated Testing Strategy**
 
@@ -69,8 +73,12 @@ Jataí dictates message state via filename prefixes. Base prefixes are configura
 ## **8. Deep Documentation (`docs/`)**
 
 * Handled via `jatai docs` and `jatai docs {query}`.
+* Default behavior is terminal output (rendered content preview).
+* `--inbox` option exports selected documentation file(s) to current node INBOX.
 
 ## **9. CLI and TUI (The Toolbox)**
 
 * **Initialization:** `jatai init [path]` handles node setup. `jatai [path]` acts as a direct alias.
+* **Operational Retrieval:** `jatai log` and `jatai log --all` (`-a`) must be available.
+* **Output Mode Policy:** `docs` and `log` are terminal-first and only write files when `--inbox` is explicitly requested.
 *(Refer to the README for the full CLI command table).*

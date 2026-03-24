@@ -35,7 +35,7 @@ This document details the Architecture Decision Records (ADR) for the Jataí pro
 * **Decision:** Jataí will *only* delete files explicitly marked with the success prefix (`_`). This cleanup can be triggered manually (`jatai clear`) or automatically via configurable retention policies.
 
 ## **8. Documentation as Messages (In-Band Help)**
-* **Decision:** Comprehensive documentation is stored in a `docs/` folder. Users can request documentation via `jatai docs {query}`, which will copy the relevant `.md` file(s) directly into their current node's INBOX.
+* **Decision:** Comprehensive documentation is stored in a `docs/` folder. Users can request documentation via `jatai docs` and `jatai docs {query}` with **terminal-first output** (content rendered directly in CLI). A file-delivery mode remains available via an explicit option (`--inbox`) when users want the documentation materialized in the node INBOX.
 
 ## **9. Atomic Delivery (Preventing Read/Write Race Conditions)**
 * **Decision:** Jataí will perform **Atomic Delivery**. Files are first copied to the destination INBOX using a temporary extension (e.g., `.file.ext.tmp`). Only after the `shutil.copy2` operation is 100% complete, the file is atomically renamed to its final name (`.file.ext`).
@@ -48,3 +48,11 @@ This document details the Architecture Decision Records (ADR) for the Jataí pro
 * **Context:** `jatai init` runs as a separate process from the background daemon. Both may attempt to read/write `~/.jatai` simultaneously. Also, users might try to point INBOX and OUTBOX to the exact same folder.
 * **Decision:** 1. **File Locks:** Any read/write operation to `~/.jatai` must be protected by a strict file lock mechanism to prevent corruption.
   2. **Overlap Prevention:** The system strictly validates and prevents INBOX and OUTBOX from sharing the same directory path (resolving the conflict interactively via the prompt defined in ADR 4).
+
+## **12. Terminal-First Operational Retrieval (Logs & Docs)**
+* **Context:** Operators need quick inspection of runtime logs and documentation without forcing file drops into node folders.
+* **Decision:** Jataí CLI adopts a **terminal-first retrieval model** for operational content:
+  * `jatai log` returns the latest log entry set in terminal output.
+  * `jatai log --all` (or `jatai log -a`) returns the complete log stream (or paginated/streamed output).
+  * `jatai docs` and `jatai docs {query}` return documentation content in terminal output by default.
+  * Both log and docs commands support an explicit `--inbox` option to export the retrieved content as file(s) into the current node INBOX when persistence/share is needed.

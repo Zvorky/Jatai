@@ -1,7 +1,7 @@
 # **Jataí 🐝**
 **The local micro-email and messaging bus for your file system. Connect scripts and AI agents instantly using a zero-config drop-folder pattern. Jataí uses OS file events to route data across directories via standardized INBOX/OUTBOX folders, without complex APIs or sockets. Drop a file, and it's delivered!**
 
-**Version:** `0.5.0` (_Alpha_) · **Author:** Zvorky
+**Version:** `0.5.1` (_Alpha_) · **Author:** Zvorky
 
 ## **🎯 Philosophy & Goal**
 
@@ -68,8 +68,7 @@ The command surface in the sections below mixes implemented commands and product
 | `jatai remove [path]` | Disables the node (current dir by default). Safeguarded against global origin. |
 | `jatai clear [inbox\|outbox]` | Clears processed files (`_`) in both folders or a specific one. |
 | `jatai log` | Prints the latest log content in terminal (use `--inbox` to export). |
-| `jatai log <YYYY-MM-DD>` | Prints logs filtered by date in terminal (use `--inbox` to export). |
-| `jatai logs` | Prints the complete log output in terminal (use `--inbox` to export). |
+| `jatai log --all` / `jatai log -a` | Prints the complete log output in terminal (use `--inbox` to export). |
 | `jatai docs [query]` | Prints matching documentation in terminal by default (use `--inbox` to export file(s)). |
 
 ## **🏗️ Architecture & Requirements**

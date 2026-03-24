@@ -70,6 +70,12 @@ The "File-System First" user experience.
 
 Adding convenience commands and storage management.
 
+- [ ] **[ARCH]** Define and document the CLI short-option policy (abbreviated flags), including canonical mappings such as `-a` for `--all`.
+- [ ] Implement `jatai log` (latest log view in terminal).
+- [ ] Implement `jatai log --all|-a` (full log output in terminal).
+- [ ] Refactor `jatai docs` and `jatai docs [query]` to terminal-first output by default.
+- [ ] Add `--inbox` option to `jatai docs` and `jatai docs [query]` to export files into current node INBOX.
+- [ ] Add `--inbox` option to `jatai log` (latest/all) to export rendered output into current node INBOX.
 - [ ] Implement `jatai list`, `jatai send`, `jatai read`, `jatai unread`.
 - [ ] Implement `jatai config` to read/write settings via CLI.
 - [ ] Implement `jatai remove` (CLI wrapper for renaming to `._jatai`).
