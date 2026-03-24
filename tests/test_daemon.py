@@ -391,6 +391,7 @@ class TestDaemonAutoOnboarding:
 
 
 class TestDaemonExclusivity:
+    """Singleton/PID lock behavior tests."""
 
     def test_daemon_rejects_duplicate_singleton(self, temp_home):
         pid_path = temp_home / ".jatai.pid"

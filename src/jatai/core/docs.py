@@ -102,7 +102,12 @@ def deliver_docs(
             stem = doc_path.stem
             suffix = doc_path.suffix
             counter = 1
+            max_counter = 1000
             while dest.exists():
+                if counter > max_counter:
+                    raise FileExistsError(
+                        f"Too many collisions for {doc_path.name} in {inbox_path}"
+                    )
                 dest = inbox_path / f"{stem} ({counter}){suffix}"
                 counter += 1
         shutil.copy2(doc_path, dest)

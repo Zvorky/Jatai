@@ -209,6 +209,48 @@ def stop() -> None:
 
 
 @app.command()
+def clear(
+    target: Optional[str] = typer.Argument(
+        None,
+        help="Which folder to clear: 'inbox', 'outbox', or both (default)",
+    ),
+) -> None:
+    """Delete processed (_) files from the local INBOX and/or OUTBOX."""
+    node_path = Path.cwd()
+    node = Node(node_path)
+
+    if not node.is_enabled():
+        typer.echo("✗ Current directory is not a Jataí node", err=True)
+        raise typer.Exit(code=1)
+
+    try:
+        node.load_config()
+    except Exception as e:
+        typer.echo(f"✗ Error loading node config: {e}", err=True)
+        raise typer.Exit(code=1)
+
+    success_prefix = str(node.get_config("PREFIX_PROCESSED", "_"))
+    clear_inbox = target in (None, "inbox")
+    clear_outbox = target in (None, "outbox")
+
+    total_removed = 0
+
+    if clear_inbox and node.inbox_path.exists():
+        for file_path in list(node.inbox_path.iterdir()):
+            if file_path.is_file() and file_path.name.startswith(success_prefix):
+                file_path.unlink()
+                total_removed += 1
+
+    if clear_outbox and node.outbox_path.exists():
+        for file_path in list(node.outbox_path.iterdir()):
+            if file_path.is_file() and file_path.name.startswith(success_prefix):
+                file_path.unlink()
+                total_removed += 1
+
+    typer.echo(f"✓ Cleared {total_removed} processed file(s)")
+
+
+@app.command()
 def remove(
     path: Optional[str] = typer.Argument(None, help="Path to the node to disable (default: current directory)"),
 ) -> None:

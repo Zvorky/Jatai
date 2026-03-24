@@ -640,3 +640,104 @@ class TestCLIRemove:
 
         result = runner.invoke(app, ["remove", str(node_path)])
         assert result.exit_code == 1
+
+
+class TestCLIClear:
+    """Tests for jatai clear command."""
+
+    def test_cli_clear_removes_processed_files_from_both(self, temp_dir):
+        """clear deletes _ prefixed files from both INBOX and OUTBOX."""
+        import os
+        node_path = temp_dir / "node"
+        node = Node(node_path)
+        node.create()
+
+        (node.inbox_path / "_read.txt").write_text("read")
+        (node.inbox_path / "pending.txt").write_text("pending")
+        (node.outbox_path / "_sent.txt").write_text("sent")
+        (node.outbox_path / "outgoing.txt").write_text("new")
+
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node_path)
+            result = runner.invoke(app, ["clear"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 0
+        assert "2" in result.stdout
+        assert not (node.inbox_path / "_read.txt").exists()
+        assert (node.inbox_path / "pending.txt").exists()
+        assert not (node.outbox_path / "_sent.txt").exists()
+        assert (node.outbox_path / "outgoing.txt").exists()
+
+    def test_cli_clear_inbox_only(self, temp_dir):
+        """clear inbox only removes from INBOX, leaves OUTBOX untouched."""
+        import os
+        node_path = temp_dir / "node"
+        node = Node(node_path)
+        node.create()
+
+        (node.inbox_path / "_read.txt").write_text("read")
+        (node.outbox_path / "_sent.txt").write_text("sent")
+
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node_path)
+            result = runner.invoke(app, ["clear", "inbox"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 0
+        assert not (node.inbox_path / "_read.txt").exists()
+        assert (node.outbox_path / "_sent.txt").exists()
+
+    def test_cli_clear_outbox_only(self, temp_dir):
+        """clear outbox only removes from OUTBOX, leaves INBOX untouched."""
+        import os
+        node_path = temp_dir / "node"
+        node = Node(node_path)
+        node.create()
+
+        (node.inbox_path / "_read.txt").write_text("read")
+        (node.outbox_path / "_sent.txt").write_text("sent")
+
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node_path)
+            result = runner.invoke(app, ["clear", "outbox"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 0
+        assert (node.inbox_path / "_read.txt").exists()
+        assert not (node.outbox_path / "_sent.txt").exists()
+
+    def test_cli_clear_no_files_to_remove(self, temp_dir):
+        """clear reports 0 files when nothing is processed."""
+        import os
+        node_path = temp_dir / "node"
+        node = Node(node_path)
+        node.create()
+
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node_path)
+            result = runner.invoke(app, ["clear"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 0
+        assert "0" in result.stdout
+
+    def test_cli_clear_not_in_node(self, temp_dir):
+        """clear fails when called outside a Jataí node."""
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(temp_dir)
+            result = runner.invoke(app, ["clear"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 1

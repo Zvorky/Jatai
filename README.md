@@ -1,7 +1,7 @@
 # **Jataí 🐝**
 **The local micro-email and messaging bus for your file system. Connect scripts and AI agents instantly using a zero-config drop-folder pattern. Jataí uses OS file events to route data across directories via standardized INBOX/OUTBOX folders, without complex APIs or sockets. Drop a file, and it's delivered!**
 
-**Version:** `0.6.4` (_Alpha_) · **Author:** Zvorky
+**Version:** `0.6.5` (_Alpha_) · **Author:** Zvorky
 
 ## **🎯 Philosophy & Goal**
 
@@ -36,29 +36,29 @@ OUTBOX/
 
 ## **🐝 Usage (The File-System Way)**
 
-Current implementation status: core modules, basic CLI, daemon lifecycle, startup scan, watchdog-based routing, 5-state prefix handling, exponential retry management, global logging, local config override handling, soft-delete/hot-reload monitoring, and prefix hot-swap rollback are available for local development and testing.
+Current implementation status: core modules, basic CLI, daemon lifecycle, startup scan, watchdog-based routing, 5-state prefix handling, exponential retry management, global logging, local config override handling, soft-delete/hot-reload monitoring, prefix hot-swap rollback, auto-onboarding with `!helloworld.md` drops, in-band documentation system (`jatai docs`), extended CLI toolbox (`jatai list`, `jatai send`, `jatai read`, `jatai unread`, `jatai config`, `jatai remove`, `jatai clear`), and background garbage collection are all available.
 
 1. **Initialize a Node (current command):** `jatai init ./my-folder`
 2. **Initialize via Alias (current command):** `jatai ./my-folder`
 3. **Check Node Status (current command):** `jatai status`
 4. **Start the Daemon (current command):** `jatai start`
 5. **Stop the Daemon (current command):** `jatai stop`
-6. **Resilience behavior already implemented in core:** 5-state prefix matrix (`_`, `!`, `!_`, `!!`, `!!_`), global `.retry` state with exponential backoff, and `MAX_RETRIES` fatal transitions are covered by current code/tests.
-7. **Observability already implemented in core:** Global daemon log file output to `~/.jatai.log` is active.
-8. **Configuration reactivity already implemented in core:** Local `.jatai` overrides are applied over global defaults, `._jatai` nodes are ignored while their roots remain monitored, and reactivation via rename is handled by the daemon.
-9. **Prefix migration safety already implemented in core:** Prefix changes trigger historical file renames; collisions restore the previous config from `.jatai.bkp` and drop an error notice into the node INBOX.
+6. **Auto-Onboarding already implemented:** Daemon detects paths added manually to `~/.jatai` and generates missing INBOX/OUTBOX folders, dropping `!helloworld.md` into the new INBOX.
+7. **Extended CLI toolbox already implemented:** `jatai list [addrs|inbox|outbox]`, `jatai send <file> [--move]`, `jatai read <file>`, `jatai unread <file>`, `jatai config [--global] <key> <val>`, `jatai remove [path]`, `jatai clear [inbox|outbox]`.
+8. **In-band documentation:** `jatai docs` drops a category index into the local INBOX. `jatai docs <query>` copies matching docs.
+9. **Garbage Collection:** Daemon automatically removes `_` prefixed files based on `GC_ENABLED`, `GC_MAX_AGE_DAYS`, and `GC_MAX_FILES` config keys.
+10. **Resilience behavior already implemented in core:** 5-state prefix matrix (`_`, `!`, `!_`, `!!`, `!!_`), global `.retry` state with exponential backoff, and `MAX_RETRIES` fatal transitions are covered by current code/tests.
+11. **Observability already implemented in core:** Global daemon log file output to `~/.jatai.log` is active.
+12. **Configuration reactivity already implemented in core:** Local `.jatai` overrides are applied over global defaults, `._jatai` nodes are ignored while their roots remain monitored, and reactivation via rename is handled by the daemon.
+13. **Prefix migration safety already implemented in core:** Prefix changes trigger historical file renames; collisions restore the previous config from `.jatai.bkp` and drop an error notice into the node INBOX.
 
 The command surface in the sections below remains the product target roadmap, not a statement that every command is already available.
 
 ## **🛠️ CLI & TUI Toolbox**
 
-*Target command surface (planned and in-progress).*
-
-$PLANNED / TODO$
-
 | Command | Action |
 | :---- | :---- |
-| `jatai` | Opens the interactive Text User Interface (TUI). |
+| `jatai` | Opens the interactive Text User Interface (TUI). **[TEMP]** Currently aliased to `jatai --help`. |
 | `jatai init [path]` | Initializes a node. Note: `jatai [path]` works as a direct alias. |
 | `jatai start` | Starts the daemon and registers it for OS auto-start. Fails safely if already running. |
 | `jatai stop` | Stops the background daemon. |
@@ -68,7 +68,7 @@ $PLANNED / TODO$
 | `jatai send <file> [--move]` | Copies (or moves) an external file into the local OUTBOX. |
 | `jatai read <file>` | Renames a file in the INBOX, adding the success prefix. |
 | `jatai unread <file>` | Removes the success prefix from a file in the INBOX. |
-| `jatai remove [path]` | Disables the node (current dir by default). Safeguarded against global origin. |
+| `jatai remove [path]` | Disables the node (current dir by default). Renames `.jatai` → `._jatai`. |
 | `jatai clear [inbox\|outbox]` | Clears processed files (`_`) in both folders or a specific one. |
 | `jatai docs [query]` | Fetches deep documentation from docs/ into the INBOX. |
 
@@ -90,18 +90,32 @@ $PLANNED / TODO$
 │   │   ├── daemon.py             # Background daemon, PID lock, watchdog integration, hot-reload
 │   │   ├── registry.py           # Global registry (~/.jatai) management
 │   │   ├── delivery.py           # Atomic file delivery (shutil.copy2 with .tmp)
+│   │   ├── docs.py               # In-band documentation delivery (jatai docs)
+│   │   ├── gc.py                 # Garbage collection (auto-remove processed files)
 │   │   ├── prefix.py             # Prefix/state handling helpers
 │   │   ├── retry.py              # Global retry state and exponential backoff scheduling
 │   │   └── node.py               # Node representation, config override, backup, and prefix migration
-│   └── cli/                       # Command-line interface
-│       ├── __init__.py
-│       └── main.py               # Typer CLI app and commands
+│   ├── cli/                       # Command-line interface
+│   │   ├── __init__.py
+│   │   └── main.py               # Typer CLI app and commands
+│   └── docs/                      # Bundled in-band documentation (markdown)
+│       ├── getting-started/
+│       │   ├── quickstart.md
+│       │   └── installation.md
+│       ├── cli/
+│       │   └── reference.md
+│       ├── configuration/
+│       │   └── options.md
+│       └── architecture/
+│           └── overview.md
 ├── tests/                         # Test suite (pytest)
 │   ├── conftest.py               # pytest fixtures and configuration
 │   ├── test_dummy.py             # Basic pytest setup test
 │   ├── test_daemon.py            # Daemon lifecycle, watchdog, auto-start, hot-reload, and rollback tests
 │   ├── test_registry.py          # Registry module tests (happy/error/adversarial/locks)
 │   ├── test_delivery.py          # Delivery module tests (atomic delivery & naming collision)
+│   ├── test_docs.py              # Docs module and jatai docs CLI tests
+│   ├── test_gc.py                # Garbage collection tests
 │   ├── test_prefix.py            # Prefix state machine & max retries tests
 │   ├── test_retry.py             # Retry state and exponential delay tests
 │   ├── test_node.py              # Node module tests (config override, backup, and path validation)
