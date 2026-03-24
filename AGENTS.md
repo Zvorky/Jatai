@@ -69,6 +69,14 @@ This ensures consistency, maintainability, and accessibility across the entire c
 
 ## Testing Requirements & Validation Before Task Completion
 
+### Scope Exception for Development Tools (`tools/`)
+
+When the agent is working exclusively on development tooling under `tools/` (without implementing product/runtime tasks from `ToDo.md`):
+
+1. The task-completion workflow in this document (automated test gate, `pytest.log`, OUTBOX report, task completion tracking, and mandatory commit flow) does **not** apply.
+2. Instead, the agent must perform **safe manual validation** of the modified tool/script, documenting command(s) executed and observed behavior in the final user summary.
+3. Manual validation must avoid unsafe/destructive side effects (for example, no irreversible deletes outside isolated test paths).
+
 ### Mandatory Test Coverage
 
 1. **Keep pytest suites updated** whenever code is implemented, modified, or refactored.
@@ -150,6 +158,8 @@ Branch flow constraints:
 - The agent must not trigger merge/release actions to `main` without that explicit request.
 
 ## Git Workflow & Final Reporting
+
+The workflow in this section applies to implementation tasks tied to `ToDo.md`. For changes scoped exclusively to development tools under `tools/`, follow the exception defined in **"Scope Exception for Development Tools (`tools/`)"**.
 
 ### After All Tests Pass
 
