@@ -113,6 +113,28 @@ When the agent is working exclusively on development tooling under `tools/` (wit
 
 ### Manual Testing Protocol
 
+### File-System First Design
+
+Jatai is a **file-system first** system. Agents must preserve this principle in implementation, validation, and documentation.
+
+1. The **primary interface** is the filesystem itself:
+   - dropping files into `OUTBOX/`
+   - receiving files in `INBOX/`
+   - renaming files to apply/remove prefixes
+   - renaming `.jatai` to `._jatai` and back for node lifecycle control
+2. The CLI is a **secondary convenience tool**, mainly for initialization, inspection, and operator ergonomics.
+3. Manual validation must prefer **direct filesystem operations** over CLI wrappers whenever the use case is fundamentally file-driven.
+4. Verification must focus on **filesystem state**, for example:
+   - `find`, `ls`, checksums, file counts, file names, and file contents
+   - presence/absence of prefixed files
+   - presence/absence of `.jatai` / `._jatai`
+5. Tests and reports must make clear whether they validated:
+   - direct filesystem behavior
+   - daemon-mediated behavior
+   - CLI convenience behavior
+6. When a manual test can be written as a direct file operation, prefer that over testing only CLI output.
+7. Documentation and helper scripts should reflect this architecture explicitly.
+
 **After automated tests pass**, perform an end-to-end manual validation:
 
 0. **Use the manual test helper script as the default execution path:**

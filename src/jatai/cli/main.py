@@ -250,7 +250,7 @@ def status() -> None:
 
 @app.command()
 def start(
-    foreground: bool = typer.Option(False, "--foreground", hidden=True),
+    foreground: bool = typer.Option(False, "--foreground", "-f", hidden=True),
 ) -> None:
     """Start the Jataí daemon."""
     daemon = JataiDaemon()
@@ -312,7 +312,7 @@ def stop() -> None:
 @app.command()
 def docs(
     query: Optional[str] = typer.Argument(None, help="Optional query to match local docs."),
-    inbox: bool = typer.Option(False, "--inbox", help="Export docs content to current node INBOX."),
+    inbox: bool = typer.Option(False, "--inbox", "-i", help="Export docs content to current node INBOX."),
 ) -> None:
     """Show docs in terminal by default, or export them to INBOX with --inbox."""
     node: Optional[Node] = None
@@ -362,7 +362,7 @@ def docs(
 @app.command()
 def log(
     all_logs: bool = typer.Option(False, "--all", "-a", help="Show full log output."),
-    inbox: bool = typer.Option(False, "--inbox", help="Export log output to current node INBOX."),
+    inbox: bool = typer.Option(False, "--inbox", "-i", help="Export log output to current node INBOX."),
 ) -> None:
     """Show daemon logs in terminal, with optional export to INBOX."""
     log_path = Path.home() / ".jatai.log"
@@ -426,7 +426,7 @@ def list_command(
 @app.command()
 def send(
     file_path: str = typer.Argument(..., help="Path to external file to send via OUTBOX."),
-    move: bool = typer.Option(False, "--move", help="Move instead of copy after enqueue."),
+    move: bool = typer.Option(False, "--move", "-m", help="Move instead of copy after enqueue."),
 ) -> None:
     """Copy or move a file into the current node OUTBOX."""
     try:
@@ -510,7 +510,7 @@ def unread(
 def config(
     key: Optional[str] = typer.Argument(None, help="Config key."),
     value: Optional[str] = typer.Argument(None, help="Config value to set."),
-    global_scope: bool = typer.Option(False, "--global", help="Operate on global registry config."),
+    global_scope: bool = typer.Option(False, "--global", "-G", help="Operate on global registry config."),
 ) -> None:
     """Read or write configuration values."""
     if global_scope:
@@ -574,8 +574,8 @@ def remove(
 
 @app.command()
 def clear(
-    read: bool = typer.Option(False, "--read", help="Clear processed files from INBOX."),
-    sent: bool = typer.Option(False, "--sent", help="Clear processed files from OUTBOX."),
+    read: bool = typer.Option(False, "--read", "-r", help="Clear processed files from INBOX."),
+    sent: bool = typer.Option(False, "--sent", "-s", help="Clear processed files from OUTBOX."),
 ) -> None:
     """Clear processed history files from INBOX and/or OUTBOX."""
     try:

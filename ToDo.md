@@ -70,7 +70,8 @@ The "File-System First" user experience.
 
 Adding convenience commands and storage management.
 
-- [ ] **[ARCH]** Define and document the CLI short-option policy (abbreviated flags), including canonical mappings such as `-a` for `--all`.
+- [x] **[ARCH]** Define and document the CLI short-option policy (abbreviated flags), including canonical mappings such as `-a` for `--all` and `-G` for `--global`.
+- [x] Implement canonical short-option flags in CLI: `-a`, `-i`, `-m`, `-r`, `-s`, `-f`, `-G` (excluding config keys per ADR 13).
 - [x] Implement `jatai log` (latest log view in terminal).
 - [x] Implement `jatai log --all|-a` (full log output in terminal).
 - [x] Refactor `jatai docs` and `jatai docs [query]` to terminal-first output by default.

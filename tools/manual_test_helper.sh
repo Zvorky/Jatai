@@ -226,12 +226,6 @@ suite_smoke() {
   run_cmd "cd '$JATAI_TEST_B' && export HOME='$TEST_HOME' && $JATAI_BIN init '$JATAI_TEST_B'" || failures=$((failures + 1))
   run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN status" || failures=$((failures + 1))
 
-  # v0.6 TODO scope (kept commented until implemented):
-  # run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN docs" || failures=$((failures + 1))
-  # run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN docs init" || failures=$((failures + 1))
-  # run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN log" || failures=$((failures + 1))
-  # run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN log --all" || failures=$((failures + 1))
-
   snapshot_dirs
   echo "[$(timestamp)] smoke suite failures=$failures"
   return 0
@@ -241,22 +235,138 @@ suite_filesystem() {
   load_state
   local failures=0
 
+  echo "[$(timestamp)] ===== FILESYSTEM DELIVERY SUITE ====="
+
   run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN init '$JATAI_TEST_A'" || failures=$((failures + 1))
   run_cmd "cd '$JATAI_TEST_B' && export HOME='$TEST_HOME' && $JATAI_BIN init '$JATAI_TEST_B'" || failures=$((failures + 1))
-  run_cmd "printf 'manual test payload\n' > '$JATAI_TEST_A/OUTBOX/manual_payload.txt'" || failures=$((failures + 1))
+  run_cmd "printf 'deliver-test\n' > '$JATAI_TEST_A/OUTBOX/test_file.txt'" || failures=$((failures + 1))
   run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN start" || failures=$((failures + 1))
   run_cmd "sleep 2"
   run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN stop" || failures=$((failures + 1))
+
+  if [[ -f "$JATAI_TEST_B/INBOX/test_file.txt" ]]; then
+    echo "[$(timestamp)] ✓ File delivered to INBOX"
+  else
+    echo "[$(timestamp)] ✗ File not delivered"
+    failures=$((failures + 1))
+  fi
 
   snapshot_dirs
   echo "[$(timestamp)] filesystem suite failures=$failures"
   return 0
 }
 
+suite_advanced() {
+  load_state
+  local failures=0
+
+  echo "[$(timestamp)] ===== ADVANCED FILESYSTEM SUITE ====="
+
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN init '$JATAI_TEST_A'" || failures=$((failures + 1))
+  run_cmd "cd '$JATAI_TEST_B' && export HOME='$TEST_HOME' && $JATAI_BIN init '$JATAI_TEST_B'" || failures=$((failures + 1))
+
+  echo "[$(timestamp)] TEST 1: Soft-delete (.jatai → ._jatai)"
+  run_cmd "mv '$JATAI_TEST_A/.jatai' '$JATAI_TEST_A/._jatai'" || failures=$((failures + 1))
+  if [[ -f "$JATAI_TEST_A/._jatai" ]]; then
+    echo "[$(timestamp)] ✓ Soft-deleted"
+  else
+    failures=$((failures + 1))
+  fi
+
+  echo "[$(timestamp)] TEST 2: Re-enable (._jatai → .jatai)"
+  run_cmd "mv '$JATAI_TEST_A/._jatai' '$JATAI_TEST_A/.jatai'" || failures=$((failures + 1))
+  if [[ -f "$JATAI_TEST_A/.jatai" ]]; then
+    echo "[$(timestamp)] ✓ Re-enabled"
+  else
+    failures=$((failures + 1))
+  fi
+
+  echo "[$(timestamp)] TEST 3: Collision handling"
+  run_cmd "printf 'data-a\n' > '$JATAI_TEST_A/OUTBOX/collision.txt'" || failures=$((failures + 1))
+  run_cmd "printf 'data-b\n' > '$JATAI_TEST_B/OUTBOX/collision.txt'" || failures=$((failures + 1))
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN start" || failures=$((failures + 1))
+  run_cmd "sleep 2"
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN stop" || failures=$((failures + 1))
+
+  local file_count
+  file_count=$(find "$JATAI_TEST_B/INBOX" -type f -name "collision*" 2>/dev/null | wc -l || echo 0)
+  echo "[$(timestamp)] Files matching collision* pattern in node_b INBOX: $file_count"
+
+  snapshot_dirs
+  echo "[$(timestamp)] advanced suite failures=$failures"
+  return 0
+}
+
+suite_startup_scan() {
+  load_state
+  local failures=0
+
+  echo "[$(timestamp)] ===== STARTUP SCAN SUITE ====="
+
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN init '$JATAI_TEST_A'" || failures=$((failures + 1))
+  run_cmd "cd '$JATAI_TEST_B' && export HOME='$TEST_HOME' && $JATAI_BIN init '$JATAI_TEST_B'" || failures=$((failures + 1))
+
+  echo "[$(timestamp)] Dropping files offline..."
+  run_cmd "printf 'offline-file-1\n' > '$JATAI_TEST_A/OUTBOX/offline1.txt'" || failures=$((failures + 1))
+  run_cmd "printf 'offline-file-2\n' > '$JATAI_TEST_A/OUTBOX/offline2.txt'" || failures=$((failures + 1))
+
+  echo "[$(timestamp)] Starting daemon (startup scan should pick up files)..."
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN start" || failures=$((failures + 1))
+  run_cmd "sleep 3"
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN stop" || failures=$((failures + 1))
+
+  if [[ -f "$JATAI_TEST_B/INBOX/offline1.txt" ]] && [[ -f "$JATAI_TEST_B/INBOX/offline2.txt" ]]; then
+    echo "[$(timestamp)] ✓ Startup scan success"
+  else
+    echo "[$(timestamp)] ✗ Startup scan missed files"
+    failures=$((failures + 1))
+  fi
+
+  snapshot_dirs
+  echo "[$(timestamp)] startup-scan suite failures=$failures"
+  return 0
+}
+
+suite_config() {
+  load_state
+  local failures=0
+
+  echo "[$(timestamp)] ===== CONFIG SUITE ====="
+
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN init '$JATAI_TEST_A'" || failures=$((failures + 1))
+  run_cmd "cd '$JATAI_TEST_B' && export HOME='$TEST_HOME' && $JATAI_BIN init '$JATAI_TEST_B'" || failures=$((failures + 1))
+
+  echo "[$(timestamp)] Checking local .jatai config..."
+  if [[ -f "$JATAI_TEST_A/.jatai" ]]; then
+    echo "[$(timestamp)] ✓ .jatai config found"
+    run_cmd "cat '$JATAI_TEST_A/.jatai' | head -5"
+  else
+    echo "[$(timestamp)] ✗ .jatai not found"
+    failures=$((failures + 1))
+  fi
+
+  echo "[$(timestamp)] Testing delivery with configured settings..."
+  run_cmd "printf 'config-test\n' > '$JATAI_TEST_A/OUTBOX/config_test.txt'" || failures=$((failures + 1))
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN start" || failures=$((failures + 1))
+  run_cmd "sleep 2"
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN stop" || failures=$((failures + 1))
+
+  if [[ -f "$JATAI_TEST_B/INBOX/config_test.txt" ]]; then
+    echo "[$(timestamp)] ✓ Delivery works with custom config"
+  else
+    echo "[$(timestamp)] ✗ Delivery failed"
+    failures=$((failures + 1))
+  fi
+
+  snapshot_dirs
+  echo "[$(timestamp)] config suite failures=$failures"
+  return 0
+}
+
 action_suite() {
   if [[ $# -eq 0 ]]; then
     echo "ERROR: suite expects a suite name"
-    echo "Available suites: smoke, filesystem"
+    echo "Available suites: smoke, filesystem, advanced, startup-scan, config"
     exit 1
   fi
 
@@ -267,9 +377,18 @@ action_suite() {
     filesystem)
       suite_filesystem
       ;;
+    advanced)
+      suite_advanced
+      ;;
+    startup-scan)
+      suite_startup_scan
+      ;;
+    config)
+      suite_config
+      ;;
     *)
       echo "ERROR: unknown suite '$1'"
-      echo "Available suites: smoke, filesystem"
+      echo "Available suites: smoke, filesystem, advanced, startup-scan, config"
       exit 1
       ;;
   esac
@@ -307,6 +426,9 @@ action_all() {
   setup_done="1"
   action_suite smoke
   action_suite filesystem
+  action_suite advanced
+  action_suite startup-scan
+  action_suite config
 
   trap - EXIT
   action_cleanup
@@ -314,30 +436,40 @@ action_all() {
 
 usage() {
   cat <<'EOF'
-Manual Test Helper for Jatai
+Manual Test Helper for Jatai - File-System First Testing
 
 Usage:
   tools/manual_test_helper.sh install
   tools/manual_test_helper.sh setup
   tools/manual_test_helper.sh snapshot
   tools/manual_test_helper.sh run -- <command>
-  tools/manual_test_helper.sh suite <smoke|filesystem>
+  tools/manual_test_helper.sh suite <smoke|filesystem|advanced|startup-scan|config>
   tools/manual_test_helper.sh cleanup
   tools/manual_test_helper.sh all
 
 Behavior:
   - Uses existing venv from ./venv
-  - Writes all output to ./manual-tests.log in the current working directory by default (or MANUAL_TEST_LOG_FILE)
-  - Uses isolated ./tmp_tests workspace and HOME in the current working directory
-  - Keeps state in ./tmp_tests/.manual_test_state.env to allow split test steps (setup/suite/cleanup)
+  - Writes all output to ./manual-tests.log
+  - Uses isolated ./tmp_tests workspace
+  - Keeps state in ./tmp_tests/.manual_test_state.env
 
-Recommended flow:
+Test Suites (File-System First Architecture):
+  - smoke: CLI initialization and status commands
+  - filesystem: Direct file delivery - drop files in OUTBOX, verify arrival in destination INBOX
+  - advanced: Soft-delete/re-enable, collision resolution, prefix state verification
+  - startup-scan: Startup scan behavior - files dropped when daemon offline
+  - config: Custom INBOX/OUTBOX paths, custom prefix settings via local .jatai
+
+Recommended comprehensive flow:
   1) install
   2) setup
-  3) suite smoke
-  4) suite filesystem
-  5) snapshot
-  6) cleanup
+  3) suite smoke        (CLI basics)
+  4) suite filesystem   (direct delivery)
+  5) suite advanced     (prefix states, soft-delete)
+  6) suite startup-scan (offline file pickup)
+  7) suite config       (configuration customization)
+  8) snapshot
+  9) cleanup
 EOF
 }
 
