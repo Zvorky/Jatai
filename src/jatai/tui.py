@@ -22,6 +22,7 @@ from textual.widgets import (
 )
 
 MENU_ITEMS: list[tuple[str, str]] = [
+    ("0",  "Init Node"),
     ("1",  "Status"),
     ("2",  "Docs Index"),
     ("3",  "Docs Query"),
@@ -196,6 +197,7 @@ class JataiApp(App):
             clear as clear_cmd,
             config as config_cmd,
             docs as docs_cmd,
+            init as init_cmd,
             list_command,
             log as log_cmd,
             read as read_cmd,
@@ -207,7 +209,18 @@ class JataiApp(App):
             unread as unread_cmd,
         )
 
-        if key == "1":
+        if key == "0":
+            def _on_init(result: Optional[list[str]]) -> None:
+                if result is not None:
+                    raw_path = result[0].strip() or None
+                    self._run(init_cmd, raw_path)
+
+            self.push_screen(
+                _InputModal("Init Node", [("Path (empty = current dir):", "")]),
+                _on_init,
+            )
+
+        elif key == "1":
             self._run(status_cmd)
 
         elif key == "2":

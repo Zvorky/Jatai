@@ -776,6 +776,17 @@ class TestCLITUI:
         result = _capture_call(fn)
         assert "boom" in result
 
+    def test_jatai_app_dispatch_init_pushes_screen(self):
+        from jatai.tui import JataiApp
+
+        pushed = {}
+        app = JataiApp()
+        app._run = lambda fn, *args: None
+        app.push_screen = lambda screen, cb=None: pushed.update({"screen": screen, "cb": cb})
+        app._dispatch("0")
+
+        assert "screen" in pushed
+
     def test_jatai_app_dispatch_status_calls_status(self):
         from jatai.tui import JataiApp
         from jatai.cli import main as cli_main
@@ -813,7 +824,7 @@ class TestCLITUI:
     def test_jatai_app_has_expected_menu_item_count(self):
         from jatai.tui import MENU_ITEMS
 
-        assert len(MENU_ITEMS) == 15
+        assert len(MENU_ITEMS) == 16
 
     def test_jatai_app_menu_item_keys_are_unique(self):
         from jatai.tui import MENU_ITEMS
