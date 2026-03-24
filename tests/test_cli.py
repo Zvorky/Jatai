@@ -221,6 +221,23 @@ class TestCLIHappyPath:
         copied = list(node.inbox_path.glob("*retry*.md"))
         assert copied
 
+    def test_cli_docs_query_inbox_applies_bang_prefix(self, temp_dir):
+        """Test docs query --inbox names all exported files with ! prefix (ADR 15)."""
+        node = Node(temp_dir / "docs_bang_prefix_node")
+        node.create()
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            result = runner.invoke(app, ["docs", "retry", "--inbox"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 0
+        for f in node.inbox_path.iterdir():
+            assert f.name.startswith("!"), f"Expected ! prefix on system artifact: {f.name}"
+
 
 class TestCLIErrorFailureScenarios:
     """Error and failure scenario tests for CLI."""
@@ -719,34 +736,122 @@ class TestCLITUI:
         assert calls["init"] == 0
         assert calls["app"] == 1
 
-    def test_tui_executes_multiple_actions_then_quits(self, monkeypatch):
-        calls = {"status": 0, "docs": 0, "log": 0}
-        prompts = iter(["1", "2", "4", "q"])
+    def test_run_tui_launches_textual_app(self, monkeypatch):
+        calls = {"run": 0}
 
-        monkeypatch.setattr("jatai.cli.main.typer.prompt", lambda *args, **kwargs: next(prompts))
-        monkeypatch.setattr("jatai.cli.main.status", lambda: calls.__setitem__("status", calls["status"] + 1))
-        monkeypatch.setattr("jatai.cli.main.docs", lambda query, inbox: calls.__setitem__("docs", calls["docs"] + 1))
-        monkeypatch.setattr("jatai.cli.main.log", lambda all_logs, inbox: calls.__setitem__("log", calls["log"] + 1))
+        class FakeApp:
+            def run(self):
+                calls["run"] += 1
+
+        monkeypatch.setattr("jatai.tui.JataiApp", FakeApp)
 
         _run_tui()
+        assert calls["run"] == 1
 
-        assert calls["status"] == 1
-        assert calls["docs"] == 1
-        assert calls["log"] == 1
+    def test_jatai_app_capture_call_returns_output(self):
+        from jatai.tui import _capture_call
 
-    def test_tui_config_get_action_invokes_get_mode(self, monkeypatch):
-        recorded = {"args": None}
-        prompts = iter(["10", "MAX_RETRIES", "q"])
+        def fn():
+            print("hello tui")
 
-        monkeypatch.setattr("jatai.cli.main.typer.prompt", lambda *args, **kwargs: next(prompts))
+        result = _capture_call(fn)
+        assert "hello tui" in result
 
-        confirms = iter([True, False])
-        monkeypatch.setattr("jatai.cli.main.typer.confirm", lambda *args, **kwargs: next(confirms))
+    def test_jatai_app_capture_call_suppresses_typer_exit(self):
+        import typer
+        from jatai.tui import _capture_call
 
-        def fake_config(key=None, value=None, global_scope=False, inbox=False):
-            recorded["args"] = (key, value, global_scope, inbox)
+        def fn():
+            raise typer.Exit(code=1)
 
-        monkeypatch.setattr("jatai.cli.main.config", fake_config)
-        _run_tui()
+        result = _capture_call(fn)
+        assert result == ""
 
-        assert recorded["args"] == ("get", "MAX_RETRIES", True, False)
+    def test_jatai_app_capture_call_captures_exceptions(self):
+        from jatai.tui import _capture_call
+
+        def fn():
+            raise RuntimeError("boom")
+
+        result = _capture_call(fn)
+        assert "boom" in result
+
+    def test_jatai_app_dispatch_status_calls_status(self):
+        from jatai.tui import JataiApp
+        from jatai.cli import main as cli_main
+
+        captured = {}
+        app = JataiApp()
+        app._run = lambda fn, *args: captured.update({"fn": fn, "args": args})
+        app._dispatch("1")
+
+        assert captured.get("fn") == cli_main.status
+        assert captured.get("args") == ()
+
+    def test_jatai_app_dispatch_docs_index_calls_docs(self):
+        from jatai.tui import JataiApp
+        from jatai.cli import main as cli_main
+
+        captured = {}
+        app = JataiApp()
+        app._run = lambda fn, *args: captured.update({"fn": fn, "args": args})
+        app._dispatch("2")
+
+        assert captured.get("fn") == cli_main.docs
+        assert captured.get("args") == (None, False)
+
+    def test_jatai_app_dispatch_unknown_key_does_nothing(self):
+        from jatai.tui import JataiApp
+
+        called = {"_run": False}
+        app = JataiApp()
+        app._run = lambda fn, *args: called.update({"_run": True})
+        app._dispatch("99")
+
+        assert not called["_run"]
+
+    def test_jatai_app_has_expected_menu_item_count(self):
+        from jatai.tui import MENU_ITEMS
+
+        assert len(MENU_ITEMS) == 15
+
+    def test_jatai_app_menu_item_keys_are_unique(self):
+        from jatai.tui import MENU_ITEMS
+
+        keys = [k for k, _ in MENU_ITEMS]
+        assert len(keys) == len(set(keys))
+
+    def test_jatai_app_dispatch_pushes_screen_for_docs_query(self, monkeypatch):
+        from jatai.tui import JataiApp
+
+        pushed = {}
+        app = JataiApp()
+        app._run = lambda fn, *args: None
+        app.push_screen = lambda screen, cb=None: pushed.update({"screen": screen, "cb": cb})
+        app._dispatch("3")
+
+        assert "screen" in pushed
+
+    def test_jatai_app_dispatch_log_latest(self):
+        from jatai.tui import JataiApp
+        from jatai.cli import main as cli_main
+
+        captured = {}
+        app = JataiApp()
+        app._run = lambda fn, *args: captured.update({"fn": fn, "args": args})
+        app._dispatch("4")
+
+        assert captured.get("fn") == cli_main.log
+        assert captured.get("args") == (False, False)
+
+    def test_jatai_app_dispatch_log_all(self):
+        from jatai.tui import JataiApp
+        from jatai.cli import main as cli_main
+
+        captured = {}
+        app = JataiApp()
+        app._run = lambda fn, *args: captured.update({"fn": fn, "args": args})
+        app._dispatch("5")
+
+        assert captured.get("fn") == cli_main.log
+        assert captured.get("args") == (True, False)

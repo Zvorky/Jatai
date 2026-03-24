@@ -407,24 +407,45 @@ suite_tui_config_get() {
     echo "[$(timestamp)] ✓ Missing key returns expected failure"
   fi
 
-  echo "[$(timestamp)] Testing TUI config get flow via pseudo-terminal..."
-  if ! command -v script >/dev/null 2>&1; then
-    echo "[$(timestamp)] 'script' not available; using Python-driven TUI fallback"
-    run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && '$VENV_PYTHON' -c \"from jatai.cli import main; choices=iter(['10','INBOX_DIR','q']); confirms=iter([False, False]); main.typer.prompt=lambda *a, **k: next(choices); main.typer.confirm=lambda *a, **k: next(confirms); main._run_tui()\" > '$TEST_ROOT/tui_config_get.out'" || failures=$((failures + 1))
+  echo "[$(timestamp)] Testing docs query --inbox applies ! prefix (ADR 15)..."
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN docs retry --inbox" || failures=$((failures + 1))
+  local bang_files
+  bang_files="$(find "$JATAI_TEST_A/INBOX" -name '!*.md' 2>/dev/null | wc -l)"
+  local nonbang_files
+  nonbang_files="$(find "$JATAI_TEST_A/INBOX" -name '*.md' -not -name '!*' 2>/dev/null | wc -l)"
+  if [[ "$bang_files" -gt 0 ]]; then
+    echo "[$(timestamp)] ✓ docs query --inbox created $bang_files file(s) with ! prefix"
   else
-    run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && printf '10\nn\nINBOX_DIR\nn\nq\n' | script -qec '$JATAI_BIN' /dev/null > '$TEST_ROOT/tui_config_get.out'" || failures=$((failures + 1))
-  fi
-
-  if grep -q "INBOX_DIR=" "$TEST_ROOT/tui_config_get.out"; then
-    echo "[$(timestamp)] ✓ TUI config get returned requested key"
-  else
-    echo "[$(timestamp)] ✗ TUI config get output did not contain requested key"
+    echo "[$(timestamp)] ✗ No ! prefixed .md files found after docs query --inbox"
     failures=$((failures + 1))
   fi
-  if grep -q "Bye\." "$TEST_ROOT/tui_config_get.out"; then
-    echo "[$(timestamp)] ✓ TUI exited cleanly"
+  if [[ "$nonbang_files" -gt 0 ]]; then
+    echo "[$(timestamp)] ✗ Found $nonbang_files .md files WITHOUT ! prefix (policy violation)"
+    failures=$((failures + 1))
   else
-    echo "[$(timestamp)] ✗ TUI did not exit as expected"
+    echo "[$(timestamp)] ✓ No .md files without ! prefix in INBOX"
+  fi
+
+  echo "[$(timestamp)] Testing Textual TUI _dispatch routing via Python..."
+  run_cmd "'$VENV_PYTHON' -c \"
+from jatai.tui import JataiApp, _capture_call
+# Confirm _capture_call captures stdout
+import io
+result = _capture_call(lambda: print('dispatch-test'))
+assert 'dispatch-test' in result, 'capture_call failed'
+# Confirm _dispatch routes key 1 to status_cmd
+from jatai.cli import main as cli_main
+app = JataiApp()
+captured = {}
+app._run = lambda fn, *args: captured.update({'fn': fn})
+app._dispatch('1')
+assert captured.get('fn') == cli_main.status, 'dispatch key 1 did not route to status'
+print('TUI dispatch tests passed')
+\"" > "$TEST_ROOT/tui_dispatch.out" || failures=$((failures + 1))
+  if grep -q "TUI dispatch tests passed" "$TEST_ROOT/tui_dispatch.out"; then
+    echo "[$(timestamp)] ✓ TUI _dispatch routes status command correctly"
+  else
+    echo "[$(timestamp)] ✗ TUI _dispatch test failed"
     failures=$((failures + 1))
   fi
 

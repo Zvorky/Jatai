@@ -152,13 +152,15 @@ def _render_docs_index(markdown_files: List[Path]) -> str:
 
 def _safe_copy_to_inbox(source: Path, inbox_path: Path) -> Path:
     inbox_path.mkdir(parents=True, exist_ok=True)
-    destination = inbox_path / source.name
+    base = source.name
+    dest_name = base if base.startswith("!") else f"!{base}"
+    destination = inbox_path / dest_name
     if not destination.exists():
         shutil.copy2(source, destination)
         return destination
 
-    stem = source.stem
     suffix = source.suffix
+    stem = dest_name[: -len(suffix)] if suffix else dest_name
     counter = 1
     while True:
         candidate = inbox_path / f"{stem}-{counter}{suffix}"
@@ -674,92 +676,9 @@ def clear(
 
 
 def _run_tui() -> None:
-    """Interactive text interface exposing current CLI toolbox actions."""
-    typer.echo("Jatai TUI (alpha)")
-    typer.echo("1) status           2) docs index        3) docs query")
-    typer.echo("4) log latest       5) log all           6) list scope")
-    typer.echo("7) send file        8) read file         9) unread file")
-    typer.echo("10) config get      11) config set       12) remove node")
-    typer.echo("13) clear processed 14) start daemon     15) stop daemon")
-    typer.echo("h) help             q) quit")
-
-    def _safe_call(fn, *args):
-        try:
-            fn(*args)
-        except typer.Exit:
-            return
-        except Exception as e:
-            typer.echo(f"✗ Error: {e}")
-
-    while True:
-        choice = typer.prompt("Select", default="q").strip().lower()
-        if choice in {"q", "quit", "exit"}:
-            typer.echo("Bye.")
-            return
-        if choice == "1":
-            _safe_call(status)
-            continue
-        if choice == "2":
-            _safe_call(docs, None, False)
-            continue
-        if choice == "3":
-            query = typer.prompt("Query", default="").strip()
-            _safe_call(docs, query or None, False)
-            continue
-        if choice == "4":
-            _safe_call(log, False, False)
-            continue
-        if choice == "5":
-            _safe_call(log, True, False)
-            continue
-        if choice == "6":
-            scope = typer.prompt("Scope (addrs|inbox|outbox)", default="inbox").strip().lower()
-            _safe_call(list_command, scope)
-            continue
-        if choice == "7":
-            file_path = typer.prompt("File path").strip()
-            move = typer.confirm("Move source file after enqueue?", default=False)
-            _safe_call(send, file_path, move)
-            continue
-        if choice == "8":
-            file_name = typer.prompt("INBOX file name").strip()
-            _safe_call(read, file_name)
-            continue
-        if choice == "9":
-            file_name = typer.prompt("INBOX file name").strip()
-            _safe_call(unread, file_name)
-            continue
-        if choice == "10":
-            global_scope = typer.confirm("Global scope?", default=False)
-            key = typer.prompt("Key (empty for full config)", default="").strip()
-            export_inbox = typer.confirm("Export to INBOX?", default=False)
-            _safe_call(config, "get", key or None, global_scope, export_inbox)
-            continue
-        if choice == "11":
-            global_scope = typer.confirm("Global scope?", default=False)
-            key = typer.prompt("Key").strip()
-            value = typer.prompt("Value").strip()
-            _safe_call(config, key, value, global_scope, False)
-            continue
-        if choice == "12":
-            raw_path = typer.prompt("Node path (empty = current)", default="").strip()
-            _safe_call(remove, raw_path or None)
-            continue
-        if choice == "13":
-            clear_read = typer.confirm("Clear processed INBOX files?", default=True)
-            clear_sent = typer.confirm("Clear processed OUTBOX files?", default=True)
-            _safe_call(clear, clear_read, clear_sent)
-            continue
-        if choice == "14":
-            _safe_call(start, False)
-            continue
-        if choice == "15":
-            _safe_call(stop)
-            continue
-        if choice in {"h", "help"}:
-            app(["--help"])
-            continue
-        typer.echo("Unknown option")
+    """Launch the Textual-based interactive TUI."""
+    from jatai.tui import JataiApp
+    JataiApp().run()
 
 
 def run() -> None:

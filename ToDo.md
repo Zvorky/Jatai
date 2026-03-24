@@ -77,7 +77,7 @@ Adding convenience commands and storage management.
 - [x] Refactor `jatai docs` and `jatai docs [query]` to terminal-first output by default.
 - [x] Add `--inbox` option to `jatai docs` and `jatai docs [query]` to export files into current node INBOX.
 - [x] Add `--inbox` option to `jatai log` (latest/all) to export rendered output into current node INBOX.
-- [ ] Enforce `!` prefix for all system-generated INBOX artifacts (including docs query exports) and add/adjust tests to verify the naming policy.
+- [x] Enforce `!` prefix for all system-generated INBOX artifacts (including docs query exports) and add/adjust tests to verify the naming policy.
 - [x] Implement `jatai list`, `jatai send`, `jatai read`, `jatai unread`.
 - [x] Implement `jatai config` to read/write settings via CLI.
 - [x] Implement `jatai config get [key]` with optional `-G|--global` scope and optional `-i|--inbox` export.
@@ -85,7 +85,7 @@ Adding convenience commands and storage management.
 - [x] Implement **Garbage Collection (Auto-Remove):** Background daemon logic to delete `_` prefixed files based on config thresholds.
 - [x] Implement `jatai clear [--read] [--sent]` manual CLI command.
 - [x] Build the interactive TUI (invoked by `jatai` with no arguments).
-- [ ] Refactor the TUI with Textual so it exposes all current CLI commands through an efficient interactive workflow.
+- [x] Refactor the TUI with Textual so it exposes all current CLI commands through an efficient interactive workflow.
 
 ## **Phase 7: Advanced / Future Expansion (Post-Core)**
 

@@ -135,9 +135,9 @@ OUTBOX/
 - [Garbage collection](../operations/garbage-collection.md) — manual and automatic cleanup of processed files
 - [CLI reference](../operations/cli-reference.md) — full command-line reference
 
-> Running `jatai` with no arguments opens the interactive TUI in a terminal
-> session. In non-interactive usage (scripts, cron), the same command prints the
-> CLI help summary.
+> Running `jatai` with no arguments opens the **Textual**-powered interactive TUI
+> in a terminal session. In non-interactive usage (scripts, cron), the same
+> command prints the CLI help summary.
 >
-> The current TUI is a menu-driven interface that covers the full CLI command set.
-> A richer Textual-based TUI is planned for a future release.
+> The TUI provides a two-pane layout: a scrollable command menu on the left and
+> a live output display on the right. It covers the full CLI command set.

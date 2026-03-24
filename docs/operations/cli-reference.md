@@ -94,7 +94,8 @@ jatai docs retry -i
 
 The query matches against the file name and path (case-insensitive substring).
 With `--inbox`, all matching `.md` files from the `docs/` tree are copied to the
-node's `INBOX`.
+node's `INBOX` with the `!` prefix applied, marking them as system-generated
+artifacts (for example `!retry-and-health.md`, `!quickstart.md`).
 
 ---
 
@@ -253,9 +254,17 @@ Canonical mapping:
 ## Interactive TUI
 
 Running `jatai` with no arguments in an interactive terminal opens the
-menu-driven TUI. In non-interactive execution (scripts, cron jobs), `jatai`
-without arguments prints the CLI help summary instead.
+**Textual**-powered TUI. In non-interactive execution (scripts, cron jobs),
+`jatai` without arguments prints the CLI help summary instead.
 
-The TUI covers all CLI workflow actions:
-`status`, `docs`, `log`, `list`, `send`, `read`, `unread`, `config get/set`,
-`remove`, `clear`, and daemon `start`/`stop`.
+The TUI exposes all CLI commands through a two-pane layout:
+- Left pane: scrollable command menu (15 actions, keyboard or mouse selection)
+- Right pane: command output display
+
+Actions available in the TUI:
+`status`, `docs index`, `docs query`, `log latest`, `log all`, `list`,
+`send file`, `read file`, `unread file`, `config get`, `config set`,
+`remove node`, `clear processed`, `start daemon`, `stop daemon`.
+
+Press `Q` to quit. The TUI opens modal input dialogs for commands that require
+parameters (e.g. query text, file paths, config keys).

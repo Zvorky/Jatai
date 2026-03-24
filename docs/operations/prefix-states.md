@@ -93,8 +93,11 @@ Common patterns:
 | `!docs-index.md` | Docs index exported via `jatai docs -i` |
 | `!log-latest.txt` | Log snapshot exported via `jatai log -i` |
 | `!log-all.txt` | Full log exported via `jatai log -a -i` |
-| `!config-local.yaml` | Local config exported via `jatai config get -i` |
-| `!config-global.yaml` | Global config exported via `jatai config get -G -i` |
+| `!config-local.txt` | Local config exported via `jatai config get -i` |
+| `!config-local-<KEY>.txt` | Single local key exported via `jatai config get KEY -i` |
+| `!config-global.txt` | Global config exported via `jatai config get -G -i` |
+| `!config-global-<KEY>.txt` | Single global key exported via `jatai config get KEY -G -i` |
+| `!<docname>.md` | Docs file exported via `jatai docs QUERY -i` |
 
 These files share the same prefix conventions and can be cleared using
 `jatai clear -r`.
