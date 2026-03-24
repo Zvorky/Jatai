@@ -115,12 +115,17 @@ When the agent is working exclusively on development tooling under `tools/` (wit
 
 **After automated tests pass**, perform an end-to-end manual validation:
 
+0. **Use the manual test helper script as the default execution path:**
+   - Prefer updating and running `tools/manual_test_helper.sh` instead of performing ad-hoc command-by-command tests directly in terminal.
+   - The script execution output is saved to `./manual-tests.log` (in the directory where it is executed).
+   - When manual testing requirements evolve, update this script in the same change set so future runs stay reproducible.
+
 1. **Install the project** following the instructions in `README.md` exactly (e.g., `pip install -e .` or the documented install command).
 
-2. **Set up a test environment** using at least two node addresses under `/tmp/`, for example:
+2. **Set up a test environment** using at least two node addresses under a local temporary directory (`./tmp_tests/`), for example:
    ```bash
-   export JATAI_TEST_A=/tmp/jatai_test_a
-   export JATAI_TEST_B=/tmp/jatai_test_b
+   export JATAI_TEST_A=./tmp_tests/node_a
+   export JATAI_TEST_B=./tmp_tests/node_b
    mkdir -p "$JATAI_TEST_A" "$JATAI_TEST_B"
    ```
 
@@ -139,7 +144,7 @@ When the agent is working exclusively on development tooling under `tools/` (wit
    ```bash
    rm -rf "$JATAI_TEST_A" "$JATAI_TEST_B"
    ```
-   All files and directories created during manual testing under `/tmp/` must be deleted before the final commit.
+   All files and directories created during manual testing under `./tmp_tests/` must be deleted before the final commit.
 
 ## Project Versioning Policy
 
