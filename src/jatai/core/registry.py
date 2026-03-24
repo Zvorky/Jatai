@@ -20,6 +20,9 @@ class Registry:
         "MAX_RETRIES": 3,
         "INBOX_DIR": "INBOX",
         "OUTBOX_DIR": "OUTBOX",
+        "GC_ENABLED": False,
+        "GC_MAX_AGE_DAYS": 30,
+        "GC_MAX_FILES": 0,
     }
 
     def __init__(self, registry_path: Optional[Path] = None):

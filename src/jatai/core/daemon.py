@@ -15,6 +15,7 @@ from watchdog.events import FileCreatedEvent, FileMovedEvent, FileSystemEventHan
 from watchdog.observers import Observer
 
 from jatai.core.delivery import Delivery
+from jatai.core.gc import run_gc_for_node
 from jatai.core.node import Node
 from jatai.core.prefix import Prefix
 from jatai.core.registry import Registry
@@ -425,6 +426,17 @@ class JataiDaemon:
             if onboarded:
                 self.logger.info("Auto-onboarded node=%s", node.node_path)
 
+    def run_garbage_collection(self) -> None:
+        """Run garbage collection for all active nodes."""
+        for node in self.load_active_nodes():
+            removed = run_gc_for_node(
+                inbox_path=node.inbox_path,
+                outbox_path=node.outbox_path,
+                node_config=node.local_config,
+            )
+            for path in removed:
+                self.logger.info("GC removed file=%s", path)
+
     def startup_scan(self) -> None:
         nodes = self.load_active_nodes()
         for node in nodes:
@@ -472,6 +484,7 @@ class JataiDaemon:
         try:
             self.onboard_registered_nodes()
             self.startup_scan()
+            self.run_garbage_collection()
             self.setup_watchdog()
             while not self.stop_event.wait(self.POLL_INTERVAL_SECONDS):
                 pass
