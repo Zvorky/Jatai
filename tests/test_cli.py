@@ -8,7 +8,7 @@ import pytest
 from pathlib import Path
 from typer.testing import CliRunner
 
-from jatai.cli.main import app, run
+from jatai.cli.main import app, run, _run_tui
 from jatai.core.registry import Registry
 from jatai.core.node import Node
 
@@ -574,6 +574,78 @@ class TestCLIPhase6Toolbox:
         assert set_global.exit_code == 0
         assert "MAX_RETRIES=8" in get_global.stdout
 
+    def test_cli_config_get_local_and_global(self, temp_dir, temp_home, monkeypatch):
+        node = Node(temp_dir / "config_get_node")
+        node.create()
+        monkeypatch.setenv("HOME", str(temp_home))
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            set_local = runner.invoke(app, ["config", "RETRY_DELAY_BASE", "77"])
+            set_global = runner.invoke(app, ["config", "-G", "MAX_RETRIES", "6"])
+            get_local = runner.invoke(app, ["config", "get", "RETRY_DELAY_BASE"])
+            get_global = runner.invoke(app, ["config", "get", "MAX_RETRIES", "-G"])
+            get_local_full = runner.invoke(app, ["config", "get"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert set_local.exit_code == 0
+        assert set_global.exit_code == 0
+        assert get_local.exit_code == 0 and "RETRY_DELAY_BASE=77" in get_local.stdout
+        assert get_global.exit_code == 0 and "MAX_RETRIES=6" in get_global.stdout
+        assert get_local_full.exit_code == 0 and "RETRY_DELAY_BASE" in get_local_full.stdout
+
+    def test_cli_config_get_with_inbox_export(self, temp_dir, temp_home, monkeypatch):
+        node = Node(temp_dir / "config_get_export_node")
+        node.create()
+        monkeypatch.setenv("HOME", str(temp_home))
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            runner.invoke(app, ["config", "RETRY_DELAY_BASE", "66"])
+            exported = runner.invoke(app, ["config", "get", "RETRY_DELAY_BASE", "-i"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert exported.exit_code == 0
+        output_file = node.inbox_path / "!config-local-RETRY_DELAY_BASE.txt"
+        assert output_file.exists()
+        assert "RETRY_DELAY_BASE=66" in output_file.read_text(encoding="utf-8")
+
+    def test_cli_config_get_missing_key_fails(self, temp_dir):
+        node = Node(temp_dir / "config_missing_key_node")
+        node.create()
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            result = runner.invoke(app, ["config", "get", "NOT_A_KEY"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 1
+        assert "unknown local config key" in result.stdout.lower() or "unknown local config key" in result.stderr.lower()
+
+    def test_cli_config_inbox_without_get_fails(self, temp_dir):
+        node = Node(temp_dir / "config_invalid_inbox_node")
+        node.create()
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            result = runner.invoke(app, ["config", "MAX_RETRIES", "9", "-i"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 1
+        assert "only supported with 'config get'" in result.stdout.lower() or "only supported with 'config get'" in result.stderr.lower()
+
     def test_cli_remove_soft_delete_and_clear(self, temp_dir):
         node = Node(temp_dir / "remove_clear_node")
         node.create()
@@ -594,3 +666,87 @@ class TestCLIPhase6Toolbox:
             assert (node.node_path / "._jatai").exists()
         finally:
             os.chdir(old_cwd)
+
+
+class TestCLITUI:
+    """Interactive TUI behavior tests."""
+
+    def test_run_without_args_uses_tui_in_interactive_terminal(self, monkeypatch):
+        calls = {"tui": 0}
+
+        monkeypatch.setattr("sys.argv", ["jatai"])
+        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+        monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+
+        def fake_tui():
+            calls["tui"] += 1
+
+        monkeypatch.setattr("jatai.cli.main._run_tui", fake_tui)
+
+        run()
+        assert calls["tui"] == 1
+
+    def test_run_without_args_non_interactive_prints_help(self, monkeypatch):
+        calls = {"help": 0}
+
+        monkeypatch.setattr("sys.argv", ["jatai"])
+        monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+
+        def fake_app(args=None):
+            calls["help"] += 1
+            assert args == ["--help"]
+
+        monkeypatch.setattr("jatai.cli.main.app", fake_app)
+        run()
+        assert calls["help"] == 1
+
+    def test_run_known_command_is_not_treated_as_path(self, monkeypatch):
+        calls = {"init": 0, "app": 0}
+
+        monkeypatch.setattr("sys.argv", ["jatai", "list", "inbox"])
+
+        def fake_init(path=None):
+            calls["init"] += 1
+
+        def fake_app(args=None):
+            calls["app"] += 1
+
+        monkeypatch.setattr("jatai.cli.main._initialize_node", fake_init)
+        monkeypatch.setattr("jatai.cli.main.app", fake_app)
+
+        run()
+        assert calls["init"] == 0
+        assert calls["app"] == 1
+
+    def test_tui_executes_multiple_actions_then_quits(self, monkeypatch):
+        calls = {"status": 0, "docs": 0, "log": 0}
+        prompts = iter(["1", "2", "4", "q"])
+
+        monkeypatch.setattr("jatai.cli.main.typer.prompt", lambda *args, **kwargs: next(prompts))
+        monkeypatch.setattr("jatai.cli.main.status", lambda: calls.__setitem__("status", calls["status"] + 1))
+        monkeypatch.setattr("jatai.cli.main.docs", lambda query, inbox: calls.__setitem__("docs", calls["docs"] + 1))
+        monkeypatch.setattr("jatai.cli.main.log", lambda all_logs, inbox: calls.__setitem__("log", calls["log"] + 1))
+
+        _run_tui()
+
+        assert calls["status"] == 1
+        assert calls["docs"] == 1
+        assert calls["log"] == 1
+
+    def test_tui_config_get_action_invokes_get_mode(self, monkeypatch):
+        recorded = {"args": None}
+        prompts = iter(["10", "MAX_RETRIES", "q"])
+
+        monkeypatch.setattr("jatai.cli.main.typer.prompt", lambda *args, **kwargs: next(prompts))
+
+        confirms = iter([True, False])
+        monkeypatch.setattr("jatai.cli.main.typer.confirm", lambda *args, **kwargs: next(confirms))
+
+        def fake_config(key=None, value=None, global_scope=False, inbox=False):
+            recorded["args"] = (key, value, global_scope, inbox)
+
+        monkeypatch.setattr("jatai.cli.main.config", fake_config)
+        _run_tui()
+
+        assert recorded["args"] == ("get", "MAX_RETRIES", True, False)

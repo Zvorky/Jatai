@@ -32,6 +32,13 @@ KNOWN_COMMANDS = {
     "stop",
     "docs",
     "log",
+    "list",
+    "send",
+    "read",
+    "unread",
+    "config",
+    "remove",
+    "clear",
     "_daemon-run",
 }
 DOCS_ROOT = Path(__file__).resolve().parents[3] / "docs"
@@ -203,6 +210,58 @@ def _coerce_config_value(raw_value: str):
     if raw_value.isdigit() or (raw_value.startswith("-") and raw_value[1:].isdigit()):
         return int(raw_value)
     return raw_value
+
+
+def _format_config_output(config_data: dict, key: Optional[str]) -> str:
+    if key is None:
+        text = yaml.safe_dump(config_data, sort_keys=True)
+        return text if text.endswith("\n") else text + "\n"
+    if key not in config_data:
+        raise KeyError(key)
+    return f"{key}={config_data[key]}\n"
+
+
+def _config_get(
+    key: Optional[str],
+    global_scope: bool,
+    inbox: bool,
+) -> None:
+    config_data: dict
+    scope_label = "global" if global_scope else "local"
+
+    if global_scope:
+        registry = Registry()
+        try:
+            registry.load()
+        except FileNotFoundError:
+            pass
+        config_data = registry.global_config
+    else:
+        node = _load_node_from_cwd()
+        config_data = node.local_config
+
+    try:
+        rendered = _format_config_output(config_data, key)
+    except KeyError:
+        typer.echo(f"✗ Error: unknown {scope_label} config key: {key}", err=True)
+        raise typer.Exit(code=1)
+
+    if not inbox:
+        typer.echo(rendered, nl=False)
+        return
+
+    try:
+        node_for_export = _load_node_from_cwd()
+    except Exception as e:
+        typer.echo(f"✗ Error: {e}", err=True)
+        raise typer.Exit(code=1)
+
+    if key is None:
+        filename = f"!config-{scope_label}.yaml"
+    else:
+        filename = f"!config-{scope_label}-{key}.txt"
+    target = _export_text_to_inbox(node_for_export, rendered, filename)
+    typer.echo(f"✓ Config exported to {target}")
 
 
 def _spawn_daemon_process() -> subprocess.Popen:
@@ -511,8 +570,16 @@ def config(
     key: Optional[str] = typer.Argument(None, help="Config key."),
     value: Optional[str] = typer.Argument(None, help="Config value to set."),
     global_scope: bool = typer.Option(False, "--global", "-G", help="Operate on global registry config."),
+    inbox: bool = typer.Option(False, "--inbox", "-i", help="Export config retrieval output to current node INBOX (for config get)."),
 ) -> None:
     """Read or write configuration values."""
+    if key == "get":
+        return _config_get(value, global_scope, inbox)
+
+    if inbox:
+        typer.echo("✗ Error: --inbox is only supported with 'config get'", err=True)
+        raise typer.Exit(code=1)
+
     if global_scope:
         registry = Registry()
         try:
@@ -607,21 +674,89 @@ def clear(
 
 
 def _run_tui() -> None:
-    """Minimal interactive TUI bootstrap for phase 6."""
+    """Interactive text interface exposing current CLI toolbox actions."""
     typer.echo("Jatai TUI (alpha)")
-    typer.echo("1) status  2) docs  3) help  q) quit")
+    typer.echo("1) status           2) docs index        3) docs query")
+    typer.echo("4) log latest       5) log all           6) list scope")
+    typer.echo("7) send file        8) read file         9) unread file")
+    typer.echo("10) config get      11) config set       12) remove node")
+    typer.echo("13) clear processed 14) start daemon     15) stop daemon")
+    typer.echo("h) help             q) quit")
+
+    def _safe_call(fn, *args):
+        try:
+            fn(*args)
+        except typer.Exit:
+            return
+        except Exception as e:
+            typer.echo(f"✗ Error: {e}")
+
     while True:
         choice = typer.prompt("Select", default="q").strip().lower()
         if choice in {"q", "quit", "exit"}:
             typer.echo("Bye.")
             return
         if choice == "1":
-            status()
+            _safe_call(status)
             continue
         if choice == "2":
-            docs(None, False)
+            _safe_call(docs, None, False)
             continue
         if choice == "3":
+            query = typer.prompt("Query", default="").strip()
+            _safe_call(docs, query or None, False)
+            continue
+        if choice == "4":
+            _safe_call(log, False, False)
+            continue
+        if choice == "5":
+            _safe_call(log, True, False)
+            continue
+        if choice == "6":
+            scope = typer.prompt("Scope (addrs|inbox|outbox)", default="inbox").strip().lower()
+            _safe_call(list_command, scope)
+            continue
+        if choice == "7":
+            file_path = typer.prompt("File path").strip()
+            move = typer.confirm("Move source file after enqueue?", default=False)
+            _safe_call(send, file_path, move)
+            continue
+        if choice == "8":
+            file_name = typer.prompt("INBOX file name").strip()
+            _safe_call(read, file_name)
+            continue
+        if choice == "9":
+            file_name = typer.prompt("INBOX file name").strip()
+            _safe_call(unread, file_name)
+            continue
+        if choice == "10":
+            global_scope = typer.confirm("Global scope?", default=False)
+            key = typer.prompt("Key (empty for full config)", default="").strip()
+            export_inbox = typer.confirm("Export to INBOX?", default=False)
+            _safe_call(config, "get", key or None, global_scope, export_inbox)
+            continue
+        if choice == "11":
+            global_scope = typer.confirm("Global scope?", default=False)
+            key = typer.prompt("Key").strip()
+            value = typer.prompt("Value").strip()
+            _safe_call(config, key, value, global_scope, False)
+            continue
+        if choice == "12":
+            raw_path = typer.prompt("Node path (empty = current)", default="").strip()
+            _safe_call(remove, raw_path or None)
+            continue
+        if choice == "13":
+            clear_read = typer.confirm("Clear processed INBOX files?", default=True)
+            clear_sent = typer.confirm("Clear processed OUTBOX files?", default=True)
+            _safe_call(clear, clear_read, clear_sent)
+            continue
+        if choice == "14":
+            _safe_call(start, False)
+            continue
+        if choice == "15":
+            _safe_call(stop)
+            continue
+        if choice in {"h", "help"}:
             app(["--help"])
             continue
         typer.echo("Unknown option")

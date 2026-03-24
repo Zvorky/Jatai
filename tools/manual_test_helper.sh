@@ -363,10 +363,80 @@ suite_config() {
   return 0
 }
 
+suite_tui_config_get() {
+  load_state
+  local failures=0
+
+  echo "[$(timestamp)] ===== TUI + CONFIG GET SUITE ====="
+
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN init '$JATAI_TEST_A'" || failures=$((failures + 1))
+  run_cmd "cd '$JATAI_TEST_B' && export HOME='$TEST_HOME' && $JATAI_BIN init '$JATAI_TEST_B'" || failures=$((failures + 1))
+
+  echo "[$(timestamp)] Testing config get (local/global) and INBOX export..."
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN config RETRY_DELAY_BASE 9" || failures=$((failures + 1))
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN config MAX_RETRIES 8 -G" || failures=$((failures + 1))
+
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN config get RETRY_DELAY_BASE > '$TEST_ROOT/config_get_local.out'" || failures=$((failures + 1))
+  if grep -q "RETRY_DELAY_BASE=9" "$TEST_ROOT/config_get_local.out"; then
+    echo "[$(timestamp)] ✓ Local config get returned expected key"
+  else
+    echo "[$(timestamp)] ✗ Local config get did not return expected key/value"
+    failures=$((failures + 1))
+  fi
+
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN config get MAX_RETRIES -G > '$TEST_ROOT/config_get_global.out'" || failures=$((failures + 1))
+  if grep -q "MAX_RETRIES=8" "$TEST_ROOT/config_get_global.out"; then
+    echo "[$(timestamp)] ✓ Global config get returned expected key"
+  else
+    echo "[$(timestamp)] ✗ Global config get did not return expected key/value"
+    failures=$((failures + 1))
+  fi
+
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN config get RETRY_DELAY_BASE -i" || failures=$((failures + 1))
+  if [[ -f "$JATAI_TEST_A/INBOX/!config-local-RETRY_DELAY_BASE.txt" ]]; then
+    echo "[$(timestamp)] ✓ config get --inbox exported system artifact with ! prefix"
+  else
+    echo "[$(timestamp)] ✗ Missing !config-local-RETRY_DELAY_BASE.txt in INBOX"
+    failures=$((failures + 1))
+  fi
+
+  if run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN config get DOES_NOT_EXIST"; then
+    echo "[$(timestamp)] ✗ Missing key should fail but command returned success"
+    failures=$((failures + 1))
+  else
+    echo "[$(timestamp)] ✓ Missing key returns expected failure"
+  fi
+
+  echo "[$(timestamp)] Testing TUI config get flow via pseudo-terminal..."
+  if ! command -v script >/dev/null 2>&1; then
+    echo "[$(timestamp)] 'script' not available; using Python-driven TUI fallback"
+    run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && '$VENV_PYTHON' -c \"from jatai.cli import main; choices=iter(['10','INBOX_DIR','q']); confirms=iter([False, False]); main.typer.prompt=lambda *a, **k: next(choices); main.typer.confirm=lambda *a, **k: next(confirms); main._run_tui()\" > '$TEST_ROOT/tui_config_get.out'" || failures=$((failures + 1))
+  else
+    run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && printf '10\nn\nINBOX_DIR\nn\nq\n' | script -qec '$JATAI_BIN' /dev/null > '$TEST_ROOT/tui_config_get.out'" || failures=$((failures + 1))
+  fi
+
+  if grep -q "INBOX_DIR=" "$TEST_ROOT/tui_config_get.out"; then
+    echo "[$(timestamp)] ✓ TUI config get returned requested key"
+  else
+    echo "[$(timestamp)] ✗ TUI config get output did not contain requested key"
+    failures=$((failures + 1))
+  fi
+  if grep -q "Bye\." "$TEST_ROOT/tui_config_get.out"; then
+    echo "[$(timestamp)] ✓ TUI exited cleanly"
+  else
+    echo "[$(timestamp)] ✗ TUI did not exit as expected"
+    failures=$((failures + 1))
+  fi
+
+  snapshot_dirs
+  echo "[$(timestamp)] tui-config-get suite failures=$failures"
+  return 0
+}
+
 action_suite() {
   if [[ $# -eq 0 ]]; then
     echo "ERROR: suite expects a suite name"
-    echo "Available suites: smoke, filesystem, advanced, startup-scan, config"
+    echo "Available suites: smoke, filesystem, advanced, startup-scan, config, tui-config-get"
     exit 1
   fi
 
@@ -386,9 +456,12 @@ action_suite() {
     config)
       suite_config
       ;;
+    tui-config-get)
+      suite_tui_config_get
+      ;;
     *)
       echo "ERROR: unknown suite '$1'"
-      echo "Available suites: smoke, filesystem, advanced, startup-scan, config"
+      echo "Available suites: smoke, filesystem, advanced, startup-scan, config, tui-config-get"
       exit 1
       ;;
   esac
@@ -429,6 +502,7 @@ action_all() {
   action_suite advanced
   action_suite startup-scan
   action_suite config
+  action_suite tui-config-get
 
   trap - EXIT
   action_cleanup
@@ -443,7 +517,7 @@ Usage:
   tools/manual_test_helper.sh setup
   tools/manual_test_helper.sh snapshot
   tools/manual_test_helper.sh run -- <command>
-  tools/manual_test_helper.sh suite <smoke|filesystem|advanced|startup-scan|config>
+  tools/manual_test_helper.sh suite <smoke|filesystem|advanced|startup-scan|config|tui-config-get>
   tools/manual_test_helper.sh cleanup
   tools/manual_test_helper.sh all
 
@@ -459,6 +533,7 @@ Test Suites (File-System First Architecture):
   - advanced: Soft-delete/re-enable, collision resolution, prefix state verification
   - startup-scan: Startup scan behavior - files dropped when daemon offline
   - config: Custom INBOX/OUTBOX paths, custom prefix settings via local .jatai
+  - tui-config-get: Dedicated pseudo-terminal TUI flow + config get validation
 
 Recommended comprehensive flow:
   1) install
@@ -468,8 +543,9 @@ Recommended comprehensive flow:
   5) suite advanced     (prefix states, soft-delete)
   6) suite startup-scan (offline file pickup)
   7) suite config       (configuration customization)
-  8) snapshot
-  9) cleanup
+  8) suite tui-config-get (interactive + config retrieval)
+  9) snapshot
+  10) cleanup
 EOF
 }
 
