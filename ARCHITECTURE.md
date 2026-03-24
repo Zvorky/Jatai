@@ -56,3 +56,16 @@ This document details the Architecture Decision Records (ADR) for the Jataí pro
   * `jatai log --all` (or `jatai log -a`) returns the complete log stream (or paginated/streamed output).
   * `jatai docs` and `jatai docs {query}` return documentation content in terminal output by default.
   * Both log and docs commands support an explicit `--inbox` option to export the retrieved content as file(s) into the current node INBOX when persistence/share is needed.
+
+## **13. CLI Short-Option Policy (Abbreviated Flags)**
+* **Context:** CLI usability requires consistent, mnemonic abbreviated options to reduce verbosity in scripts and terminal usage.
+* **Decision:** Adopt a canonical short-option mapping for all optional flags:
+  * `-a` ↔ `--all` : Show/process complete output (e.g., full logs).
+  * `-i` ↔ `--inbox` : Export/process via current node INBOX.
+  * `-m` ↔ `--move` : Move instead of copy after operation.
+  * `-r` ↔ `--read` : Target/clear read (processed) files.
+  * `-s` ↔ `--sent` : Target/clear sent (processed) files.
+  * `-f` ↔ `--foreground` : Run daemon in foreground (diagnostic/hidden use).
+  * `-G` ↔ `--global` : Operate on global configuration (uppercase to emphasize significance).
+* **Restriction:** Config key arguments (positional, not flags) are explicitly excluded from short-option mapping to maintain clarity and prevent future key-name ambiguity.
+* **Scope:** All future CLI development must follow this policy for consistency.

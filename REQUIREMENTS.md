@@ -81,4 +81,8 @@ Jataí dictates message state via filename prefixes. Base prefixes are configura
 * **Initialization:** `jatai init [path]` handles node setup. `jatai [path]` acts as a direct alias.
 * **Operational Retrieval:** `jatai log` and `jatai log --all` (`-a`) must be available.
 * **Output Mode Policy:** `docs` and `log` are terminal-first and only write files when `--inbox` is explicitly requested.
+* **Canonical Short-Option Mapping:** All optional flags must support abbreviated forms:
+  * `-a` = `--all`, `-i` = `--inbox`, `-m` = `--move`, `-r` = `--read`, `-s` = `--sent`, `-f` = `--foreground`, `-G` = `--global`.
+  * Config key arguments (positional) explicitly exclude short-option mapping.
+  * (See ADR 13 for full policy and rationale).
 *(Refer to the README for the full CLI command table).*
