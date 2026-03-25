@@ -10,7 +10,7 @@ This document details the Architecture Decision Records (ADR) for the Jataí pro
 
 ## **3. Configurable State Machine & Hot-Swap (Prefix Philosophy)**
 * **Decision:** File renaming using *configurable* prefixes dictates the state of messages without a database.
-  * `_` : Delivered successfully to all active nodes.
+  * `_` : **Ignore (OUTBOX) / Read (INBOX).** In OUTBOX, means the file has already been delivered to all active nodes (or is being written/ignored by the user). In INBOX, means it was read/processed locally.
   * `!` : Total error (failed for all nodes), pending retry.
   * `!_` : Partial error (delivered to some, failed for others), pending retry.
   * `!!` : Total error, max retries reached (fatal).
@@ -32,7 +32,12 @@ This document details the Architecture Decision Records (ADR) for the Jataí pro
 * **Max Retries:** A strict `MAX_RETRIES` limit exists. Once reached, files transition to `!!` or `!!_` and are no longer retried. Soft-deleted nodes (`._jatai`) are simply ignored and do not count as delivery failures.
 
 ## **7. Data Safety and Controlled Garbage Collection**
-* **Decision:** Jataí will *only* delete files explicitly marked with the success prefix (`_`). This cleanup can be triggered manually (`jatai clear`) or automatically via configurable retention policies.
+* **Decision:** Jataí will *only* delete files explicitly marked with the success/ignore prefix (`_`).
+* **GC Rules & Triggers:**
+  * **Defaults:** By default, INBOX files are *never* deleted. OUTBOX files have a default limit of `MAX_SENT_FILES = 11` (keeping only the 11 newest files, deleting the oldest).
+  * **Deletion Method:** By default, files are moved to the OS Trash (Recycle Bin/Trash) to prevent accidental data loss. This can be configured to "permanent delete" via settings.
+  * **Execution Intervals:** A standard background sweep occurs every 15 minutes to clean up by age. However, when a quantitative limit is reached (e.g., the 11th file in the OUTBOX), the cleanup must trigger **immediately** upon delivery to prevent queue buildup and avoid freezing older HDDs with mass I/O operations.
+  * *Scope Note:* This GC strategy is strictly designed for local file systems. In future versions involving network/cloud protocols, these retention rules must be re-evaluated.
 
 ## **8. Documentation as Messages (In-Band Help)**
 * **Decision:** Comprehensive documentation is stored in a `docs/` folder. Users can request documentation via `jatai docs` and `jatai docs {query}` with **terminal-first output** (content rendered directly in CLI). A file-delivery mode remains available via an explicit option (`--inbox`) when users want the documentation materialized in the node INBOX.
@@ -50,31 +55,22 @@ This document details the Architecture Decision Records (ADR) for the Jataí pro
   2. **Overlap Prevention:** The system strictly validates and prevents INBOX and OUTBOX from sharing the same directory path (resolving the conflict interactively via the prompt defined in ADR 4).
 
 ## **12. Terminal-First Operational Retrieval (Logs & Docs)**
-* **Context:** Operators need quick inspection of runtime logs and documentation without forcing file drops into node folders.
-* **Decision:** Jataí CLI adopts a **terminal-first retrieval model** for operational content:
-  * `jatai log` returns the latest log entry set in terminal output.
-  * `jatai log --all` (or `jatai log -a`) returns the complete log stream (or paginated/streamed output).
-  * `jatai docs` and `jatai docs {query}` return documentation content in terminal output by default.
-  * Both log and docs commands support an explicit `--inbox` option to export the retrieved content as file(s) into the current node INBOX when persistence/share is needed.
+* **Context:** (...)
+* **Log Rotation & Naming:** To prevent infinite file growth, log files must be generated using a datetime suffix format (e.g., `jatai_YYYY-MM-DD_HHMMSS.log`). A standard alias or symlink file (e.g., `jatai_latest.log`) must always point to the most recent execution for easy access.
 
 ## **13. CLI Short-Option Policy (Abbreviated Flags)**
 * **Context:** CLI usability requires consistent, mnemonic abbreviated options to reduce verbosity in scripts and terminal usage.
 * **Decision:** Adopt a canonical short-option mapping for all optional flags:
-  * `-a` ↔ `--all` : Show/process complete output (e.g., full logs).
-  * `-i` ↔ `--inbox` : Export/process via current node INBOX.
-  * `-m` ↔ `--move` : Move instead of copy after operation.
-  * `-r` ↔ `--read` : Target/clear read (processed) files.
-  * `-s` ↔ `--sent` : Target/clear sent (processed) files.
-  * `-f` ↔ `--foreground` : Run daemon in foreground (diagnostic/hidden use).
-  * `-G` ↔ `--global` : Operate on global configuration (uppercase to emphasize significance).
+  * `-a` → `--all` : Show/process complete output (e.g., full logs).
+  * `-i` → `--inbox` : Export/process via current node INBOX.
+  * `-m` → `--move` : Move instead of copy after operation.
+  * `-r` → `--read` : Target/clear read (processed) files.
+  * `-s` → `--sent` : Target/clear sent (processed) files.
+  * `-f` → `--foreground` : Run daemon in foreground (diagnostic/hidden use).
+  * `-G` → `--global` : Operate on global configuration (uppercase to emphasize significance).
 * **Restriction:** Config key arguments (positional, not flags) are explicitly excluded from short-option mapping to maintain clarity and prevent future key-name ambiguity.
-* **Config Retrieval Extension (specified):** Add explicit retrieval subcommand via `jatai config get [key]` with the following behavior:
-  * Default scope is local node config.
-  * `-G` / `--global` switches retrieval scope to global config.
-  * `-i` / `--inbox` exports rendered retrieval output into current node INBOX.
-  * Optional `key` returns only the requested key value from the selected scope.
-  * Missing key in selected scope must return a clear error (for example, `INBOX_DIR` in global scope when absent).
-* **Scope:** All future CLI development must follow this policy for consistency.
+* **Config Retrieval and Setting Extension:** * `jatai config get [key]` is the strict, canonical way to READ a config.
+  * `jatai config [key] [value]` is the strict, canonical way to SET a config. Both arguments are **mandatory**. Executing `jatai config [key]` without a value must return a clear syntax error, explicitly rejecting the attempt to use it as a shortcut for `get`.
 
 ## **14. TUI Architecture and Default Launch Behavior**
 * **Context:** The current TUI bootstrap is intentionally minimal and does not yet provide a coherent operator workflow across the existing CLI surface. Jataí is file-system first, but operators still need a productive terminal control plane for inspection, configuration, and operational actions.
@@ -89,6 +85,7 @@ This document details the Architecture Decision Records (ADR) for the Jataí pro
 * **Command coverage rule:** The TUI must expose all existing CLI capabilities through discoverable screens, actions, or dialogs, including status, start/stop, docs, log, list, send, read, unread, config, remove, clear, and future CLI additions.
 * **Implementation rule:** The TUI must not reimplement core behavior independently. It must orchestrate the same application services and command handlers used by the regular CLI so terminal and TUI behavior remain aligned.
 * **File-system first constraint:** The TUI is an operator layer, not the primary system interface. It must surface filesystem state clearly and never obscure the underlying INBOX/OUTBOX and prefix-based workflow.
+* **Navigation Feature:** The TUI officially supports a "Browse Nodes" feature, allowing operators to navigate the local file system and switch context to different registered nodes interactively, avoiding terminal directory lock-in.
 
 ## **15. System-Generated INBOX Artifact Prefix Policy**
 * **Context:** Jataí writes some files directly into INBOX as system-generated artifacts (for example onboarding files, exported operational snapshots, or internal notices). These files must be visually distinguishable from user-delivered payload files.

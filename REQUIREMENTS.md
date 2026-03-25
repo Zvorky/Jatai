@@ -18,8 +18,9 @@ This document defines the functional and technical requirements for building Jat
 
 Jataí dictates message state via filename prefixes. Base prefixes are configurable, but default to the following exact matrix:
 
-* **Success States:**
-  * `_` : **Delivered.** In OUTBOX, it reached all active nodes. In INBOX, it was read/processed locally.
+* **Success/Ignore States:**
+  * `_` : **Ignore/Delivered (OUTBOX).** Reached all active nodes, or explicitly marked by the user to be ignored during write.
+  * `_` : **Read (INBOX).** Read/processed locally.
 * **Retry / Error States:**
   * `!` : **Total Error.** Failed to deliver to ALL active nodes. Pending retry.
   * `!_` : **Partial Error.** Delivered to some nodes, failed for others. Pending retry.
@@ -43,7 +44,10 @@ Jataí dictates message state via filename prefixes. Base prefixes are configura
 
 ### **3.2 Migration, Removal & Data Retention**
 * **Soft-Delete:** Renaming `.jatai` to `._jatai` disables the node. The daemon strictly ignores the folder contents, only monitoring the root for reactivation.
-* **Data Retention:** Manual (`jatai clear`) or automatic cleanup applies *only* to successfully processed files (`_`).
+* **Data Retention & Garbage Collection:** * Applies *only* to `_` prefixed files.
+  * **Defaults:** INBOX retains everything (`0` or `null` limit). OUTBOX retains a maximum of 11 files (`GC_MAX_SENT_FILES=11`), deleting the oldest first.
+  * **Deletion Engine:** Uses OS Trash by default. Configurable to hard delete.
+  * **Triggers:** Global sweep every 15 minutes. Immediate local sweep triggered instantly when a quantitative threshold (like the 11 file limit) is hit.
 
 ## **4. Routing Engine (Daemon & Watchdog)**
 
@@ -59,11 +63,9 @@ Jataí dictates message state via filename prefixes. Base prefixes are configura
 
 ## **6. Observability and Logging**
 
-* Exclusive use of the native logging library (`~/.jatai.log`).
-* CLI retrieval must support:
-  * `jatai log` for latest log output in terminal.
-  * `jatai log --all` (or `jatai log -a`) for complete log output in terminal.
-* Log retrieval commands must support `--inbox` to export the rendered result to current node INBOX.
+
+* Exclusive use of the native logging library.
+* **Log Rotation:** Logs are saved with datetime stamps (e.g., `~/.jatai/logs/jatai_YYYYMMDD_HHMMSS.log`), alongside a fixed `jatai_latest.log` pointing to the current run.
 
 ## **7. Automated Testing Strategy**
 
@@ -88,13 +90,9 @@ Jataí dictates message state via filename prefixes. Base prefixes are configura
   * `-a` = `--all`, `-i` = `--inbox`, `-m` = `--move`, `-r` = `--read`, `-s` = `--sent`, `-f` = `--foreground`, `-G` = `--global`.
   * Config key arguments (positional) explicitly exclude short-option mapping.
   * (See ADR 13 for full policy and rationale).
+* **Config Operations:** * `jatai config get [key]` for reading.
+  * `jatai config [key] [value]` for setting. If `value` is missing, the CLI must raise an error.
 * **TUI Framework:** The interactive TUI must be implemented with **Textual**.
 * **TUI Coverage:** The TUI must provide operator access to all CLI capabilities through interactive views and actions, without reducing the existing CLI command surface.
 * **TUI Consistency Rule:** TUI actions must reuse the same underlying application logic as the CLI commands rather than maintaining separate behavior paths.
-* **Config Retrieval Subcommand:** `jatai config get [key]` must be supported.
-  * Default retrieval scope is local node config.
-  * `-G` / `--global` switches retrieval to global config.
-  * `-i` / `--inbox` exports retrieved output to the current node INBOX.
-  * `key` is optional; when present, only that key is returned from selected scope.
-  * If a requested key does not exist in selected scope, command must fail with a clear error message.
-*(Refer to the README for the full CLI command table).*
+* **TUI Context:** The TUI includes "Browse Nodes" for interactive directory switching.
