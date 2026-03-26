@@ -15,12 +15,13 @@ Completing the operational toolset and fixing architectural compliance gaps from
 - [x] Implement `jatai list`, `jatai send`, `jatai read`, `jatai unread`, `jatai remove`.
 - [x] Implement `jatai config` and `jatai config get`.
 - [x] Build the interactive TUI with Textual and implement "Browse Nodes".
-- [ ] **[BUGFIX] OS Auto-Start Enable:** Ensure the daemon installation not only creates the `.service`/`.plist` file, but actually runs the OS command to enable/load it (e.g., `systemctl --user enable`).
-- [ ] **[BUGFIX] Unify Helloworld Drop:** Modify the Daemon auto-onboarding to read `!helloworld.md` from the `docs/` folder instead of using a hardcoded string, matching the `jatai init` behavior.
-- [ ] **[BUGFIX] TUI Feature Parity:** Expose the `--inbox` option inside the TUI for `docs` and `log` commands.
-- [ ] **[BUGFIX] Code Cleanup:** Remove dead code (`deliver_copy_to_outbox()` in `delivery.py`).
-- [ ] **[BUGFIX] Enforce Config Syntax:** Modify `jatai config [key]` to throw a syntax error if `[value]` is missing, enforcing the use of `config get` for reads.
-- [ ] **[BUGFIX] Rename internal methods:** Rename misleading methods like `is_being_written` to `has_ignore_prefix` or similar to reflect the state machine accurately.
+- [x] **[BUGFIX] OS Auto-Start Enable:** Ensure the daemon installation not only creates the `.service`/`.plist` file, but actually runs the OS command to enable/load it (e.g., `systemctl --user enable`).
+- [x] **[BUGFIX] Unify Helloworld Drop:** Modify the Daemon auto-onboarding to read `!helloworld.md` from the `docs/` folder instead of using a hardcoded string, matching the `jatai init` behavior.
+- [x] **[BUGFIX] TUI Feature Parity:** Expose the `--inbox` option inside the TUI for `docs` and `log` commands.
+- [x] **[BUGFIX] Code Cleanup:** Remove dead code (`deliver_copy_to_outbox()` in `delivery.py`).
+- [x] **[BUGFIX] Enforce Config Syntax:** Modify `jatai config [key]` to throw a syntax error if `[value]` is missing, enforcing the use of `config get` for reads.
+- [x] **[BUGFIX] Rename internal methods:** Rename misleading methods like `is_being_written` to `has_ignore_prefix` or similar to reflect the state machine accurately.
+- [x] **[BUGFIX] Update CLI/TUI Tests:** Update/fix CLI and TUI automated tests to match the new config get/set enforcement and TUI async/modal prompt behavior. Ensure tests reflect ADRs and REQUIREMENTS, and are compatible with Textual's event loop requirements.
 
 ## **Phase 7: Advanced Logging & Immediate Garbage Collection**
 Refining the internal engines for long-term disk safety and observability.

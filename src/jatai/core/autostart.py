@@ -24,11 +24,28 @@ class AutoStartRegistrar:
         self.python_executable = python_executable or sys.executable
 
     def register(self) -> Path:
-        """Create the appropriate auto-start configuration file for the host OS."""
+        """Create the appropriate auto-start configuration file for the host OS and enable it."""
         if self.platform_name == "linux":
-            return self._register_systemd_user_service()
+            service_path = self._register_systemd_user_service()
+            # Enable the service for user
+            import subprocess
+            try:
+                subprocess.run([
+                    "systemctl", "--user", "enable", f"{self.service_name}.service"
+                ], check=True)
+            except Exception as e:
+                print(f"Warning: Failed to enable systemd user service: {e}")
+            return service_path
         if self.platform_name == "darwin":
-            return self._register_launch_agent()
+            plist_path = self._register_launch_agent()
+            import subprocess
+            try:
+                subprocess.run([
+                    "launchctl", "load", str(plist_path)
+                ], check=True)
+            except Exception as e:
+                print(f"Warning: Failed to load launch agent: {e}")
+            return plist_path
         if self.platform_name == "windows":
             return self._register_windows_startup_script()
         raise NotImplementedError(f"Unsupported platform for auto-start registration: {self.platform_name}")

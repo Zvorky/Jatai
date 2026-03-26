@@ -294,23 +294,52 @@ class JataiApp(App):
             self._run(status_cmd)
 
         elif key == "2":
-            self._run(docs_cmd, None, False)
+            def _on_docs_inbox(result: Optional[list[str]]) -> None:
+                if result is not None:
+                    inbox_flag = result[0].strip().lower() in {"1", "y", "yes", "true"}
+                    self._run(docs_cmd, None, inbox_flag)
+
+            self.push_screen(
+                _InputModal("Docs Index", [("Export to INBOX? (y/n):", "n")]),
+                _on_docs_inbox,
+            )
 
         elif key == "3":
             def _on_query(result: Optional[list[str]]) -> None:
                 if result is not None:
-                    self._run(docs_cmd, result[0].strip() or None, False)
+                    query = result[0].strip() or None
+                    inbox_flag = result[1].strip().lower() in {"1", "y", "yes", "true"}
+                    self._run(docs_cmd, query, inbox_flag)
 
             self.push_screen(
-                _InputModal("Docs Query", [("Query:", "search term")]),
+                _InputModal("Docs Query", [
+                    ("Query:", "search term"),
+                    ("Export to INBOX? (y/n):", "n")
+                ]),
                 _on_query,
             )
 
         elif key == "4":
-            self._run(log_cmd, False, False)
+            def _on_log_inbox(result: Optional[list[str]]) -> None:
+                if result is not None:
+                    inbox_flag = result[0].strip().lower() in {"1", "y", "yes", "true"}
+                    self._run(log_cmd, False, inbox_flag)
+
+            self.push_screen(
+                _InputModal("Log Latest", [("Export to INBOX? (y/n):", "n")]),
+                _on_log_inbox,
+            )
 
         elif key == "5":
-            self._run(log_cmd, True, False)
+            def _on_logall_inbox(result: Optional[list[str]]) -> None:
+                if result is not None:
+                    inbox_flag = result[0].strip().lower() in {"1", "y", "yes", "true"}
+                    self._run(log_cmd, True, inbox_flag)
+
+            self.push_screen(
+                _InputModal("Log All", [("Export to INBOX? (y/n):", "n")]),
+                _on_logall_inbox,
+            )
 
         elif key == "6":
             def _on_scope(result: Optional[list[str]]) -> None:

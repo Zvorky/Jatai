@@ -80,17 +80,6 @@ class JataiDaemon:
     LOCK_TIMEOUT_SECONDS = 2
     MAINTENANCE_INTERVAL_TICKS = 25
     HELLOWORLD_FILENAME = "!helloworld.md"
-    HELLOWORLD_CONTENT = """# Welcome to Jatai
-
-This node was auto-onboarded from the global registry.
-
-How to use:
-
-1. Drop files into OUTBOX to broadcast.
-2. Read files from INBOX.
-3. Use `jatai status` to inspect this node.
-4. Use `jatai docs` to receive documentation files in INBOX.
-"""
 
     def __init__(
         self,
@@ -137,15 +126,23 @@ How to use:
         return node.node_path / candidate
 
     def _drop_helloworld(self, node: Node) -> None:
+        """Drop !helloworld.md in node INBOX for newly onboarded nodes, reading from docs/helloworld.md."""
+        from pathlib import Path
+        import shutil
+        docs_root = Path(__file__).resolve().parents[3] / "docs"
+        source = docs_root / "helloworld.md"
         inbox = node.inbox_path
         inbox.mkdir(parents=True, exist_ok=True)
         hello_path = inbox / self.HELLOWORLD_FILENAME
         if hello_path.exists():
             return
-        hello_path.write_text(
-            self.HELLOWORLD_CONTENT + f"\nGenerated at: {datetime.now(timezone.utc).isoformat()}\n",
-            encoding="utf-8",
-        )
+        if source.exists():
+            shutil.copy2(source, hello_path)
+        else:
+            hello_path.write_text(
+                f"# Welcome to Jatai\n\n(helloworld.md missing in docs/)\nGenerated at: {datetime.now(timezone.utc).isoformat()}\n",
+                encoding="utf-8",
+            )
 
     def _ensure_node_onboarded(
         self,
@@ -389,7 +386,7 @@ How to use:
             success_prefix=success_prefix,
             error_prefix=str(source_node.get_config("PREFIX_ERROR", "!_")),
         )
-        if Delivery.is_being_written(file_path, success_prefix=success_prefix):
+        if Delivery.has_ignore_prefix(file_path, ignore_prefix=success_prefix):
             return
         if not prefix.is_pending(file_path):
             return
@@ -558,7 +555,7 @@ How to use:
             error_prefix=str(node.get_config("PREFIX_ERROR", "!_")),
         )
         for file_path in sorted(node.list_outbox()):
-            if Delivery.is_being_written(file_path, success_prefix=prefix.success_prefix):
+            if Delivery.has_ignore_prefix(file_path, ignore_prefix=prefix.success_prefix):
                 continue
 
             if prefix.is_pending(file_path):

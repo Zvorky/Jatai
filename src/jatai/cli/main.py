@@ -600,25 +600,16 @@ def config(
         typer.echo("✗ Error: --inbox is only supported with 'config get'", err=True)
         raise typer.Exit(code=1)
 
+    if value is None:
+        typer.echo("✗ Syntax error: 'jatai config [key]' is not allowed. Use 'jatai config get [key]' to read config values.", err=True)
+        raise typer.Exit(code=1)
+
     if global_scope:
         registry = Registry()
         try:
             registry.load()
         except FileNotFoundError:
             pass
-
-        if key is None:
-            typer.echo(f"# source: {registry.registry_path}")
-            typer.echo(yaml.safe_dump(registry.global_config, sort_keys=True), nl=False)
-            return
-
-        if value is None:
-            if key not in registry.global_config:
-                typer.echo(f"✗ Error: unknown global config key: {key}", err=True)
-                raise typer.Exit(code=1)
-            typer.echo(f"# source: {registry.registry_path}")
-            typer.echo(f"{key}={registry.global_config[key]}")
-            return
 
         registry.set_config(key, _coerce_config_value(value))
         registry.save()
@@ -630,19 +621,6 @@ def config(
     except Exception as e:
         typer.echo(f"✗ Error: {e}", err=True)
         raise typer.Exit(code=1)
-
-    if key is None:
-        typer.echo(f"# source: {node.local_config_path}")
-        typer.echo(yaml.safe_dump(node.local_config, sort_keys=True), nl=False)
-        return
-
-    if value is None:
-        if key not in node.local_config:
-            typer.echo(f"✗ Error: unknown local config key: {key}", err=True)
-            raise typer.Exit(code=1)
-        typer.echo(f"# source: {node.local_config_path}")
-        typer.echo(f"{key}={node.local_config[key]}")
-        return
 
     node.set_config(key, _coerce_config_value(value))
     typer.echo(f"✓ Updated local config: {key}")

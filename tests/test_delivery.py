@@ -122,26 +122,26 @@ class TestDeliveryHappyPath:
         assert result.name == "file with spaces & special.txt"
         assert result.exists()
 
-    def test_delivery_is_being_written_true(self, temp_dir):
-        """Test is_being_written returns True for prefixed files."""
+    def test_delivery_has_ignore_prefix_true(self, temp_dir):
+        """Test has_ignore_prefix returns True for prefixed files."""
         file_path = temp_dir / "_being_written.txt"
         file_path.write_text("content")
 
-        assert Delivery.is_being_written(file_path)
+        assert Delivery.has_ignore_prefix(file_path)
 
-    def test_delivery_is_being_written_false(self, temp_dir):
-        """Test is_being_written returns False for normal files."""
+    def test_delivery_has_ignore_prefix_false(self, temp_dir):
+        """Test has_ignore_prefix returns False for normal files."""
         file_path = temp_dir / "normal_file.txt"
         file_path.write_text("content")
 
-        assert not Delivery.is_being_written(file_path)
+        assert not Delivery.has_ignore_prefix(file_path)
 
-    def test_delivery_is_being_written_custom_prefix(self, temp_dir):
-        """Test is_being_written with custom prefix."""
+    def test_delivery_has_ignore_prefix_custom_prefix(self, temp_dir):
+        """Test has_ignore_prefix with custom prefix."""
         file_path = temp_dir / ".work_file.txt"
         file_path.write_text("content")
 
-        assert Delivery.is_being_written(file_path, success_prefix=".work")
+        assert Delivery.has_ignore_prefix(file_path, ignore_prefix=".work")
 
 
 class TestDeliveryErrorFailureScenarios:
@@ -194,10 +194,10 @@ class TestDeliveryErrorFailureScenarios:
         result = delivery.deliver()
         assert result.exists()
 
-    def test_delivery_is_being_written_nonexistent_file(self, temp_dir):
-        """Test is_being_written on nonexistent file."""
+    def test_delivery_has_ignore_prefix_nonexistent_file(self, temp_dir):
+        """Test has_ignore_prefix on nonexistent file."""
         file_path = temp_dir / "nonexistent.txt"
-        assert not Delivery.is_being_written(file_path)
+        assert not Delivery.has_ignore_prefix(file_path)
 
 
 class TestDeliveryMaliciousAdversarialScenarios:

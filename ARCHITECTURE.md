@@ -70,6 +70,9 @@ This document details the Architecture Decision Records (ADR) for the Jataí pro
   * `-G` → `--global` : Operate on global configuration (uppercase to emphasize significance).
 * **Restriction:** Config key arguments (positional, not flags) are explicitly excluded from short-option mapping to maintain clarity and prevent future key-name ambiguity.
 * **Config Retrieval and Setting Extension:** * `jatai config get [key]` is the strict, canonical way to READ a config.
+  * The use of the `get` argument is strict and canonical for reading configuration: `jatai config get [key]`.
+    * The `[key]` argument is optional: if omitted, the entire config file is returned (local by default, or global if `--global/-G` is specified).
+    * The `-i`/`--inbox` flag is the canonical way to export the config retrieval output to the current node INBOX, for both full and partial config retrieval. This applies to `jatai config get`, as well as to documentation and log export commands.
   * `jatai config [key] [value]` is the strict, canonical way to SET a config. Both arguments are **mandatory**. Executing `jatai config [key]` without a value must return a clear syntax error, explicitly rejecting the attempt to use it as a shortcut for `get`.
 
 ## **14. TUI Architecture and Default Launch Behavior**
