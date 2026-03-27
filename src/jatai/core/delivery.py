@@ -92,17 +92,21 @@ class Delivery:
             raise IOError(f"Delivery failed: {e}")
 
     @staticmethod
-    def has_ignore_prefix(file_path: Path, ignore_prefix: str = "_") -> bool:
+    def has_ignore_prefix(
+        file_path: Path, ignore_prefix: str = "_", success_prefix: Optional[str] = None
+    ) -> bool:
         """
         Check if a file has the ignore prefix (was processed or is being written).
 
         Args:
             file_path: Path to check
-            ignore_prefix: Prefix indicating file is ignored/processed
+            ignore_prefix: Fallback prefix indicating file is ignored/processed
+            success_prefix: Optional explicit prefix name (used by callers)
 
         Returns:
             True if file has the ignore prefix, False otherwise
         """
         if not file_path.exists():
             return False
-        return file_path.name.startswith(ignore_prefix)
+        prefix = success_prefix if success_prefix is not None else ignore_prefix
+        return file_path.name.startswith(prefix)

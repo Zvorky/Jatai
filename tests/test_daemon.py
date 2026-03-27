@@ -12,6 +12,7 @@ from jatai.core.autostart import AutoStartRegistrar
 from jatai.core.daemon import AlreadyRunningError, JataiDaemon, JataiWatchdogHandler
 from jatai.core.node import Node
 from jatai.core.registry import Registry
+import shutil
 
 
 class FakeObserver:
@@ -229,6 +230,12 @@ class TestDaemonHappyPath:
         daemon.setup_watchdog()
 
         node.enable()
+        # Simulate a user updating local config to new prefixes so migration should run
+        new_config = dict(node.local_config)
+        new_config["PREFIX_PROCESSED"] = "processed_"
+        new_config["PREFIX_ERROR"] = "error_"
+        node.write_config(new_config)
+
         daemon.handle_node_config_change(node.node_path)
 
         active_nodes = daemon.load_active_nodes()
@@ -257,6 +264,46 @@ class TestDaemonHappyPath:
         new_config["PREFIX_ERROR"] = "error_"
         node.write_config(new_config)
 
+    def test_daemon_creates_softdelete_instead_of_recreating_node(self, temp_home):
+        """When local .jatai is deleted, daemon must create ._jatai (soft-delete)
+        and must not recreate INBOX/OUTBOX or .jatai automatically.
+        """
+        registry_path = temp_home / ".jatai"
+        node = register_node(registry_path, "node_a", temp_home / "node_a")
+
+        # Ensure initial files exist
+        old_success = node.outbox_path / "_done.txt"
+        old_error = node.inbox_path / "!_failed.txt"
+        old_success.write_text("done")
+        old_error.write_text("failed")
+        assert node.local_config_path.exists()
+        assert node.inbox_path.exists()
+        assert node.outbox_path.exists()
+
+        # Simulate a user deleting the local config (preserve inbox/outbox for migration)
+        node.local_config_path.unlink()
+
+        assert not node.local_config_path.exists()
+        assert node.inbox_path.exists()
+        assert node.outbox_path.exists()
+
+        daemon = JataiDaemon(registry_path=registry_path, pid_path=temp_home / ".jatai.pid")
+        # This should call _ensure_node_onboarded and create ._jatai instead of recreating runtime files
+        daemon.load_registered_nodes()
+
+        assert node.disabled_config_path.exists(), "Expected ._jatai soft-delete marker to be created"
+        assert not node.local_config_path.exists(), ".jatai should not be recreated automatically"
+        # INBOX/OUTBOX are preserved so migration can operate on existing history files
+        assert node.inbox_path.exists(), "INBOX should be preserved for migration"
+        assert node.outbox_path.exists(), "OUTBOX should be preserved for migration"
+
+        daemon.handle_node_config_change(node.node_path)
+
+        # Simulate a user updating local config to new prefixes so migration should run
+        new_config = dict(node.local_config)
+        new_config["PREFIX_PROCESSED"] = "processed_"
+        new_config["PREFIX_ERROR"] = "error_"
+        node.write_config(new_config)
         daemon.handle_node_config_change(node.node_path)
 
         assert not old_success.exists()

@@ -80,6 +80,7 @@ When reviewing pending ADR/requirement items:
 - For code commits, update `pyproject.toml` version using `MAJOR.PHASE.ITERATION` before report/commit.
 - For code commits, run `tools/set_version <new_version>` and verify all version citations were updated correctly.
 - Report changes and pending items to the user.
+- **Always activate the Python virtual environment (venv) before running any tests or using Python commands.**
 
 ## Language Requirements
 

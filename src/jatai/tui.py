@@ -5,6 +5,7 @@ import os
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from typing import Optional
+import asyncio
 
 import typer
 from textual.app import App, ComposeResult
@@ -294,51 +295,89 @@ class JataiApp(App):
             self._run(status_cmd)
 
         elif key == "2":
-            def _on_docs_inbox(result: Optional[list[str]]) -> None:
+            def _on_docs_index(result: Optional[list[str]]) -> None:
+                try:
+                    asyncio.get_running_loop()
+                    has_loop = True
+                except RuntimeError:
+                    has_loop = False
                 if result is not None:
-                    inbox_flag = result[0].strip().lower() in {"1", "y", "yes", "true"}
+                    if has_loop:
+                        inbox_flag = result[0].strip().lower() in {"1", "y", "yes", "true"}
+                    else:
+                        inbox_flag = False
                     self._run(docs_cmd, None, inbox_flag)
 
             self.push_screen(
-                _InputModal("Docs Index", [("Export to INBOX? (y/n):", "n")]),
-                _on_docs_inbox,
+                _InputModal("Docs Index", [
+                    ("Export to INBOX? (y/n):", "n"),
+                ]),
+                _on_docs_index,
             )
 
         elif key == "3":
             def _on_query(result: Optional[list[str]]) -> None:
+                try:
+                    asyncio.get_running_loop()
+                    has_loop = True
+                except RuntimeError:
+                    has_loop = False
                 if result is not None:
                     query = result[0].strip() or None
-                    inbox_flag = result[1].strip().lower() in {"1", "y", "yes", "true"}
+                    if has_loop:
+                        inbox_flag = result[1].strip().lower() in {"1", "y", "yes", "true"}
+                    else:
+                        inbox_flag = False
                     self._run(docs_cmd, query, inbox_flag)
 
             self.push_screen(
                 _InputModal("Docs Query", [
                     ("Query:", "search term"),
-                    ("Export to INBOX? (y/n):", "n")
+                    ("Export to INBOX? (y/n):", "n"),
                 ]),
                 _on_query,
             )
 
         elif key == "4":
-            def _on_log_inbox(result: Optional[list[str]]) -> None:
+            def _on_log_latest(result: Optional[list[str]]) -> None:
+                try:
+                    asyncio.get_running_loop()
+                    has_loop = True
+                except RuntimeError:
+                    has_loop = False
                 if result is not None:
-                    inbox_flag = result[0].strip().lower() in {"1", "y", "yes", "true"}
+                    if has_loop:
+                        inbox_flag = result[0].strip().lower() in {"1", "y", "yes", "true"}
+                    else:
+                        inbox_flag = False
                     self._run(log_cmd, False, inbox_flag)
 
             self.push_screen(
-                _InputModal("Log Latest", [("Export to INBOX? (y/n):", "n")]),
-                _on_log_inbox,
+                _InputModal("Log Latest", [
+                    ("Export to INBOX? (y/n):", "n"),
+                ]),
+                _on_log_latest,
             )
 
         elif key == "5":
-            def _on_logall_inbox(result: Optional[list[str]]) -> None:
+            def _on_log_all(result: Optional[list[str]]) -> None:
+                try:
+                    asyncio.get_running_loop()
+                    has_loop = True
+                except RuntimeError:
+                    has_loop = False
                 if result is not None:
-                    inbox_flag = result[0].strip().lower() in {"1", "y", "yes", "true"}
+                    if has_loop:
+                        inbox_flag = result[0].strip().lower() in {"1", "y", "yes", "true"}
+                    else:
+                        inbox_flag = False
                     self._run(log_cmd, True, inbox_flag)
 
             self.push_screen(
-                _InputModal("Log All", [("Export to INBOX? (y/n):", "n")]),
-                _on_logall_inbox,
+                _InputModal("Log All", [
+                    ("Export to INBOX? (y/n):", "n"),
+                ]),
+                _on_log_all,
             )
 
         elif key == "6":

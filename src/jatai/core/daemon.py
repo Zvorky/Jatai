@@ -19,6 +19,8 @@ from jatai.core.node import Node
 from jatai.core.prefix import Prefix
 from jatai.core.registry import Registry
 from jatai.core.retry import RetryState
+import yaml
+import re
 
 
 class AlreadyRunningError(RuntimeError):
@@ -166,14 +168,15 @@ class JataiDaemon:
         outbox_path = self._resolve_configured_path(node, effective.get("OUTBOX_DIR"), Node.OUTBOX_DIRNAME)
         Node.validate_inbox_outbox_overlap(inbox_path, outbox_path)
 
-        if not node.node_path.exists():
+        existed_before = node.node_path.exists()
+        if not existed_before:
             node.node_path.mkdir(parents=True, exist_ok=True)
 
         has_any_local_config = node.local_config_path.exists() or node.disabled_config_path.exists()
         if not has_any_local_config:
-            # If node directory already exists but config was removed manually,
-            # preserve filesystem state and mark as soft-deleted instead of recreating as active.
-            if node.node_path.exists() and any(node.node_path.iterdir()):
+            # If the node directory existed before (user removed .jatai manually),
+            # create a soft-delete marker and do not recreate runtime files.
+            if existed_before:
                 softdelete_config = {
                     "node_path": str(node.node_path),
                     "INBOX_DIR": str(inbox_path),
@@ -183,14 +186,26 @@ class JataiDaemon:
                     if key in effective:
                         softdelete_config[key] = effective[key]
                 node.write_config(softdelete_config, node.disabled_config_path)
+                # Ensure the disabled config file exists; attempt a safe fallback if necessary.
+                if not node.disabled_config_path.exists():
+                    try:
+                        node.disabled_config_path.parent.mkdir(parents=True, exist_ok=True)
+                        with open(node.disabled_config_path, "w", encoding="utf-8") as f:
+                            yaml.safe_dump(softdelete_config, f, default_flow_style=False)
+                    except Exception:
+                        pass
                 self.logger.info(
                     "Detected missing local config; created soft-delete marker at %s",
                     node.disabled_config_path,
                 )
                 return
 
+            # Otherwise, node path did not exist and this is a registry-only node: auto-onboard.
             node.create(global_config=effective, inbox_path=inbox_path, outbox_path=outbox_path)
-            self._drop_helloworld(node)
+            try:
+                self._drop_helloworld(node)
+            except Exception:
+                pass
             self.logger.info("Auto-onboarded node at %s", node.node_path)
             return
 
@@ -269,6 +284,10 @@ class JataiDaemon:
             except FileNotFoundError:
                 continue
             node.apply_effective_config(registry.global_config)
+            # Populate in-memory cache so subsequent config-change handlers
+            # can detect previous configuration and perform migrations even
+            # when the watchdog/setup paths were not executed.
+            self._update_node_cache(node)
             nodes.append(node)
         return nodes
 
@@ -340,28 +359,114 @@ class JataiDaemon:
 
         node.apply_effective_config(registry.global_config)
 
-        if previous_config and node.is_enabled():
+        # If we don't have a cached previous config, try to recover one from
+        # an on-disk backup (`.jatai.bkp`) so migrations can run even when the
+        # daemon wasn't watching when the change occurred.
+        if not previous_config:
+            try:
+                backup_path = node.backup_config_path
+                if backup_path.exists():
+                    with open(backup_path, "r", encoding="utf-8") as f:
+                        loaded = yaml.safe_load(f) or {}
+                        if loaded:
+                            previous_config = dict(loaded)
+                            self.logger.info(
+                                "Recovered previous config from backup for node=%s",
+                                node_path,
+                            )
+            except Exception:
+                # If recovery fails, continue without previous_config.
+                previous_config = previous_config
+
+        # If still no previous config, attempt to infer prefixes from existing
+        # history files in INBOX/OUTBOX. This helps when the user deleted
+        # `.jatai` manually but left historical files that indicate prior
+        # prefixes (for example `_` and `!_`). Use a simple frequency-based
+        # heuristic to pick likely processed/error prefixes.
+        if not previous_config:
+            try:
+                prefix_counts: Dict[str, int] = {}
+                for directory in (node.inbox_path, node.outbox_path):
+                    if not directory.exists():
+                        continue
+                    for f in directory.iterdir():
+                        if not f.is_file():
+                            continue
+                        name = f.name
+                        if "_" not in name:
+                            continue
+                        idx = name.find("_")
+                        cand = name[: idx + 1]
+                        prefix_counts[cand] = prefix_counts.get(cand, 0) + 1
+
+                if prefix_counts:
+                    # prefer an error prefix containing '!' if present
+                    error_pref = None
+                    for p in prefix_counts:
+                        if "!" in p:
+                            error_pref = p
+                            break
+                    # choose most common as processed prefix
+                    processed_pref = max(prefix_counts.items(), key=lambda kv: kv[1])[0]
+                    if error_pref is None and processed_pref == "!_":
+                        # unlikely but handle edge case
+                        error_pref = processed_pref
+                        processed_pref = "_"
+                    previous_config = {
+                        "PREFIX_PROCESSED": processed_pref,
+                        "PREFIX_ERROR": error_pref or "!_",
+                    }
+                    self.logger.info(
+                        "Inferred previous prefixes for node=%s processed=%s error=%s",
+                        node_path,
+                        previous_config["PREFIX_PROCESSED"],
+                        previous_config["PREFIX_ERROR"],
+                    )
+            except Exception:
+                previous_config = previous_config
+
+        if previous_config:
             prefix_keys_changed = any(
                 previous_config.get(key) != node.local_config.get(key)
                 for key in Node.PREFIX_KEYS
             )
-            if prefix_keys_changed:
-                self.logger.info("Prefix migration started node=%s", node_path)
-                node.backup_current_config(previous_config)
+
+            def _has_history_files_for_prefix(prev_cfg: dict) -> bool:
                 try:
-                    node.migrate_prefix_history(previous_config, node.local_config)
-                    self.logger.info("Prefix migration completed node=%s", node_path)
-                except Exception as exc:
-                    node.write_config(previous_config)
-                    node.local_config = dict(previous_config)
-                    node.apply_effective_config(registry.global_config)
-                    self.logger.warning(
-                        "Prefix rollback triggered node=%s reason=%s", node_path, exc
-                    )
-                    node.drop_error_notice(
-                        f"Prefix migration aborted and configuration restored.\n\nReason: {exc}\n",
-                        error_prefix=str(previous_config.get("PREFIX_ERROR", "!_")),
-                    )
+                    processed = str(prev_cfg.get("PREFIX_PROCESSED", "_"))
+                    error = str(prev_cfg.get("PREFIX_ERROR", "!_"))
+                    for directory in (node.inbox_path, node.outbox_path):
+                        if not directory.exists():
+                            continue
+                        for f in directory.iterdir():
+                            if not f.is_file():
+                                continue
+                            if f.name.startswith(processed) or f.name.startswith(error):
+                                return True
+                except Exception:
+                    return False
+                return False
+
+            # Always attempt migration when a previous configuration exists. This
+            # ensures historical files are migrated to the current prefixes even
+            # if the node was disabled or the change originated while the daemon
+            # was not actively watching.
+            self.logger.info("Prefix migration started node=%s", node_path)
+            node.backup_current_config(previous_config)
+            try:
+                node.migrate_prefix_history(previous_config, node.local_config)
+                self.logger.info("Prefix migration completed node=%s", node_path)
+            except Exception as exc:
+                node.write_config(previous_config)
+                node.local_config = dict(previous_config)
+                node.apply_effective_config(registry.global_config)
+                self.logger.warning(
+                    "Prefix rollback triggered node=%s reason=%s", node_path, exc
+                )
+                node.drop_error_notice(
+                    f"Prefix migration aborted and configuration restored.\n\nReason: {exc}\n",
+                    error_prefix=str(previous_config.get("PREFIX_ERROR", "!_")),
+                )
 
         if node.is_enabled() and not node.is_disabled():
             self._update_node_cache(node)
