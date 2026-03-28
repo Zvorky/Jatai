@@ -610,6 +610,45 @@ suite_phase7() {
   return 0
 }
 
+suite_phase7_full() {
+  load_state
+  local failures=0
+
+  echo "[$(timestamp)] ===== PHASE7-FULL SUITE ====="
+  # setup two nodes and validate global .jatai operations + filesystem behavior
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN init '$JATAI_TEST_A'" || failures=$((failures + 1))
+  run_cmd "cd '$JATAI_TEST_B' && export HOME='$TEST_HOME' && $JATAI_BIN init '$JATAI_TEST_B'" || failures=$((failures + 1))
+
+  # switch to node_a and verify OUTBOX/inbox operations
+  run_cmd "printf 'hello' > '$JATAI_TEST_A/OUTBOX/msg1.txt'" || failures=$((failures + 1))
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN start" || failures=$((failures + 1))
+  sleep 2
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN stop" || failures=$((failures + 1))
+  local retries=10
+  while [[ $retries -gt 0 ]] && [[ ! -f '$JATAI_TEST_B/INBOX/msg1.txt' ]]; do
+    sleep 0.5
+    retries=$((retries - 1))
+  done
+
+  if [[ ! -f '$JATAI_TEST_B/INBOX/msg1.txt' ]]; then
+    echo "[$(timestamp)] ✗ FAILED: phase7-full delivery across nodes"
+    failures=$((failures + 1))
+  else
+    echo "[$(timestamp)] ✓ phase7-full delivery across nodes succeeded"
+  fi
+
+  # soft-delete behavior from registry on existing path w/o local .jatai
+  run_cmd "rm -f '$JATAI_TEST_A/.jatai'" || failures=$((failures + 1))
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN status" && failures=$((failures + 1)) || true
+
+  # ensure global registration still present but not in-memory created to new path
+  run_cmd "cd '$JATAI_TEST_B' && export HOME='$TEST_HOME' && $JATAI_BIN list" || failures=$((failures + 1))
+
+  snapshot_dirs
+  echo "[$(timestamp)] phase7-full suite failures=$failures"
+  return 0
+}
+
 action_suite() {
   if [[ $# -eq 0 ]]; then
     echo "ERROR: suite expects a suite name"
@@ -626,6 +665,9 @@ action_suite() {
       ;;
     phase7)
       suite_phase7
+      ;;
+    phase7-full)
+      suite_phase7_full
       ;;
     migration)
       suite_migration
@@ -695,6 +737,7 @@ action_all() {
   action_suite smoke
   action_suite filesystem
   action_suite phase7
+  action_suite phase7-full
   action_suite advanced
   action_suite startup-scan
   action_suite config
@@ -714,7 +757,7 @@ Usage:
   tools/manual_test_helper.sh setup
   tools/manual_test_helper.sh snapshot
   tools/manual_test_helper.sh run -- <command>
-  tools/manual_test_helper.sh suite <smoke|filesystem|phase7|advanced|startup-scan|config|tui-config-get>
+  tools/manual_test_helper.sh suite <smoke|filesystem|phase7|phase7-full|advanced|startup-scan|config|tui-config-get>
   tools/manual_test_helper.sh cleanup
   tools/manual_test_helper.sh all
 

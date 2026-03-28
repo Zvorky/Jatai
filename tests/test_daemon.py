@@ -356,7 +356,7 @@ class TestDaemonHappyPath:
         assert "collision" in notice_files[0].read_text(encoding="utf-8").lower()
         assert not list(node_b.inbox_path.glob("!_config-migration-error*.md"))
 
-    def test_daemon_auto_onboards_registry_only_node(self, temp_home):
+    def test_daemon_registry_only_node_not_created(self, temp_home):
         registry_path = temp_home / ".jatai"
         manual_node_path = temp_home / "manual_node"
 
@@ -369,14 +369,12 @@ class TestDaemonHappyPath:
         daemon = JataiDaemon(registry_path=registry_path, pid_path=temp_home / ".jatai.pid")
         nodes = daemon.load_registered_nodes()
 
-        assert len(nodes) == 1
-        assert manual_node_path.exists()
-        assert (manual_node_path / "INBOX").exists()
-        assert (manual_node_path / "OUTBOX").exists()
-        assert (manual_node_path / ".jatai").exists()
-        hello = manual_node_path / "INBOX" / "!helloworld.md"
-        assert hello.exists()
-        assert "Welcome to Jatai" in hello.read_text(encoding="utf-8")
+        assert len(nodes) == 0
+        assert not manual_node_path.exists()
+        assert not (manual_node_path / "INBOX").exists()
+        assert not (manual_node_path / "OUTBOX").exists()
+        assert not (manual_node_path / ".jatai").exists()
+
 
     def test_daemon_auto_onboarding_respects_custom_dirs(self, temp_home):
         registry_path = temp_home / ".jatai"
@@ -391,9 +389,10 @@ class TestDaemonHappyPath:
         daemon = JataiDaemon(registry_path=registry_path, pid_path=temp_home / ".jatai.pid")
         nodes = daemon.load_registered_nodes()
 
-        assert len(nodes) == 1
-        assert (manual_node_path / "messages" / "in").exists()
-        assert (manual_node_path / "messages" / "out").exists()
+        assert len(nodes) == 0
+        assert not manual_node_path.exists()
+        assert not (manual_node_path / "messages" / "in").exists()
+        assert not (manual_node_path / "messages" / "out").exists()
 
     def test_daemon_missing_local_config_creates_softdelete_marker(self, temp_home):
         registry_path = temp_home / ".jatai"
@@ -717,7 +716,7 @@ class TestDaemonLogging:
         daemon.load_registered_nodes()
 
         log = self._log_text(log_path)
-        assert "Auto-onboarded" in log
+        assert "Node path missing; skipping auto-onboarding" in log
         assert str(manual_node_path) in log
 
     def test_log_onboarding_failure_warning(self, temp_home):

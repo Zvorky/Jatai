@@ -195,43 +195,38 @@ class JataiDaemon:
 
         existed_before = node.node_path.exists()
         if not existed_before:
-            node.node_path.mkdir(parents=True, exist_ok=True)
+            # Node path is registered globally but not present on disk: do not create files.
+            self.logger.warning(
+                "Node path missing; skipping auto-onboarding for node=%s",
+                node.node_path,
+            )
+            return
 
         has_any_local_config = node.local_config_path.exists() or node.disabled_config_path.exists()
         if not has_any_local_config:
             # If the node directory existed before (user removed .jatai manually),
             # create a soft-delete marker and do not recreate runtime files.
-            if existed_before:
-                softdelete_config = {
-                    "node_path": str(node.node_path),
-                    "INBOX_DIR": str(inbox_path),
-                    "OUTBOX_DIR": str(outbox_path),
-                }
-                for key in ("PREFIX_PROCESSED", "PREFIX_ERROR", "RETRY_DELAY_BASE", "MAX_RETRIES"):
-                    if key in effective:
-                        softdelete_config[key] = effective[key]
-                node.write_config(softdelete_config, node.disabled_config_path)
-                # Ensure the disabled config file exists; attempt a safe fallback if necessary.
-                if not node.disabled_config_path.exists():
-                    try:
-                        node.disabled_config_path.parent.mkdir(parents=True, exist_ok=True)
-                        with open(node.disabled_config_path, "w", encoding="utf-8") as f:
-                            yaml.safe_dump(softdelete_config, f, default_flow_style=False)
-                    except Exception:
-                        pass
-                self.logger.info(
-                    "Detected missing local config; created soft-delete marker at %s",
-                    node.disabled_config_path,
-                )
-                return
-
-            # Otherwise, node path did not exist and this is a registry-only node: auto-onboard.
-            node.create(global_config=effective, inbox_path=inbox_path, outbox_path=outbox_path)
-            try:
-                self._drop_helloworld(node)
-            except Exception:
-                pass
-            self.logger.info("Auto-onboarded node at %s", node.node_path)
+            softdelete_config = {
+                "node_path": str(node.node_path),
+                "INBOX_DIR": str(inbox_path),
+                "OUTBOX_DIR": str(outbox_path),
+            }
+            for key in ("PREFIX_PROCESSED", "PREFIX_ERROR", "RETRY_DELAY_BASE", "MAX_RETRIES"):
+                if key in effective:
+                    softdelete_config[key] = effective[key]
+            node.write_config(softdelete_config, node.disabled_config_path)
+            # Ensure the disabled config file exists; attempt a safe fallback if necessary.
+            if not node.disabled_config_path.exists():
+                try:
+                    node.disabled_config_path.parent.mkdir(parents=True, exist_ok=True)
+                    with open(node.disabled_config_path, "w", encoding="utf-8") as f:
+                        yaml.safe_dump(softdelete_config, f, default_flow_style=False)
+                except Exception:
+                    pass
+            self.logger.info(
+                "Detected missing local config; created soft-delete marker at %s",
+                node.disabled_config_path,
+            )
             return
 
         inbox_path.mkdir(parents=True, exist_ok=True)
