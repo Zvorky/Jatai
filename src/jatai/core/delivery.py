@@ -91,37 +91,22 @@ class Delivery:
                     pass
             raise IOError(f"Delivery failed: {e}")
 
-    def deliver_copy_to_outbox(self, outbox_path: Path) -> Path:
-        """
-        Copy a file to OUTBOX (used when file needs to be broadcasted).
-
-        Args:
-            outbox_path: Path to the OUTBOX directory
-
-        Returns:
-            Path to the copied file in OUTBOX
-
-        Raises:
-            NotADirectoryError: If outbox_path is not a directory
-        """
-        if not outbox_path.is_dir():
-            raise NotADirectoryError(f"OUTBOX is not a directory: {outbox_path}")
-
-        self.destination_path = outbox_path
-        return self.deliver()
-
     @staticmethod
-    def is_being_written(file_path: Path, success_prefix: str = "_") -> bool:
+    def has_ignore_prefix(
+        file_path: Path, ignore_prefix: str = "_", success_prefix: Optional[str] = None
+    ) -> bool:
         """
-        Check if a file is currently being written (has success prefix).
+        Check if a file has the ignore prefix (was processed or is being written).
 
         Args:
             file_path: Path to check
-            success_prefix: Prefix indicating file is being written
+            ignore_prefix: Fallback prefix indicating file is ignored/processed
+            success_prefix: Optional explicit prefix name (used by callers)
 
         Returns:
-            True if file has the success prefix, False otherwise
+            True if file has the ignore prefix, False otherwise
         """
         if not file_path.exists():
             return False
-        return file_path.name.startswith(success_prefix)
+        prefix = success_prefix if success_prefix is not None else ignore_prefix
+        return file_path.name.startswith(prefix)

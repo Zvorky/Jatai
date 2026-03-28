@@ -3,6 +3,8 @@ OS auto-start registration helpers for the Jataí daemon.
 """
 
 import platform
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import Optional
@@ -24,13 +26,29 @@ class AutoStartRegistrar:
         self.python_executable = python_executable or sys.executable
 
     def register(self) -> Path:
-        """Create the appropriate auto-start configuration file for the host OS."""
+        """Create the appropriate auto-start configuration file for the host OS and enable it."""
         if self.platform_name == "linux":
-            return self._register_systemd_user_service()
+            service_path = self._register_systemd_user_service()
+            enabled = self._enable_systemd_service()
+            if not enabled:
+                print(
+                    "Warning: Could not enable systemd user service. "
+                    "The daemon may not auto-start on boot. "
+                    "Run 'systemctl --user enable {0}.service' manually if needed.".format(self.service_name)
+                )
+            return service_path
+
         if self.platform_name == "darwin":
-            return self._register_launch_agent()
+            plist_path = self._register_launch_agent()
+            try:
+                subprocess.run(["launchctl", "load", str(plist_path)], check=True)
+            except subprocess.CalledProcessError as e:
+                print(f"Warning: Failed to load launch agent: {e}")
+            return plist_path
+
         if self.platform_name == "windows":
             return self._register_windows_startup_script()
+
         raise NotImplementedError(f"Unsupported platform for auto-start registration: {self.platform_name}")
 
     def _daemon_exec_start(self) -> str:
@@ -53,6 +71,23 @@ class AutoStartRegistrar:
             encoding="utf-8",
         )
         return service_path
+
+    def _enable_systemd_service(self) -> bool:
+        if shutil.which("systemctl") is None:
+            return False
+
+        try:
+            subprocess.run(
+                ["systemctl", "--user", "enable", f"{self.service_name}.service"],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            return True
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            return False
+        except Exception:
+            return False
 
     def _register_launch_agent(self) -> Path:
         plist_dir = self.home_path / "Library" / "LaunchAgents"
@@ -77,13 +112,3 @@ class AutoStartRegistrar:
             encoding="utf-8",
         )
         return plist_path
-
-    def _register_windows_startup_script(self) -> Path:
-        startup_dir = self.home_path / "AppData" / "Roaming" / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
-        startup_dir.mkdir(parents=True, exist_ok=True)
-        script_path = startup_dir / f"{self.service_name}.cmd"
-        script_path.write_text(
-            f'@echo off\nstart "" "{self.python_executable}" -m jatai.cli.main _daemon-run\n',
-            encoding="utf-8",
-        )
-        return script_path

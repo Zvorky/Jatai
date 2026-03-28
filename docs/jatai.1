@@ -1,4 +1,4 @@
-.TH JATAI 1 "2026-03-23" "0.6.4" "Jataí Manual"
+.TH JATAI 1 "2026-03-23" "0.6.9" "Jataí Manual"
 .SH NAME
 jatai \- local file-system message bus for scripts and agents
 .SH SYNOPSIS
@@ -20,8 +20,9 @@ Invoking
 with no arguments opens the interactive TUI when running in an interactive
 terminal. In non-interactive execution, it displays the CLI help summary.
 .PP
-Current TUI menu actions cover status, docs/log retrieval, list/send/read/unread,
-config get/set, remove, clear, daemon start/stop, help, and quit.
+Current TUI menu actions cover init, status, docs/log retrieval,
+list/send/read/unread, config get/set, remove, clear, daemon start/stop,
+and browse-node directory navigation.
 .SH COMMANDS
 .TP
 .B jatai [\fIPATH\fR]
@@ -32,12 +33,12 @@ Jataí node.
 .B jatai init [\fIPATH\fR]
 Initialise a Jataí node at \fIPATH\fR (defaults to the current working
 directory). Creates the INBOX and OUTBOX directories, writes a local
-\fI.jatai\fR configuration file, and registers the node in the global
-registry at \fI~/.jatai\fR.
+\fI.jatai\fR configuration file, drops \fI!helloworld.md\fR into INBOX,
+and registers the node in the global registry at \fI~/.jatai\fR.
 .TP
 .B jatai status
-Show the status of the Jataí node in the current directory: INBOX and OUTBOX
-file counts.
+Show the status of the Jataí node in the current directory: node path,
+local config path, and INBOX/OUTBOX file counts.
 .TP
 .B jatai start
 Start the Jataí background daemon. The daemon watches all registered node
@@ -59,7 +60,8 @@ Show daemon logs in terminal. \fB--all\fR shows full output. \fB--inbox\fR expor
 rendered output to current node INBOX.
 .TP
 .B jatai list [\fIaddrs|inbox|outbox\fR]
-List known addresses or files from current node INBOX/OUTBOX.
+List known addresses or files from current node INBOX/OUTBOX. For
+\fBaddrs\fR, output includes the registry source path (\fI~/.jatai\fR).
 .TP
 .B jatai send \fIFILE\fR [\fB-m\fR|\fB--move\fR]
 Copy (or move) an external file into the current node OUTBOX.
@@ -72,14 +74,21 @@ Mark an INBOX file as unread by removing the success prefix.
 .TP
 .B jatai config [\fIKEY\fR] [\fIVALUE\fR] [\fB-G\fR|\fB--global\fR]
 Read or write configuration values. \fB--global\fR targets global registry config.
-Config keys are positional arguments.
+Config keys are positional arguments. Read-mode output includes a source header
+showing the config file path used.
 .TP
 .B jatai config get [\fIKEY\fR] [\fB-G\fR|\fB--global\fR] [\fB-i\fR|\fB--inbox\fR]
 Read-only config retrieval. Defaults to local scope, switches to global with
 \fB--global\fR, and can export output to current node INBOX with \fB--inbox\fR.
+Terminal output includes a source config path header; INBOX export writes only
+the rendered config payload.
 .TP
 .B jatai remove [\fIPATH\fR]
 Soft-delete a node by renaming \fI.jatai\fR to \fI._jatai\fR.
+.PP
+If \fI.jatai\fR is manually deleted from an existing registered node directory,
+daemon maintenance writes \fI._jatai\fR to preserve soft-delete semantics
+instead of silently recreating an active node.
 .TP
 .B jatai clear [\fB-r\fR|\fB--read\fR] [\fB-s\fR|\fB--sent\fR]
 Clear processed history files from INBOX and/or OUTBOX.

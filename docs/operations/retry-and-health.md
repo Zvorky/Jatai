@@ -19,11 +19,14 @@ delay = RETRY_DELAY_BASE * (2 ^ (retry_index - 1))
 
 Default `RETRY_DELAY_BASE` is **60 seconds**. With the default `MAX_RETRIES = 3`:
 
-| Attempt | Delay       |
-|---------|-------------|
-| 1st     | 60 seconds  |
-| 2nd     | 120 seconds |
-| 3rd     | fatal       |
+| Attempt | Description | Delay       |
+|---------|-------------|-------------|
+| 1st     | initial attempt | immediate  |
+| 2nd     | first retry | 60 seconds |
+| 3rd     | second retry | 120 seconds |
+| 4th     | third retry (fatal after this) | 240 seconds |
+
+Note: the system performs at most `1 original + MAX_RETRIES` delivery attempts.
 
 Each node can override these values independently via its local `.jatai` config.
 

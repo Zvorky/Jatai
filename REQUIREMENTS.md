@@ -18,8 +18,9 @@ This document defines the functional and technical requirements for building Jat
 
 Jataí dictates message state via filename prefixes. Base prefixes are configurable, but default to the following exact matrix:
 
-* **Success States:**
-  * `_` : **Delivered.** In OUTBOX, it reached all active nodes. In INBOX, it was read/processed locally.
+* **Success/Ignore States:**
+  * `_` : **Ignore/Delivered (OUTBOX).** Reached all active nodes, or explicitly marked by the user to be ignored during write.
+  * `_` : **Read (INBOX).** Read/processed locally.
 * **Retry / Error States:**
   * `!` : **Total Error.** Failed to deliver to ALL active nodes. Pending retry.
   * `!_` : **Partial Error.** Delivered to some nodes, failed for others. Pending retry.
@@ -37,33 +38,49 @@ Jataí dictates message state via filename prefixes. Base prefixes are configura
 * **Global Registry (`~/.jatai`):** YAML file containing absolute paths of all nodes. **Must be protected by a file lock** during reads/writes.
 * **Local Configuration (`.jatai`):** Stores node metadata. Backups (`.jatai.bkp`) are maintained for rollback scenarios.
 
+Jataí explicitly separates user configuration from system state.
+
+* **User Configuration (File-System):**
+  * **Global Registry (`~/.jatai`):** YAML file containing absolute paths of active nodes and global settings. **Must be protected by a filelock.**
+  * **Local Configuration (`.jatai`):** Stores node metadata. Manual backups (`.jatai.bkp`) are maintained locally. Operations on `.jatai` (save/load) **must also be protected by a filelock**.
+* **System Control State (OS Temporary Directory):**
+  * Located at `/tmp/jatai/` (or OS equivalent). Contains UTF-8 YAML files.
+  * `uuid_map.yaml`: Dictionary mapping node paths to unique UUIDs.
+  * `removed.yaml`: List of soft-deleted addresses. Auto-removed addresses are explicitly marked (e.g., via an `--autoremoved` flag or property).
+  * `bkp/<UUID>.yaml`: Cached copies of local node configurations, used by the daemon as the ultimate source of truth for safe prefix rollbacks.
+
 ### **3.1 Validation & Initialization**
 * **Overlap Prevention:** `jatai init` and the Daemon must strictly validate that `INBOX_DIR` and `OUTBOX_DIR` are NOT the same path.
 * **Collision Handling:** If a file being delivered to an INBOX already exists, a numerical suffix (e.g., `(1)`) must be appended.
 
 ### **3.2 Migration, Removal & Data Retention**
 * **Soft-Delete:** Renaming `.jatai` to `._jatai` disables the node. The daemon strictly ignores the folder contents, only monitoring the root for reactivation.
-* **Data Retention:** Manual (`jatai clear`) or automatic cleanup applies *only* to successfully processed files (`_`).
+* **Automatic Soft-Remove Marking:** When the daemon detects that a registered node's local `.jatai` file no longer exists, it must:
+  * add the node address to `removed.yaml` using an appended ` --autoremoved` suffix on the stored path to indicate the entry was automatically created by the daemon;
+  * explicitly avoid recreating or reactivating the node's directories or files (INBOX/OUTBOX/.jatai) as part of this operation; reactivation requires explicit user action (restore/rename or re-registration).
+* **Data Retention & Garbage Collection:** * Applies *only* to `_` prefixed files.
+  * **Defaults:** INBOX retains everything (`0` or `null` limit). OUTBOX retains a maximum of 11 files (`GC_MAX_SENT_FILES=11`), deleting the oldest first.
+  * **Deletion Engine:** Uses OS Trash by default. Configurable to hard delete.
+  * **Triggers:** Global sweep every 15 minutes. Immediate local sweep triggered instantly when a quantitative threshold (like the 11 file limit) is hit.
 
 ## **4. Routing Engine (Daemon & Watchdog)**
 
 * **Exclusivity:** The daemon must implement a PID/Lock file (e.g., `~/.jatai.pid`). Subsequent `jatai start` calls must abort with a friendly "Already running" message.
-* **OS Auto-Start:** The daemon registers itself with the host OS to run silently in the background.
+* **OS Auto-Start:** The daemon registers itself with the host OS (focusing on Linux/systemd). If registration fails or the OS is incompatible, the system must catch the exception and print an explicit warning to the user rather than failing silently.
 * **Startup Scan:** Processes pending files on boot.
 * **Real-Time Trigger:** `watchdog` listens for file creations/moves in `OUTBOX` folders.
 
 ## **5. Retry Mechanism (Failure Management)**
 
 * **Exponential Logic:** Delay is `[Node's RETRY_DELAY_BASE] * (2 ^ retry_index)`. 
-* **Limits:** A `MAX_RETRIES` parameter dictates when a file moves from `!` / `!_` to the fatal `!!` / `!!_` states.
+* **Limits:** A `MAX_RETRIES` parameter dictates when a file moves from `!` / `!_` to the fatal `!!` / `!!_` states. The calculation is `1 (Initial Attempt) + MAX_RETRIES (Retries)`.
 
 ## **6. Observability and Logging**
 
-* Exclusive use of the native logging library (`~/.jatai.log`).
-* CLI retrieval must support:
-  * `jatai log` for latest log output in terminal.
-  * `jatai log --all` (or `jatai log -a`) for complete log output in terminal.
-* Log retrieval commands must support `--inbox` to export the rendered result to current node INBOX.
+
+* Exclusive use of the native logging library.
+* **Log Location:** All rotated logs with datetime stamps are stored in `/tmp/jatai/logs/`.
+* **Latest Log Pointer:** A fixed `jatai_latest.log` shortcut pointing to the current run is maintained. The path for this specific shortcut is user-configurable in the global `~/.jatai` registry.
 
 ## **7. Automated Testing Strategy**
 
@@ -88,13 +105,9 @@ Jataí dictates message state via filename prefixes. Base prefixes are configura
   * `-a` = `--all`, `-i` = `--inbox`, `-m` = `--move`, `-r` = `--read`, `-s` = `--sent`, `-f` = `--foreground`, `-G` = `--global`.
   * Config key arguments (positional) explicitly exclude short-option mapping.
   * (See ADR 13 for full policy and rationale).
+* **Config Operations:** * `jatai config get [key]` for reading.
+  * `jatai config [key] [value]` for setting. If `value` is missing, the CLI must raise an error.
 * **TUI Framework:** The interactive TUI must be implemented with **Textual**.
 * **TUI Coverage:** The TUI must provide operator access to all CLI capabilities through interactive views and actions, without reducing the existing CLI command surface.
 * **TUI Consistency Rule:** TUI actions must reuse the same underlying application logic as the CLI commands rather than maintaining separate behavior paths.
-* **Config Retrieval Subcommand:** `jatai config get [key]` must be supported.
-  * Default retrieval scope is local node config.
-  * `-G` / `--global` switches retrieval to global config.
-  * `-i` / `--inbox` exports retrieved output to the current node INBOX.
-  * `key` is optional; when present, only that key is returned from selected scope.
-  * If a requested key does not exist in selected scope, command must fail with a clear error message.
-*(Refer to the README for the full CLI command table).*
+* **TUI Context:** The TUI includes "Browse Nodes" for interactive directory switching.

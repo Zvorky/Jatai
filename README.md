@@ -1,7 +1,7 @@
 # **Jataí 🐝**
 **The local micro-email and messaging bus for your file system. Connect scripts and AI agents instantly using a zero-config drop-folder pattern. Jataí uses OS file events to route data across directories via standardized INBOX/OUTBOX folders, without complex APIs or sockets. Drop a file, and it's delivered!**
 
-**Version:** `0.6.4` (_Alpha_) · **Author:** Zvorky
+**Version:** `0.6.9` (_Alpha_) · **Author:** Zvorky
 
 ## **🎯 Philosophy & Goal**
 
@@ -31,6 +31,7 @@ Add the following entries to your project's `.gitignore` to avoid committing Jat
 # Jataí
 INBOX/
 OUTBOX/
+.jatai.lock
 # .jatai # Settings, you may want to synchronize them
 ```
 
@@ -48,19 +49,20 @@ Current implementation status: core modules, basic CLI, daemon lifecycle, startu
 8. **Configuration reactivity already implemented in core:** Local `.jatai` overrides are applied over global defaults, `._jatai` nodes are ignored while their roots remain monitored, and reactivation via rename is handled by the daemon.
 9. **Prefix migration safety already implemented in core:** Prefix changes trigger historical file renames; collisions restore the previous config from `.jatai.bkp` and drop an error notice into the node INBOX.
 10. **Onboarding and docs already implemented in core/CLI:** Registry-only nodes are auto-created by the daemon (including `!helloworld.md` in new INBOXes), `jatai docs` renders documentation in terminal by default, and `jatai docs [query]` renders matching markdown docs in terminal by default (`-i|--inbox` exports to files).
+11. **Manual local-config deletion safety:** If `.jatai` is manually deleted from an existing registered node directory, the daemon will record the node as auto-removed in `/tmp/jatai/removed.yaml` (appending ` --autoremoved` to the stored path) and will NOT recreate `._jatai` or any node directories/files. The `._jatai` soft-delete marker is only created by explicit CLI/TUI removal actions (for example `jatai remove`, which performs `.jatai` → `._jatai`).
 
 ## **🛠️ CLI & TUI Toolbox**
 
 | Command | Action |
 | :---- | :---- |
 | `jatai` | Opens the interactive Text User Interface (TUI) when run in an interactive terminal; otherwise prints CLI help. |
-| `jatai init [path]` | Initializes a node. Note: `jatai [path]` works as a direct alias. |
+| `jatai init [path]` | Initializes a node, registers it globally, and drops `!helloworld.md` into INBOX. Note: `jatai [path]` works as a direct alias. |
 | `jatai start` | Starts the daemon and registers it for OS auto-start. Fails safely if already running. |
 | `jatai stop` | Stops the background daemon. |
-| `jatai status` | Returns file counters for the current node. |
+| `jatai status` | Returns node path, local config path, and file counters for the current node. |
 | `jatai config [-G\|--global] [key] [value]` | Reads/writes configuration in local/global scope. |
-| `jatai config get [key] [-G\|--global] [-i\|--inbox]` | Read-only config retrieval (single key or full scope), optionally exported to current node INBOX. |
-| `jatai list [addrs\|inbox\|outbox]` | Lists files in current node (inbox/outbox) or all nodes (addrs). |
+| `jatai config get [key] [-G\|--global] [-i\|--inbox]` | Read-only config retrieval (single key or full scope); terminal mode shows source config path, and `--inbox` exports to current node INBOX. |
+| `jatai list [addrs\|inbox\|outbox]` | Lists files in current node (inbox/outbox) or all nodes (addrs); `addrs` output shows global registry path. |
 | `jatai send <file> [-m\|--move]` | Copies (or moves) an external file into the local OUTBOX. |
 | `jatai read <file>` | Renames a file in the INBOX, adding the success prefix. |
 | `jatai unread <file>` | Removes the success prefix from a file in the INBOX. |
@@ -75,6 +77,7 @@ Current implementation status: core modules, basic CLI, daemon lifecycle, startu
 `jatai` in an interactive terminal opens a menu-driven TUI that exposes the same handlers as CLI commands:
 
 - `status`, `start`, `stop`
+- `init`, `browse nodes` (navigate current working directory to a registered node)
 - `docs` (index/query), `log` (latest/all)
 - `list`, `send`, `read`, `unread`
 - `config get`, `config set` (local/global, optional INBOX export for get)

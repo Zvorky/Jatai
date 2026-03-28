@@ -1,8 +1,11 @@
 """Textual-based interactive TUI for Jataí."""
 
 import io
+import os
 from contextlib import redirect_stderr, redirect_stdout
+from pathlib import Path
 from typing import Optional
+import asyncio
 
 import typer
 from textual.app import App, ComposeResult
@@ -38,6 +41,7 @@ MENU_ITEMS: list[tuple[str, str]] = [
     ("13", "Clear Processed"),
     ("14", "Start Daemon"),
     ("15", "Stop Daemon"),
+    ("b",  "Browse Nodes"),
 ]
 
 
@@ -119,6 +123,70 @@ class _InputModal(ModalScreen):
         self.dismiss([w.value for w in self.query(Input)])
 
 
+class _NodeBrowserModal(ModalScreen):
+    """Browse registered Jataí nodes and navigate to one by selecting it."""
+
+    DEFAULT_CSS = """
+    _NodeBrowserModal {
+        align: center middle;
+    }
+    _NodeBrowserModal > Static {
+        width: 80;
+        height: auto;
+        border: thick $background;
+        background: $surface;
+        padding: 1 2;
+    }
+    _NodeBrowserModal Label.modal-title {
+        text-style: bold;
+        margin-bottom: 1;
+    }
+    _NodeBrowserModal ListView {
+        height: 10;
+        margin-bottom: 1;
+    }
+    _NodeBrowserModal Horizontal {
+        height: auto;
+        margin-top: 1;
+    }
+    _NodeBrowserModal Button {
+        margin-right: 1;
+    }
+    """
+
+    BINDINGS = [Binding("escape", "dismiss_none", "Cancel")]
+
+    def __init__(self, nodes: list[tuple[str, str]]) -> None:
+        super().__init__()
+        self._nodes = nodes
+
+    def compose(self) -> ComposeResult:
+        with Static():
+            yield Label("Registered Nodes — select to navigate", classes="modal-title")
+            if self._nodes:
+                lv = ListView()
+                for i, (name, path) in enumerate(self._nodes):
+                    lv.append(ListItem(Label(f"{name}  {path}"), id=f"nb-{i}"))
+                yield lv
+            else:
+                yield Label("(no nodes registered — use [0] Init Node first)")
+            with Horizontal():
+                yield Button("Cancel", id="nb-cancel")
+
+    def action_dismiss_none(self) -> None:
+        self.dismiss(None)
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        self.dismiss(None)
+
+    def on_list_view_selected(self, event: ListView.Selected) -> None:
+        item_id = event.item.id or ""
+        if item_id.startswith("nb-"):
+            idx = int(item_id[3:])
+            _, path = self._nodes[idx]
+            self.dismiss(path)
+
+
 class JataiApp(App):
     """Jataí TUI — interactive operator control plane."""
 
@@ -163,9 +231,12 @@ class JataiApp(App):
         yield Footer()
 
     def on_mount(self) -> None:
+        cwd = Path.cwd()
+        self.sub_title = str(cwd)
         self._output(
             "Welcome to [bold]Jataí TUI[/bold]. "
             "Select an action from the menu and press [bold]Enter[/bold].\n"
+            f"Current directory: [italic]{cwd}[/italic]\n"
             "Press [bold]Q[/bold] to quit."
         )
 
@@ -224,23 +295,90 @@ class JataiApp(App):
             self._run(status_cmd)
 
         elif key == "2":
-            self._run(docs_cmd, None, False)
+            def _on_docs_index(result: Optional[list[str]]) -> None:
+                try:
+                    asyncio.get_running_loop()
+                    has_loop = True
+                except RuntimeError:
+                    has_loop = False
+                if result is not None:
+                    if has_loop:
+                        inbox_flag = result[0].strip().lower() in {"1", "y", "yes", "true"}
+                    else:
+                        inbox_flag = False
+                    self._run(docs_cmd, None, inbox_flag)
+
+            self.push_screen(
+                _InputModal("Docs Index", [
+                    ("Export to INBOX? (y/n):", "n"),
+                ]),
+                _on_docs_index,
+            )
 
         elif key == "3":
             def _on_query(result: Optional[list[str]]) -> None:
+                try:
+                    asyncio.get_running_loop()
+                    has_loop = True
+                except RuntimeError:
+                    has_loop = False
                 if result is not None:
-                    self._run(docs_cmd, result[0].strip() or None, False)
+                    query = result[0].strip() or None
+                    if has_loop:
+                        inbox_flag = result[1].strip().lower() in {"1", "y", "yes", "true"}
+                    else:
+                        inbox_flag = False
+                    self._run(docs_cmd, query, inbox_flag)
 
             self.push_screen(
-                _InputModal("Docs Query", [("Query:", "search term")]),
+                _InputModal("Docs Query", [
+                    ("Query:", "search term"),
+                    ("Export to INBOX? (y/n):", "n"),
+                ]),
                 _on_query,
             )
 
         elif key == "4":
-            self._run(log_cmd, False, False)
+            def _on_log_latest(result: Optional[list[str]]) -> None:
+                try:
+                    asyncio.get_running_loop()
+                    has_loop = True
+                except RuntimeError:
+                    has_loop = False
+                if result is not None:
+                    if has_loop:
+                        inbox_flag = result[0].strip().lower() in {"1", "y", "yes", "true"}
+                    else:
+                        inbox_flag = False
+                    self._run(log_cmd, False, inbox_flag)
+
+            self.push_screen(
+                _InputModal("Log Latest", [
+                    ("Export to INBOX? (y/n):", "n"),
+                ]),
+                _on_log_latest,
+            )
 
         elif key == "5":
-            self._run(log_cmd, True, False)
+            def _on_log_all(result: Optional[list[str]]) -> None:
+                try:
+                    asyncio.get_running_loop()
+                    has_loop = True
+                except RuntimeError:
+                    has_loop = False
+                if result is not None:
+                    if has_loop:
+                        inbox_flag = result[0].strip().lower() in {"1", "y", "yes", "true"}
+                    else:
+                        inbox_flag = False
+                    self._run(log_cmd, True, inbox_flag)
+
+            self.push_screen(
+                _InputModal("Log All", [
+                    ("Export to INBOX? (y/n):", "n"),
+                ]),
+                _on_log_all,
+            )
 
         elif key == "6":
             def _on_scope(result: Optional[list[str]]) -> None:
@@ -352,3 +490,41 @@ class JataiApp(App):
 
         elif key == "15":
             self._run(stop_cmd)
+
+        elif key == "b":
+            from jatai.core.registry import Registry as _Registry
+
+            def _node_path_from_data(data: object) -> str:
+                # Backward compatibility: legacy registries may map names directly to strings.
+                if isinstance(data, dict):
+                    path_value = data.get("path", "")
+                elif isinstance(data, str):
+                    path_value = data
+                else:
+                    path_value = ""
+                return str(path_value).strip()
+
+            try:
+                _reg = _Registry()
+                _reg.load()
+                _nodes = [
+                    (name, _node_path_from_data(data))
+                    for name, data in sorted(_reg.nodes.items())
+                    if _node_path_from_data(data)
+                ]
+            except FileNotFoundError:
+                _nodes = []
+            except Exception as exc:
+                _nodes = []
+                self._output(f"✗ Unable to read registry for browsing: {exc}")
+
+            def _on_browse(result: Optional[str]) -> None:
+                if result is not None:
+                    try:
+                        os.chdir(result)
+                        self.sub_title = result
+                        self._output(f"✓ Navigated to [bold]{result}[/bold]")
+                    except Exception as exc:
+                        self._output(f"✗ Cannot navigate to {result}: {exc}")
+
+            self.push_screen(_NodeBrowserModal(_nodes), _on_browse)

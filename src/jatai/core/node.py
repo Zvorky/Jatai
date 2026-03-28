@@ -3,6 +3,7 @@ Node module: Represents a single Jataí node with INBOX and OUTBOX folders.
 """
 
 import shutil
+from filelock import FileLock, Timeout
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -18,6 +19,15 @@ class Node:
     INBOX_DIRNAME = "INBOX"
     OUTBOX_DIRNAME = "OUTBOX"
     PREFIX_KEYS = ("PREFIX_PROCESSED", "PREFIX_ERROR")
+    LOCK_TIMEOUT_SECONDS = 10
+
+    @property
+    def lock_path(self) -> Path:
+        return Path(f"{self.local_config_path}.lock")
+
+    def _lock(self) -> FileLock:
+        self.node_path.mkdir(parents=True, exist_ok=True)
+        return FileLock(str(self.lock_path), timeout=self.LOCK_TIMEOUT_SECONDS)
 
     def __init__(self, node_path: Path):
         """
@@ -108,11 +118,12 @@ class Node:
         if not self.local_config_path.exists():
             raise FileNotFoundError(f"Local config not found: {self.local_config_path}")
 
-        try:
-            with open(self.local_config_path, "r") as f:
-                self.local_config = yaml.safe_load(f) or {}
-        except yaml.YAMLError as e:
-            raise yaml.YAMLError(f"Failed to parse local config: {e}")
+        with self._lock():
+            try:
+                with open(self.local_config_path, "r", encoding="utf-8") as f:
+                    self.local_config = yaml.safe_load(f) or {}
+            except yaml.YAMLError as e:
+                raise yaml.YAMLError(f"Failed to parse local config: {e}")
 
     def load_any_config(self) -> None:
         """Load either enabled or disabled local configuration from disk."""
@@ -124,11 +135,12 @@ class Node:
                 f"Local config not found: {self.local_config_path} or {self.disabled_config_path}"
             )
 
-        try:
-            with open(config_path, "r", encoding="utf-8") as f:
-                self.local_config = yaml.safe_load(f) or {}
-        except yaml.YAMLError as e:
-            raise yaml.YAMLError(f"Failed to parse local config: {e}")
+        with self._lock():
+            try:
+                with open(config_path, "r", encoding="utf-8") as f:
+                    self.local_config = yaml.safe_load(f) or {}
+            except yaml.YAMLError as e:
+                raise yaml.YAMLError(f"Failed to parse local config: {e}")
 
     def apply_effective_config(self, global_config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Merge global defaults with local overrides and update resolved paths."""
@@ -154,15 +166,17 @@ class Node:
 
     def save_config(self) -> None:
         """Save local configuration to .jatai file."""
-        with open(self.local_config_path, "w", encoding="utf-8") as f:
-            yaml.safe_dump(self.local_config, f, default_flow_style=False)
+        with self._lock():
+            with open(self.local_config_path, "w", encoding="utf-8") as f:
+                yaml.safe_dump(self.local_config, f, default_flow_style=False)
 
     def write_config(self, config: Dict[str, Any], target_path: Optional[Path] = None) -> None:
         """Write a configuration mapping to the target path."""
         destination = target_path or self.local_config_path
         destination.parent.mkdir(parents=True, exist_ok=True)
-        with open(destination, "w", encoding="utf-8") as f:
-            yaml.safe_dump(config, f, default_flow_style=False)
+        with self._lock():
+            with open(destination, "w", encoding="utf-8") as f:
+                yaml.safe_dump(config, f, default_flow_style=False)
 
     def backup_current_config(self, previous_config: Optional[Dict[str, Any]] = None) -> Path:
         """Persist the current or provided config into .jatai.bkp."""
@@ -182,8 +196,9 @@ class Node:
         if not self.backup_config_path.exists():
             raise FileNotFoundError(f"Backup config not found: {self.backup_config_path}")
 
-        shutil.copy2(self.backup_config_path, self.local_config_path)
-        self.load_config()
+        with self._lock():
+            shutil.copy2(self.backup_config_path, self.local_config_path)
+            self.load_config()
 
     def is_enabled(self) -> bool:
         """

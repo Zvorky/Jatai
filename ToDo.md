@@ -2,95 +2,57 @@
 
 This document organizes the planned development phases for Jataí, ordered by priority.
 
-## **Phase 1: Core Foundation & Basic CLI**
+## **Phase 1 to Phase 5: Core & Configuration**
+*(All tasks completed successfully in previous cycles. See repository history).*
 
-The absolute minimum required to route files safely between folders.
+## **Phase 6: CLI, TUI & Architecture Bugfixes**
+Completing the operational toolset and fixing architectural compliance gaps from the Phase 1-5 audit.
 
-- [x] Set up Python project structure (`core/`, `cli/`, `tests/`).
-- [x] Configure `pyproject.toml` with `console_scripts` entry point to expose `jatai` globally via pip.
-- [x] Set up pytest framework and write first dummy test.
-- [x] Implement typer base setup.
-- [x] Write unit tests for global registry parsing (`~/.jatai`).
-- [x] Implement `filelock` for concurrent-safe reading/writing of the global registry (`~/.jatai`).
-- [x] Create `jatai init [path]` command (and its `jatai [path]` alias) to initialize INBOX/, OUTBOX/, and .jatai.
-- [x] Implement path validation forbidding INBOX/OUTBOX overlap, adding an interactive prompt to suggest and create separate subdirectories.
-- [x] Implement physical file copying logic (`shutil.copy2`) using **Atomic Delivery** (temporary .tmp extension during copy).
-- [x] Implement name collision resolution (appending numerical suffixes like `(1)` to duplicates in INBOX).
-- [x] Implement the success prefix logic (adding `_` to processed OUTBOX files).
-- [x] Implement `jatai status` command showing node state (INBOX/OUTBOX file counts).
-- [x] Write unit tests for genuine concurrent `filelock` contention on `~/.jatai` using threading (REQ §7 — lock concurrency coverage beyond simulation).
+- [x] **[ARCH]** Define and document the CLI short-option policy (abbreviated flags).
+- [x] Implement canonical short-option flags in CLI (`-a`, `-i`, `-m`, etc.).
+- [x] Implement `jatai log`, `jatai log --all`, and `jatai docs` with terminal-first output.
+- [x] Add `--inbox` option to export logs and docs directly to current node INBOX.
+- [x] Implement `jatai list`, `jatai send`, `jatai read`, `jatai unread`, `jatai remove`.
+- [x] Implement `jatai config` and `jatai config get`.
+- [x] Build the interactive TUI with Textual and implement "Browse Nodes".
+- [x] **[BUGFIX] OS Auto-Start Enable:** Ensure the daemon installation not only creates the `.service`/`.plist` file, but actually runs the OS command to enable/load it (e.g., `systemctl --user enable`).
+- [x] **[BUGFIX] Unify Helloworld Drop:** Modify the Daemon auto-onboarding to read `!helloworld.md` from the `docs/` folder instead of using a hardcoded string, matching the `jatai init` behavior.
+- [x] **[BUGFIX] TUI Feature Parity:** Expose the `--inbox` option inside the TUI for `docs` and `log` commands.
+- [x] **[BUGFIX] Code Cleanup:** Remove dead code (`deliver_copy_to_outbox()` in `delivery.py`).
+- [x] **[BUGFIX] Enforce Config Syntax:** Modify `jatai config [key]` to throw a syntax error if `[value]` is missing, enforcing the use of `config get` for reads.
+- [x] **[BUGFIX] Rename internal methods:** Rename misleading methods like `is_being_written` to `has_ignore_prefix` or similar to reflect the state machine accurately.
+- [x] **[BUGFIX] Update CLI/TUI Tests:** Update/fix CLI and TUI automated tests to match the new config get/set enforcement and TUI async/modal prompt behavior. Ensure tests reflect ADRs and REQUIREMENTS, and are compatible with Textual's event loop requirements.
+- [x] **[BUGFIX] OS Auto-Start Enable & Warnings:** Ensure the daemon installation runs `systemctl --user enable`. Catch failures (or missing systemd) and output an explicit error message to the user.
+- [x] **[BUGFIX] Retry Math Correction:** Ensure the code logic accurately reflects `1 original attempt + MAX_RETRIES` before hitting the fatal prefix state.
+- [x] **[BUGFIX] Local File Locks:** Implement `filelock` on `Node.save_config` and `Node.load_config` to match the global registry concurrency protection.
 
-## **Phase 2: The Routing Engine (Daemon & Watchdog)**
+## **Phase 7: Advanced Logging & Immediate Garbage Collection**
+Refining the internal engines for long-term disk safety and observability.
 
-Making the system reactive and background-driven.
+- [ ] **State Architecture Refactor:** Strip "prefix guessing" logic. Move all system control data out of `~/.jatai`. Implement `/tmp/jatai/` structure handling `uuid_map.yaml`, `removed.yaml` (with `--autoremoved` tagging), and `bkp/<UUID>.yaml` caching for robust prefix migrations.
+- [ ] Implement Log Rotation: Name log files with datetime suffix + `.log` and store them in `/tmp/jatai/logs/`.
+- [ ] Implement Configurable Latest Log: Maintain a `jatai_latest.log` symlink/copy whose target location is defined by a global configuration key.
+- [ ] Implement GC Deletion Engine: Move deleted files to the OS Trash by default, with an override setting for permanent deletion.
+- [ ] Implement GC 15-Minute Sweep: Background daemon loop to sweep old files every 15 minutes.
+- [ ] Implement GC Immediate Threshold: Logic to instantly delete the oldest file locally the moment the 11th file (or configured limit) hits the OUTBOX.
+- [ ] Implement default configuration constants: INBOX keeps all, OUTBOX keeps max 11 files.
+- [ ] Rename `_` semantic references in code/docs from "processed" to "ignore" for OUTBOX contexts.
+- [BUGFIX] Fix node lifecycle in daemon/node onboarding when local folder is deleted: avoid re-creating `.jatai` and instead enforce softdeleted state with `--autoremoved` metadata.
+- [BUGFIX] Remove/disable TUI "Browse Nodes" button in the current phase so crashes are not user-visible until rework in future phases.
+- [BUGFIX] Apply local `.jatai` locking in `Node.save_config` and `Node.load_config` to match global registry lock style.
+- [BUGFIX] Adjust GC execution path to run immediate outbound processed-file sweep when OUTBOX crosses `GC_MAX_SENT_FILES`.
+- [BUGFIX] Align `Registry.DEFAULT_CONFIG` to ADR/REQUIREMENTS with `GC_MAX_SENT_FILES: 11` and `GC_MAX_READ_FILES: 0`.
 
-- [x] Implement `jatai start` and `jatai stop` logic.
-- [x] Implement **Daemon Exclusivity**: Use a PID/Lock file to gracefully reject duplicate `start` commands.
-- [x] Implement **OS Auto-Start Registration** logic (systemd, launchd, or startup folder mapping).
-- [x] Implement the **Startup Scan**: on boot, scan all registered OUTBOXes for pending files.
-- [x] Integrate watchdog to listen for `on_created` and `on_moved` events in active OUTBOXes.
-- [x] Write integration tests simulating watchdog file drop events.
-- [x] Implement logic to ignore files currently being written (files starting with the success prefix).
+---
 
-## **Phase 3: Resilience & Error Handling**
+## **Future / Expansion (Post-Core)**
+Architectural discussions and network expansions.
 
-Ensuring no data is lost during I/O failures.
-
-- [x] Implement the 5-state prefix matrix (`_`, `!`, `!_`, `!!`, `!!_`) for success, partial, and total failures.
-- [x] Create the `~/.retry` global state file to track retry indices.
-- [x] Implement the dynamic exponential retry loop and the `MAX_RETRIES` transition to fatal prefixes (`!!`).
-- [x] Write unit tests for the exponential retry math (`RETRY_DELAY_BASE` * (2 ^ index)) and state transitions.
-- [x] Setup global logging (logging to `~/.jatai.log`).
-
-## **Phase 4: Configuration & File-System Reactivity**
-
-Giving power back to the user via YAML and File-System manipulation.
-
-- [x] Parse and apply local `.jatai` configurations (overriding global defaults).
-- [x] Implement `.jatai.bkp` mechanism for configuration rollback on collisions.
-- [x] Implement **Soft-Delete**: Daemon strictly ignores node contents where config is named `._jatai`, monitoring only the root.
-- [x] Implement **Hot-Reload**: Watchdog listening to node root for `._jatai` -> `.jatai` renames.
-- [x] Implement **Prefix Hot-Swap & Rollback**: Auto-rename local history if prefix config changes, aborting via `.bkp` on collisions.
-- [x] Drop an error notification file into the originating node's INBOX when a prefix hot-swap rollback is triggered by a naming collision (ADR 3).
-
-## **Phase 5: Onboarding & Documentation (In-Band Help)**
-
-The "File-System First" user experience.
-
-- [x] Curate project documentation to reflect only the current implementation state and real repository structure.
-- [x] Move the version utility to `tools/set_version`, update all references, and add a directory-scoped permissive license in `tools/LICENSE`.
-- [x] Define and document that README "File Structure" must list only non-ignored system files, allowing `docs/` as the only documentation directory, while excluding governance/project documentation files.
-- [x] Implement Auto-Onboarding: Daemon detects paths added manually to `~/.jatai` and generates missing folders.
-- [x] Add `!helloworld.md` file drop to newly created INBOXes.
-- [x] Create the `docs/` folder structure (markdown files in subfolders).
-- [x] Implement `jatai docs` to drop a category index file.
-- [x] Implement `jatai docs [query]` to copy matching markdown files directly to the local INBOX.
-
-## **Phase 6: Extended CLI Toolbox, TUI & Garbage Collection**
-
-Adding convenience commands and storage management.
-
-- [x] **[ARCH]** Define and document the CLI short-option policy (abbreviated flags), including canonical mappings such as `-a` for `--all` and `-G` for `--global`.
-- [x] Implement canonical short-option flags in CLI: `-a`, `-i`, `-m`, `-r`, `-s`, `-f`, `-G` (excluding config keys per ADR 13).
-- [x] Implement `jatai log` (latest log view in terminal).
-- [x] Implement `jatai log --all|-a` (full log output in terminal).
-- [x] Refactor `jatai docs` and `jatai docs [query]` to terminal-first output by default.
-- [x] Add `--inbox` option to `jatai docs` and `jatai docs [query]` to export files into current node INBOX.
-- [x] Add `--inbox` option to `jatai log` (latest/all) to export rendered output into current node INBOX.
-- [x] Enforce `!` prefix for all system-generated INBOX artifacts (including docs query exports) and add/adjust tests to verify the naming policy.
-- [x] Implement `jatai list`, `jatai send`, `jatai read`, `jatai unread`.
-- [x] Implement `jatai config` to read/write settings via CLI.
-- [x] Implement `jatai config get [key]` with optional `-G|--global` scope and optional `-i|--inbox` export.
-- [x] Implement `jatai remove` (CLI wrapper for renaming to `._jatai`).
-- [x] Implement **Garbage Collection (Auto-Remove):** Background daemon logic to delete `_` prefixed files based on config thresholds.
-- [x] Implement `jatai clear [--read] [--sent]` manual CLI command.
-- [x] Build the interactive TUI (invoked by `jatai` with no arguments).
-- [x] Refactor the TUI with Textual so it exposes all current CLI commands through an efficient interactive workflow.
-
-## **Phase 7: Advanced / Future Expansion (Post-Core)**
-
+- [ ] Implement OS Auto-Start fallbacks (e.g., `crontab @reboot` for Alpine/minimal Linux) and native compatibility for Windows/macOS.
+- [ ] **[ARCH]** Define detailed TUI Navigation rules (separating INBOX/OUTBOX views, webapp layout mirroring).
+- [ ] **[ARCH]** Define the Prefix Customization Schema (how users will change `_`, `!`, etc., in the `.jatai` file).
 - [ ] **[ARCH]** Define directory structure logic for Smart Routing & Topics.
-- [ ] **[ARCH]** Design the Node Addressing protocol (ID generation and resolution mapping).
+- [ ] **[ARCH]** Design the Node Addressing protocol (ID generation based on the existing UUID map for direct resolution).
 - [ ] **[ARCH]** Design payload structures and UI for the Built-in Chat Application.
 - [ ] Implement Built-in Chat Application using INBOX/OUTBOX for transport.
 - [ ] Implement Jataí Over Internet (IP/Port exposition).

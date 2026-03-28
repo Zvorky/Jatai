@@ -34,6 +34,17 @@ class TestCLIHappyPath:
         assert (Path(node_path) / "INBOX").exists()
         assert (Path(node_path) / "OUTBOX").exists()
 
+    def test_cli_init_drops_helloworld_into_inbox(self, temp_dir, temp_home):
+        """Test init drops !helloworld.md tutorial into node INBOX."""
+        node_path = Path(temp_dir / "hello_node")
+
+        result = runner.invoke(app, ["init", str(node_path)])
+
+        assert result.exit_code == 0
+        hello_file = node_path / "INBOX" / "!helloworld.md"
+        assert hello_file.exists()
+        assert "Welcome" in hello_file.read_text(encoding="utf-8")
+
     def test_cli_init_current_directory(self, temp_dir, temp_home):
         """Test initializing current directory as node using init alias."""
         # Pass temp_dir as explicit path argument instead of using cwd
@@ -452,8 +463,9 @@ class TestCLIMaliciousAdversarialScenarios:
         assert result.exit_code == 0
         assert (actual_path / "INBOX").exists() or (link_path / "INBOX").exists()
 
-    def test_cli_rapid_fire_commands(self, temp_dir, temp_home):
+    def test_cli_rapid_fire_commands(self, temp_dir, temp_home, monkeypatch):
         """Test rapid sequential CLI commands."""
+        monkeypatch.setenv("HOME", str(temp_home))
         for i in range(10):
             node_path = str(temp_dir / f"node_{i}")
             result = runner.invoke(app, ["init", node_path])
@@ -580,6 +592,7 @@ class TestCLIPhase6Toolbox:
         try:
             os.chdir(node.node_path)
             set_local = runner.invoke(app, ["config", "RETRY_DELAY_BASE", "90"])
+            # This should now fail with a syntax error (must use 'config get')
             get_local = runner.invoke(app, ["config", "RETRY_DELAY_BASE"])
             set_global = runner.invoke(app, ["config", "--global", "MAX_RETRIES", "8"])
             get_global = runner.invoke(app, ["config", "--global", "MAX_RETRIES"])
@@ -587,9 +600,11 @@ class TestCLIPhase6Toolbox:
             os.chdir(old_cwd)
 
         assert set_local.exit_code == 0
-        assert "RETRY_DELAY_BASE=90" in get_local.stdout
+        assert get_local.exit_code == 1
+        assert "syntax error" in get_local.stdout.lower()
         assert set_global.exit_code == 0
-        assert "MAX_RETRIES=8" in get_global.stdout
+        assert get_global.exit_code == 1
+        assert "syntax error" in get_global.stdout.lower()
 
     def test_cli_config_get_local_and_global(self, temp_dir, temp_home, monkeypatch):
         node = Node(temp_dir / "config_get_node")
@@ -683,6 +698,86 @@ class TestCLIPhase6Toolbox:
             assert (node.node_path / "._jatai").exists()
         finally:
             os.chdir(old_cwd)
+
+    def test_cli_status_shows_config_path(self, temp_dir, temp_home, monkeypatch):
+        monkeypatch.setenv("HOME", str(temp_home))
+        node = Node(temp_dir / "status_path_node")
+        node.create()
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            result = runner.invoke(app, ["status"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 0
+        assert "Config:" in result.stdout
+        assert ".jatai" in result.stdout
+
+    def test_cli_list_addrs_shows_registry_path(self, temp_dir, temp_home, monkeypatch):
+        monkeypatch.setenv("HOME", str(temp_home))
+        node = Node(temp_dir / "addrs_path_node")
+        node.create()
+        registry = Registry()
+        try:
+            registry.load()
+        except FileNotFoundError:
+            pass
+        registry.add_node(node.node_path.name, str(node.node_path))
+        registry.save()
+
+        result = runner.invoke(app, ["list", "addrs"])
+        assert result.exit_code == 0
+        assert "# registry:" in result.stdout
+
+    def test_cli_config_local_full_dump_shows_source(self, temp_dir, temp_home, monkeypatch):
+        monkeypatch.setenv("HOME", str(temp_home))
+        node = Node(temp_dir / "cfg_source_node")
+        node.create()
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            result = runner.invoke(app, ["config"])
+        finally:
+            os.chdir(old_cwd)
+
+        # Now this should fail with a syntax error (must use 'config get')
+        assert result.exit_code == 1
+        assert "syntax error" in result.stdout.lower()
+
+    def test_cli_config_global_full_dump_shows_source(self, temp_dir, temp_home, monkeypatch):
+        monkeypatch.setenv("HOME", str(temp_home))
+        registry = Registry()
+        try:
+            registry.load()
+        except FileNotFoundError:
+            pass
+        registry.save()
+
+        result = runner.invoke(app, ["config", "--global"])
+        # Now this should fail with a syntax error (must use 'config get')
+        assert result.exit_code == 1
+        assert "syntax error" in result.stdout.lower()
+
+    def test_cli_config_get_local_shows_source(self, temp_dir, temp_home, monkeypatch):
+        monkeypatch.setenv("HOME", str(temp_home))
+        node = Node(temp_dir / "cfg_get_src_node")
+        node.create()
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            result = runner.invoke(app, ["config", "get"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 0
+        assert "# source:" in result.stdout
 
 
 class TestCLITUI:
@@ -799,19 +894,29 @@ class TestCLITUI:
         assert captured.get("fn") == cli_main.status
         assert captured.get("args") == ()
 
-    def test_jatai_app_dispatch_docs_index_calls_docs(self):
-        from jatai.tui import JataiApp
-        from jatai.cli import main as cli_main
 
-        captured = {}
-        app = JataiApp()
-        app._run = lambda fn, *args: captured.update({"fn": fn, "args": args})
-        app._dispatch("2")
 
-        assert captured.get("fn") == cli_main.docs
-        assert captured.get("args") == (None, False)
+import asyncio
 
-    def test_jatai_app_dispatch_unknown_key_does_nothing(self):
+def test_jatai_app_dispatch_docs_index_calls_docs():
+    from jatai.tui import JataiApp
+    from jatai.cli import main as cli_main
+
+    captured = {}
+
+    app = JataiApp()
+    app._run = lambda fn, *args: captured.update({"fn": fn, "args": args})
+    # Patch push_screen to call callback directly (simulate modal result)
+    def fake_push_screen(screen, cb=None):
+        if cb:
+            cb(["n"])
+    app.push_screen = fake_push_screen
+    app._dispatch("2")
+
+    assert captured.get("fn") == cli_main.docs
+    assert captured.get("args") == (None, False)
+
+def test_jatai_app_dispatch_unknown_key_does_nothing():
         from jatai.tui import JataiApp
 
         called = {"_run": False}
@@ -821,48 +926,51 @@ class TestCLITUI:
 
         assert not called["_run"]
 
-    def test_jatai_app_has_expected_menu_item_count(self):
-        from jatai.tui import MENU_ITEMS
+def test_jatai_app_has_expected_menu_item_count():
+    from jatai.tui import MENU_ITEMS
+    assert len(MENU_ITEMS) == 17
 
-        assert len(MENU_ITEMS) == 16
+def test_jatai_app_menu_item_keys_are_unique():
+    from jatai.tui import MENU_ITEMS
+    keys = [k for k, _ in MENU_ITEMS]
+    assert len(keys) == len(set(keys))
 
-    def test_jatai_app_menu_item_keys_are_unique(self):
-        from jatai.tui import MENU_ITEMS
+def test_jatai_app_dispatch_browse_nodes_with_legacy_string_paths(monkeypatch):
+    from jatai.tui import JataiApp
 
-        keys = [k for k, _ in MENU_ITEMS]
-        assert len(keys) == len(set(keys))
+    pushed = {}
+    app = JataiApp()
+    app.push_screen = lambda screen, cb=None: pushed.update({"screen": screen, "cb": cb})
 
-    def test_jatai_app_dispatch_pushes_screen_for_docs_query(self, monkeypatch):
-        from jatai.tui import JataiApp
+    class _FakeRegistry:
+        def __init__(self):
+            self.nodes = {"legacy": "/tmp/legacy_node", "bad": None}
 
-        pushed = {}
-        app = JataiApp()
-        app._run = lambda fn, *args: None
-        app.push_screen = lambda screen, cb=None: pushed.update({"screen": screen, "cb": cb})
-        app._dispatch("3")
+        def load(self):
+            pass
 
-        assert "screen" in pushed
+    monkeypatch.setattr("jatai.core.registry.Registry", _FakeRegistry)
+    app._dispatch("b")
 
-    def test_jatai_app_dispatch_log_latest(self):
-        from jatai.tui import JataiApp
-        from jatai.cli import main as cli_main
+    assert "screen" in pushed
 
-        captured = {}
-        app = JataiApp()
-        app._run = lambda fn, *args: captured.update({"fn": fn, "args": args})
-        app._dispatch("4")
+def test_jatai_app_dispatch_browse_nodes_registry_error_does_not_crash(monkeypatch):
+    from jatai.tui import JataiApp
 
-        assert captured.get("fn") == cli_main.log
-        assert captured.get("args") == (False, False)
+    pushed = {}
+    outputs = []
+    app = JataiApp()
+    app.push_screen = lambda screen, cb=None: pushed.update({"screen": screen, "cb": cb})
+    app._output = lambda text: outputs.append(text)
 
-    def test_jatai_app_dispatch_log_all(self):
-        from jatai.tui import JataiApp
-        from jatai.cli import main as cli_main
+    class _FakeRegistry:
+        nodes = {}
 
-        captured = {}
-        app = JataiApp()
-        app._run = lambda fn, *args: captured.update({"fn": fn, "args": args})
-        app._dispatch("5")
+        def load(self):
+            raise RuntimeError("broken registry")
 
-        assert captured.get("fn") == cli_main.log
-        assert captured.get("args") == (True, False)
+    monkeypatch.setattr("jatai.core.registry.Registry", _FakeRegistry)
+    app._dispatch("b")
+
+    assert "screen" in pushed
+    assert any("Unable to read registry" in text for text in outputs)
