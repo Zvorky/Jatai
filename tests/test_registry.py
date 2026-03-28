@@ -38,6 +38,8 @@ class TestRegistryHappyPath:
             "OUTBOX_DIR",
             "GC_MAX_READ_FILES",
             "GC_MAX_SENT_FILES",
+            "GC_DELETE_MODE",
+            "LATEST_LOG_PATH",
         }
         assert set(registry.DEFAULT_CONFIG.keys()) == expected_keys
 
@@ -106,6 +108,13 @@ class TestRegistryHappyPath:
         registry = Registry()
         config_value = registry.get_config("PREFIX_PROCESSED")
         assert config_value == "_"
+
+    def test_registry_default_config_has_gc_options(self):
+        registry = Registry()
+        assert registry.DEFAULT_CONFIG["GC_MAX_READ_FILES"] == 0
+        assert registry.DEFAULT_CONFIG["GC_MAX_SENT_FILES"] == 11
+        assert registry.DEFAULT_CONFIG["GC_DELETE_MODE"] == "trash"
+        assert registry.DEFAULT_CONFIG["LATEST_LOG_PATH"] == "~/.jatai_latest.log"
 
     def test_registry_set_config_global(self):
         """Test setting global configuration."""

@@ -198,7 +198,10 @@ class Node:
 
         with self._lock():
             shutil.copy2(self.backup_config_path, self.local_config_path)
-            self.load_config()
+
+        # Load configuration after releasing lock to avoid reentrant locking
+        # deadlocks when FileLock is non-recursive.
+        self.load_config()
 
     def is_enabled(self) -> bool:
         """

@@ -6,6 +6,8 @@ import logging
 import os
 import signal
 import threading
+import shutil
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -14,11 +16,13 @@ from filelock import FileLock, Timeout
 from watchdog.events import FileCreatedEvent, FileMovedEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
+from send2trash import send2trash
 from jatai.core.delivery import Delivery
 from jatai.core.node import Node
 from jatai.core.prefix import Prefix
 from jatai.core.registry import Registry
 from jatai.core.retry import RetryState
+from jatai.core.sysstate import SystemState
 import yaml
 import re
 
@@ -80,8 +84,11 @@ class JataiDaemon:
 
     POLL_INTERVAL_SECONDS = 0.2
     LOCK_TIMEOUT_SECONDS = 2
-    MAINTENANCE_INTERVAL_TICKS = 25
+    MAINTENANCE_INTERVAL_TICKS = int(15 * 60 / POLL_INTERVAL_SECONDS)
     HELLOWORLD_FILENAME = "!helloworld.md"
+    GC_DEFAULT_READ = 0
+    GC_DEFAULT_SENT = 11
+    GC_DEFAULT_MODE = "trash"
 
     def __init__(
         self,
@@ -94,7 +101,9 @@ class JataiDaemon:
         self.registry_path = Path(registry_path) if registry_path is not None else Path.home() / ".jatai"
         self.pid_path = Path(pid_path) if pid_path is not None else Path.home() / ".jatai.pid"
         self.retry_path = Path(retry_path) if retry_path is not None else Path.home() / ".retry"
-        self.log_path = Path(log_path) if log_path is not None else Path.home() / ".jatai.log"
+        SystemState.ensure_base()
+        self.log_path = Path(log_path) if log_path is not None else SystemState.BASE_PATH / "logs" / f"jatai_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.log"
+        self.latest_log_path = Path(os.path.expanduser(Registry(self.registry_path).global_config.get("LATEST_LOG_PATH", "~/.jatai_latest.log"))).expanduser() if log_path is None else None
         self.observer_factory = observer_factory
         self.stop_event = threading.Event()
         self.observer: Optional[Observer] = None
@@ -112,7 +121,23 @@ class JataiDaemon:
             handler = logging.FileHandler(log_path, encoding="utf-8")
             handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
             logger.addHandler(handler)
+            self._update_latest_log_link(log_path)
         return logger
+
+    def _update_latest_log_link(self, new_log_path: Path) -> None:
+        if not self.latest_log_path:
+            return
+
+        try:
+            if self.latest_log_path.exists() or self.latest_log_path.is_symlink():
+                self.latest_log_path.unlink(missing_ok=True)
+            self.latest_log_path.parent.mkdir(parents=True, exist_ok=True)
+            self.latest_log_path.symlink_to(new_log_path)
+        except Exception:
+            try:
+                shutil.copy2(new_log_path, self.latest_log_path)
+            except Exception:
+                pass
 
     def _load_registry(self) -> Registry:
         registry = Registry(self.registry_path)
@@ -557,6 +582,11 @@ class JataiDaemon:
                 prefix.set_state(source_file, "processed")
             self.retry_state.clear(canonical_retry_path)
             self.logger.info("Delivery succeeded for file=%s", source_file)
+            # Immediate GC threshold enforcement
+            try:
+                self._run_auto_gc_for_node(source_node)
+            except Exception:
+                pass
             return True
 
         retry_delay_base = int(source_node.get_config("RETRY_DELAY_BASE", 60))
@@ -620,6 +650,18 @@ class JataiDaemon:
             self._run_auto_gc_for_node(node)
         self.logger.info("Startup scan complete")
 
+    def _delete_path(self, path: Path, mode: Optional[str] = None) -> None:
+        if mode is None:
+            mode = str(Registry(self.registry_path).global_config.get("GC_DELETE_MODE", self.GC_DEFAULT_MODE))
+
+        if mode == "trash":
+            try:
+                send2trash(str(path))
+                return
+            except Exception:
+                pass
+        path.unlink(missing_ok=True)
+
     def _trim_processed_history(self, files: List[Path], success_prefix: str, max_files: int) -> int:
         if max_files <= 0:
             return 0
@@ -634,7 +676,7 @@ class JataiDaemon:
 
         removed = 0
         for file_path in processed_files[:excess]:
-            file_path.unlink(missing_ok=True)
+            self._delete_path(file_path)
             removed += 1
         return removed
 

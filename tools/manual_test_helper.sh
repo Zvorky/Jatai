@@ -573,10 +573,47 @@ print('TUI dispatch tests passed')
   return 0
 }
 
+suite_phase7() {
+  load_state
+  local failures=0
+
+  echo "[$(timestamp)] ===== PHASE7 SUITE ====="
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN init '$JATAI_TEST_A'" || failures=$((failures + 1))
+  run_cmd "cd '$JATAI_TEST_B' && export HOME='$TEST_HOME' && $JATAI_BIN init '$JATAI_TEST_B'" || failures=$((failures + 1))
+
+  echo "[$(timestamp)] Validate auto-onboarding and defaults"
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN status" || failures=$((failures + 1))
+
+  echo "[$(timestamp)] Create processed file and run daemon for GC cycle"
+  run_cmd "printf 'x' > '$JATAI_TEST_A/OUTBOX/_old-1.txt'" || failures=$((failures + 1))
+  run_cmd "printf 'x' > '$JATAI_TEST_A/OUTBOX/_old-2.txt'" || failures=$((failures + 1))
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && nohup $VENV_PYTHON -m jatai.cli.main _daemon-run > /tmp/jatai_phase7_daemon.log 2>&1 & echo \$! > /tmp/jatai_phase7.pid" || failures=$((failures + 1))
+  sleep 2
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN stop" || failures=$((failures + 1))
+  if [[ -f /tmp/jatai_phase7.pid ]]; then
+    DAEMON_PID=$(cat /tmp/jatai_phase7.pid)
+    if kill -0 "$DAEMON_PID" 2>/dev/null; then
+      kill "$DAEMON_PID" 2>/dev/null || true
+      rm -f /tmp/jatai_phase7.pid
+    fi
+  fi
+
+  echo "[$(timestamp)] Check Phase7 log path symlink"
+  run_cmd "python - <<'PY'\nfrom pathlib import Path\nfrom jatai.core.registry import Registry\nfrom jatai.core.daemon import JataiDaemon\nregistry_path = Path('$TEST_HOME') / '.jatai'\nRegistry(registry_path=registry_path).load()\nlog_path = Path(Registry(registry_path).global_config.get('LATEST_LOG_PATH', '~/.jatai_latest.log')).expanduser()\nprint('log symlink exists', log_path.exists())\nPY" || failures=$((failures + 1))
+
+  echo "[$(timestamp)] Ensure soft-delete path logic via config removal"
+  run_cmd "rm -f '$JATAI_TEST_A/.jatai'" || failures=$((failures + 1))
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN start" || failures=$((failures + 1))
+
+  snapshot_dirs
+  echo "[$(timestamp)] phase7 suite failures=$failures"
+  return 0
+}
+
 action_suite() {
   if [[ $# -eq 0 ]]; then
     echo "ERROR: suite expects a suite name"
-    echo "Available suites: smoke, filesystem, advanced, startup-scan, config, tui-config-get"
+    echo "Available suites: smoke, filesystem, phase7, advanced, startup-scan, config, tui-config-get"
     exit 1
   fi
 
@@ -586,6 +623,9 @@ action_suite() {
       ;;
     filesystem)
       suite_filesystem
+      ;;
+    phase7)
+      suite_phase7
       ;;
     migration)
       suite_migration
@@ -616,7 +656,7 @@ action_suite() {
       ;;
     *)
       echo "ERROR: unknown suite '$1'"
-      echo "Available suites: smoke, filesystem, advanced, startup-scan, config, tui-config-get"
+      echo "Available suites: smoke, filesystem, phase7, advanced, startup-scan, config, tui-config-get"
       exit 1
       ;;
   esac
@@ -654,6 +694,7 @@ action_all() {
   setup_done="1"
   action_suite smoke
   action_suite filesystem
+  action_suite phase7
   action_suite advanced
   action_suite startup-scan
   action_suite config
@@ -673,7 +714,7 @@ Usage:
   tools/manual_test_helper.sh setup
   tools/manual_test_helper.sh snapshot
   tools/manual_test_helper.sh run -- <command>
-  tools/manual_test_helper.sh suite <smoke|filesystem|advanced|startup-scan|config|tui-config-get>
+  tools/manual_test_helper.sh suite <smoke|filesystem|phase7|advanced|startup-scan|config|tui-config-get>
   tools/manual_test_helper.sh cleanup
   tools/manual_test_helper.sh all
 

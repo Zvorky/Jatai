@@ -108,6 +108,8 @@ When the agent is working exclusively on development tooling under `tools/` (wit
 3. **Test location:** All tests must reside in `./tests/` directory, organized by module structure.
 4. **Test framework:** Use `pytest` (as specified in REQUIREMENTS.md).
 
+5. **Test-first synchronization requirement:** Before implementing any code that changes behavior defined by an ADR or `REQUIREMENTS.md`, update the automated pytest suites and the manual test scripts to encode the expected behavior as tests (these act as executable requirements/specs). The updated tests must be committed (or staged) alongside the `ToDo.md` tasks that describe the implementation work. This ensures tests define the acceptance criteria before code changes begin.
+
 ### Task Completion Validation Protocol
 
 **Before marking any task as completed in `ToDo.md`:**
@@ -118,11 +120,19 @@ When the agent is working exclusively on development tooling under `tools/` (wit
    ```
 2. Verify all tests pass (exit code 0).
 3. Save the output to `pytest.log` in the repository root.
+4. In addition to the unit/test-suite run above, always execute the full test matrix before marking completion:
+   - Run the full `pytest` suite across the repository (`pytest ./tests/`) and confirm exit code 0.
+   - Run the manual test helper script and save its output to `manual-tests.log`:
+      ```bash
+      ./tools/manual_test_helper.sh > manual-tests.log 2>&1 || true
+      ```
+   - Verify `manual-tests.log` shows the full manual validation passes for the changed areas. If manual tests fail, do NOT mark the task as completed.
 4. If any test fails:
    - Do NOT mark the task as completed.
    - Fix the implementation.
    - Re-run tests and save new results to `pytest.log`.
 5. Include `pytest.log` in the summary when reporting task completion to the user.
+6. Include `manual-tests.log` alongside `pytest.log` in the OUTBOX report when reporting task completion.
 
 ### Test Quality Standards
 
@@ -240,6 +250,7 @@ The workflow in this section applies to implementation tasks tied to `ToDo.md`. 
    - Summary of changes made.
    - Test results from `pytest.log`.
    - Manual testing summary (tested scopes, errors/failures found, and overall validation view).
+   - `manual-tests.log` alongside `pytest.log`.
    - Files modified/created.
    - Tasks completed in `ToDo.md`.
    - Any breaking changes or migration notes.
@@ -257,6 +268,12 @@ The workflow in this section applies to implementation tasks tied to `ToDo.md`. 
 
 5. **Exclude pytest.log from git** if not already in `.gitignore`:
    - The `pytest.log` file is for local validation only and should not be committed.
+    - Also exclude `manual-tests.log` from commits; these logs should be included in the `OUTBOX/` report but not committed to the repository.
+
+7. **Documentation sweep requirement:** After tests pass and before final report/merge, perform a full documentation sweep:
+   - Update all affected files under `docs/` and `README.md` so they reflect implemented behavior and public command surfaces.
+   - Conduct a documentation review across `docs/`, `README.md`, and `ARCHITECTURE.md` / `REQUIREMENTS.md` to ensure consistency and that no docs reference outdated ADRs or behaviors.
+   - Only after documentation is updated and reviewed should the final OUTBOX report be generated and the commit considered complete.
 
 ### Final User Summary
 

@@ -21,7 +21,9 @@ class Registry:
         "INBOX_DIR": "INBOX",
         "OUTBOX_DIR": "OUTBOX",
         "GC_MAX_READ_FILES": 0,
-        "GC_MAX_SENT_FILES": 0,
+        "GC_MAX_SENT_FILES": 11,
+        "GC_DELETE_MODE": "trash",
+        "LATEST_LOG_PATH": "~/.jatai_latest.log",
     }
 
     def __init__(self, registry_path: Optional[Path] = None):

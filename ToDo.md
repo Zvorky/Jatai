@@ -29,19 +29,19 @@ Completing the operational toolset and fixing architectural compliance gaps from
 ## **Phase 7: Advanced Logging & Immediate Garbage Collection**
 Refining the internal engines for long-term disk safety and observability.
 
-- [ ] **State Architecture Refactor:** Strip "prefix guessing" logic. Move all system control data out of `~/.jatai`. Implement `/tmp/jatai/` structure handling `uuid_map.yaml`, `removed.yaml` (with `--autoremoved` tagging), and `bkp/<UUID>.yaml` caching for robust prefix migrations.
-- [ ] Implement Log Rotation: Name log files with datetime suffix + `.log` and store them in `/tmp/jatai/logs/`.
-- [ ] Implement Configurable Latest Log: Maintain a `jatai_latest.log` symlink/copy whose target location is defined by a global configuration key.
-- [ ] Implement GC Deletion Engine: Move deleted files to the OS Trash by default, with an override setting for permanent deletion.
-- [ ] Implement GC 15-Minute Sweep: Background daemon loop to sweep old files every 15 minutes.
-- [ ] Implement GC Immediate Threshold: Logic to instantly delete the oldest file locally the moment the 11th file (or configured limit) hits the OUTBOX.
-- [ ] Implement default configuration constants: INBOX keeps all, OUTBOX keeps max 11 files.
+- [x] **State Architecture Refactor:** Strip "prefix guessing" logic. Move all system control data out of `~/.jatai`. Implement `/tmp/jatai/` structure handling `uuid_map.yaml`, `removed.yaml` (with `--autoremoved` tagging), and `bkp/<UUID>.yaml` caching for robust prefix migrations.
+- [x] Implement Log Rotation: Name log files with datetime suffix + `.log` and store them in `/tmp/jatai/logs/`.
+- [x] Implement Configurable Latest Log: Maintain a `jatai_latest.log` symlink/copy whose target location is defined by a global configuration key.
+- [x] Implement GC Deletion Engine: Move deleted files to the OS Trash by default, with an override setting for permanent deletion.
+- [x] Implement GC 15-Minute Sweep: Background daemon loop to sweep old files every 15 minutes.
+- [x] Implement GC Immediate Threshold: Logic to instantly delete the oldest file locally the moment the 11th file (or configured limit) hits the OUTBOX.
+- [x] Implement default configuration constants: INBOX keeps all, OUTBOX keeps max 11 files.
 - [ ] Rename `_` semantic references in code/docs from "processed" to "ignore" for OUTBOX contexts.
-- [BUGFIX] Fix node lifecycle in daemon/node onboarding when local folder is deleted: avoid re-creating `.jatai` and instead enforce softdeleted state with `--autoremoved` metadata.
-- [BUGFIX] Remove/disable TUI "Browse Nodes" button in the current phase so crashes are not user-visible until rework in future phases.
-- [BUGFIX] Apply local `.jatai` locking in `Node.save_config` and `Node.load_config` to match global registry lock style.
-- [BUGFIX] Adjust GC execution path to run immediate outbound processed-file sweep when OUTBOX crosses `GC_MAX_SENT_FILES`.
-- [BUGFIX] Align `Registry.DEFAULT_CONFIG` to ADR/REQUIREMENTS with `GC_MAX_SENT_FILES: 11` and `GC_MAX_READ_FILES: 0`.
+- [x] [BUGFIX] Fix node lifecycle in daemon/node onboarding when local folder is deleted: avoid re-creating `.jatai` and instead enforce softdeleted state with `--autoremoved` metadata.
+- [x] [BUGFIX] Remove/disable TUI "Browse Nodes" button in the current phase so crashes are not user-visible until rework in future phases.
+- [x] [BUGFIX] Apply local `.jatai` locking in `Node.save_config` and `Node.load_config` to match global registry lock style.
+- [x] [BUGFIX] Adjust GC execution path to run immediate outbound processed-file sweep when OUTBOX crosses `GC_MAX_SENT_FILES`.
+- [x] [BUGFIX] Align `Registry.DEFAULT_CONFIG` to ADR/REQUIREMENTS with `GC_MAX_SENT_FILES: 11` and `GC_MAX_READ_FILES: 0`.
 
 ---
 
