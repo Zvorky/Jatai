@@ -86,7 +86,9 @@ class RetryState:
 
         retry_index = int(previous.get("retry_index", 0))
         next_index = retry_index + 1
-        is_fatal = next_index >= int(max_retries)
+        # Retry semantics: 1 original attempt + MAX_RETRIES retries.
+        # Fatal state is reached only after exceeding MAX_RETRIES.
+        is_fatal = next_index > int(max_retries)
 
         result: Dict[str, Any] = {
             "retry_index": next_index,

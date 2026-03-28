@@ -151,6 +151,15 @@ class TestDaemonHappyPath:
         (temp_home / ".retry").write_text(json.dumps(retry_data), encoding="utf-8")
 
         daemon.startup_scan()
+        second_failure = node_a.outbox_path / "!message.txt"
+        assert second_failure.exists()
+        assert not (node_a.outbox_path / "!!message.txt").exists()
+
+        retry_data = json.loads((temp_home / ".retry").read_text(encoding="utf-8"))
+        retry_data[key]["next_retry_at"] = 0
+        (temp_home / ".retry").write_text(json.dumps(retry_data), encoding="utf-8")
+
+        daemon.startup_scan()
         fatal_failure = node_a.outbox_path / "!!message.txt"
         assert fatal_failure.exists()
 
@@ -591,7 +600,15 @@ class TestDaemonLogging:
         )
         daemon.startup_scan()
 
-        # force retry to be due
+        # force first retry to be due (should still be non-fatal for MAX_RETRIES=2)
+        retry_data = json.loads((temp_home / ".retry").read_text(encoding="utf-8"))
+        for entry in retry_data.values():
+            entry["next_retry_at"] = 0
+        (temp_home / ".retry").write_text(json.dumps(retry_data), encoding="utf-8")
+
+        daemon.startup_scan()
+
+        # force second retry to be due and become fatal
         retry_data = json.loads((temp_home / ".retry").read_text(encoding="utf-8"))
         for entry in retry_data.values():
             entry["next_retry_at"] = 0

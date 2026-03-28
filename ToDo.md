@@ -22,9 +22,9 @@ Completing the operational toolset and fixing architectural compliance gaps from
 - [x] **[BUGFIX] Enforce Config Syntax:** Modify `jatai config [key]` to throw a syntax error if `[value]` is missing, enforcing the use of `config get` for reads.
 - [x] **[BUGFIX] Rename internal methods:** Rename misleading methods like `is_being_written` to `has_ignore_prefix` or similar to reflect the state machine accurately.
 - [x] **[BUGFIX] Update CLI/TUI Tests:** Update/fix CLI and TUI automated tests to match the new config get/set enforcement and TUI async/modal prompt behavior. Ensure tests reflect ADRs and REQUIREMENTS, and are compatible with Textual's event loop requirements.
-- [ ] **[BUGFIX] OS Auto-Start Enable & Warnings:** Ensure the daemon installation runs `systemctl --user enable`. Catch failures (or missing systemd) and output an explicit error message to the user.
-- [ ] **[BUGFIX] Retry Math Correction:** Ensure the code logic accurately reflects `1 original attempt + MAX_RETRIES` before hitting the fatal prefix state.
-- [ ] **[BUGFIX] Local File Locks:** Implement `filelock` on `Node.save_config` and `Node.load_config` to match the global registry concurrency protection.
+- [x] **[BUGFIX] OS Auto-Start Enable & Warnings:** Ensure the daemon installation runs `systemctl --user enable`. Catch failures (or missing systemd) and output an explicit error message to the user.
+- [x] **[BUGFIX] Retry Math Correction:** Ensure the code logic accurately reflects `1 original attempt + MAX_RETRIES` before hitting the fatal prefix state.
+- [x] **[BUGFIX] Local File Locks:** Implement `filelock` on `Node.save_config` and `Node.load_config` to match the global registry concurrency protection.
 
 ## **Phase 7: Advanced Logging & Immediate Garbage Collection**
 Refining the internal engines for long-term disk safety and observability.
