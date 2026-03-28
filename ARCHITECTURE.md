@@ -16,16 +16,22 @@ This document details the Architecture Decision Records (ADR) for the Jataí pro
   * `!!` : Total error, max retries reached (fatal).
   * `!!_` : Partial error, max retries reached for the failing nodes (fatal).
 * **Hot-Swap & Rollback:** Changing the prefix in the `.jatai` file triggers the daemon to rename historical files. Collisions trigger an immediate rollback using a `.bkp` configuration file and an error file drop in the INBOX.
+* **Anti-Heuristic Rule:** Jataí must **never** attempt to "guess" or infer past prefixes by scanning directory contents. Prefix migration must rely strictly on the system's cached configurations located in the OS temporary directory (mapped by UUID) or the local `.jatai.bkp`.
 
-## **4. Dual Registry & File-System First Onboarding**
-* **Decision:** Jataí uses a dual YAML configuration approach with soft-deletion and auto-creation.
-  * **Global (`~/.jatai`):** Stores absolute paths. Adding a path here auto-generates the INBOX/, OUTBOX/, and `.jatai` folders, dropping a `!helloworld.md` tutorial into the new INBOX.
-  * **Local (`.jatai` or `._jatai`):** Renaming this file to `._jatai` disables the node (soft-delete). Renaming it back reactivates it (hot-reload).
+## **4. Configuration vs. System State Separation (The Dual Registry)**
+* **Decision:** Jataí strictly separates user-facing configuration from internal daemon control states.
+  * **Global User Config (`~/.jatai`):** A pure YAML configuration file. Contains only global default settings and the list of active registered addresses (node paths). It contains **no** system control data.
+  * **Local User Config (`.jatai`):** Stores node-specific metadata overrides. A `.jatai.bkp` is kept locally so users can manually easily rollback if desired.
+  * **System Control State (`/tmp/jatai/`):** All daemon control data, status flags, and caches are stored in the OS temporary directory, formatted as human-readable UTF-8 YAML files.
+    * `uuid_map.yaml`: Maps every registered directory path to a unique UUID (reused if the path is removed and added back).
+    * `removed.yaml`: A list of soft-deleted/disabled addresses. Paths automatically disabled by the system (e.g., local `.jatai` was deleted) receive an `--autoremoved` flag to differentiate them from paths commented out/ignored manually by the user.
+    * `bkp/` subdirectory: Contains a copy of each local node's configuration named by its UUID (e.g., `<UUID>.yaml`). This acts as the ultimate truth cache for the daemon to perform safe prefix migrations without heuristic guessing.
   * **Overlap Handling & Suggestion:** If a user attempts to configure INBOX and OUTBOX in the exact same directory, Jataí strictly forbids it to avoid infinite broadcast loops. Instead, it will automatically suggest creating two separate subdirectories (e.g., `./dir/INBOX` and `./dir/OUTBOX`) and prompt for the user's interactive confirmation to build them.
 
 ## **5. Event-Driven Execution & OS Integration (Daemon)**
 * **Decision:** The main synchronization engine operates as a background Daemon based on OS file events (using `watchdog`). Upon installation/setup, Jataí must register itself to **auto-start with the Operating System**. It performs a "Startup Scan" on OS boot to process any files dropped during downtime.
 * **Exclusivity (Singleton):** The `jatai start` command must implement a PID/Lock file. If another daemon is already running, the second execution fails gracefully ("Already running") to prevent duplicate broadcasts.
+* **OS Auto-Start Constraints:** The primary target is Linux with `systemd`. If `systemd` is unavailable or the enablement command fails, the CLI must not fail silently. It must output a clear, explicit warning to the operator indicating that manual auto-start configuration is required.
 
 ## **6. Dynamic Resiliency and Exponential Retry**
 * **Decision:** An exponential retry mechanism managed by a global `~/.retry` state file, calculated dynamically per node: `[Node's RETRY_DELAY_BASE] * (2 ^ retry_index)`.
@@ -50,13 +56,14 @@ This document details the Architecture Decision Records (ADR) for the Jataí pro
 * **Decision:** If a destination file already exists, Jataí will append a numerical suffix (e.g., `file (1).ext`) to ensure no data is ever overwritten.
 
 ## **11. Process & File Concurrency (Locks & Validation)**
-* **Context:** `jatai init` runs as a separate process from the background daemon. Both may attempt to read/write `~/.jatai` simultaneously. Also, users might try to point INBOX and OUTBOX to the exact same folder.
-* **Decision:** 1. **File Locks:** Any read/write operation to `~/.jatai` must be protected by a strict file lock mechanism to prevent corruption.
-  2. **Overlap Prevention:** The system strictly validates and prevents INBOX and OUTBOX from sharing the same directory path (resolving the conflict interactively via the prompt defined in ADR 4).
+* **Context:** `jatai init` runs as a separate process from the background daemon. Both may attempt to read/write global or local configurations simultaneously.
+* **Decision:** 1. **File Locks:** Any read/write operation to the global `~/.jatai` AND the local `.jatai` files must be strictly protected by a `filelock` mechanism to prevent data corruption during concurrent CLI/Daemon access.
+ 2. **Overlap Prevention:** The system strictly validates and prevents INBOX and OUTBOX from sharing the same directory path (resolving the conflict interactively via the prompt defined in ADR 4).
 
 ## **12. Terminal-First Operational Retrieval (Logs & Docs)**
 * **Context:** (...)
-* **Log Rotation & Naming:** To prevent infinite file growth, log files must be generated using a datetime suffix format (e.g., `jatai_YYYY-MM-DD_HHMMSS.log`). A standard alias or symlink file (e.g., `jatai_latest.log`) must always point to the most recent execution for easy access.
+* **Log Storage & Rotation:** Log files are generated in the system temporary directory (`/tmp/jatai/logs/`) using a datetime suffix format (e.g., `jatai_YYYY-MM-DD_HHMMSS.log`).
+* **Latest Log Pointer:** The destination path for the `jatai_latest.log` symlink/alias is configurable via the global `~/.jatai` file (e.g., allowing the user to place the latest log shortcut in their `~/` home directory).
 
 ## **13. CLI Short-Option Policy (Abbreviated Flags)**
 * **Context:** CLI usability requires consistent, mnemonic abbreviated options to reduce verbosity in scripts and terminal usage.

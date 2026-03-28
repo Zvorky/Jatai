@@ -38,6 +38,17 @@ Jataí dictates message state via filename prefixes. Base prefixes are configura
 * **Global Registry (`~/.jatai`):** YAML file containing absolute paths of all nodes. **Must be protected by a file lock** during reads/writes.
 * **Local Configuration (`.jatai`):** Stores node metadata. Backups (`.jatai.bkp`) are maintained for rollback scenarios.
 
+Jataí explicitly separates user configuration from system state.
+
+* **User Configuration (File-System):**
+  * **Global Registry (`~/.jatai`):** YAML file containing absolute paths of active nodes and global settings. **Must be protected by a filelock.**
+  * **Local Configuration (`.jatai`):** Stores node metadata. Manual backups (`.jatai.bkp`) are maintained locally. Operations on `.jatai` (save/load) **must also be protected by a filelock**.
+* **System Control State (OS Temporary Directory):**
+  * Located at `/tmp/jatai/` (or OS equivalent). Contains UTF-8 YAML files.
+  * `uuid_map.yaml`: Dictionary mapping node paths to unique UUIDs.
+  * `removed.yaml`: List of soft-deleted addresses. Auto-removed addresses are explicitly marked (e.g., via an `--autoremoved` flag or property).
+  * `bkp/<UUID>.yaml`: Cached copies of local node configurations, used by the daemon as the ultimate source of truth for safe prefix rollbacks.
+
 ### **3.1 Validation & Initialization**
 * **Overlap Prevention:** `jatai init` and the Daemon must strictly validate that `INBOX_DIR` and `OUTBOX_DIR` are NOT the same path.
 * **Collision Handling:** If a file being delivered to an INBOX already exists, a numerical suffix (e.g., `(1)`) must be appended.
@@ -52,20 +63,21 @@ Jataí dictates message state via filename prefixes. Base prefixes are configura
 ## **4. Routing Engine (Daemon & Watchdog)**
 
 * **Exclusivity:** The daemon must implement a PID/Lock file (e.g., `~/.jatai.pid`). Subsequent `jatai start` calls must abort with a friendly "Already running" message.
-* **OS Auto-Start:** The daemon registers itself with the host OS to run silently in the background.
+* **OS Auto-Start:** The daemon registers itself with the host OS (focusing on Linux/systemd). If registration fails or the OS is incompatible, the system must catch the exception and print an explicit warning to the user rather than failing silently.
 * **Startup Scan:** Processes pending files on boot.
 * **Real-Time Trigger:** `watchdog` listens for file creations/moves in `OUTBOX` folders.
 
 ## **5. Retry Mechanism (Failure Management)**
 
 * **Exponential Logic:** Delay is `[Node's RETRY_DELAY_BASE] * (2 ^ retry_index)`. 
-* **Limits:** A `MAX_RETRIES` parameter dictates when a file moves from `!` / `!_` to the fatal `!!` / `!!_` states.
+* **Limits:** A `MAX_RETRIES` parameter dictates when a file moves from `!` / `!_` to the fatal `!!` / `!!_` states. The calculation is `1 (Initial Attempt) + MAX_RETRIES (Retries)`.
 
 ## **6. Observability and Logging**
 
 
 * Exclusive use of the native logging library.
-* **Log Rotation:** Logs are saved with datetime stamps (e.g., `~/.jatai/logs/jatai_YYYYMMDD_HHMMSS.log`), alongside a fixed `jatai_latest.log` pointing to the current run.
+* **Log Location:** All rotated logs with datetime stamps are stored in `/tmp/jatai/logs/`.
+* **Latest Log Pointer:** A fixed `jatai_latest.log` shortcut pointing to the current run is maintained. The path for this specific shortcut is user-configurable in the global `~/.jatai` registry.
 
 ## **7. Automated Testing Strategy**
 
