@@ -49,7 +49,7 @@ Current implementation status: core modules, basic CLI, daemon lifecycle, startu
 8. **Configuration reactivity already implemented in core:** Local `.jatai` overrides are applied over global defaults, `._jatai` nodes are ignored while their roots remain monitored, and reactivation via rename is handled by the daemon.
 9. **Prefix migration safety already implemented in core:** Prefix changes trigger historical file renames; collisions restore the previous config from `.jatai.bkp` and drop an error notice into the node INBOX.
 10. **Onboarding and docs already implemented in core/CLI:** Registry-only nodes are auto-created by the daemon (including `!helloworld.md` in new INBOXes), `jatai docs` renders documentation in terminal by default, and `jatai docs [query]` renders matching markdown docs in terminal by default (`-i|--inbox` exports to files).
-11. **Manual local-config deletion safety:** If `.jatai` is manually deleted from an existing registered node directory, daemon maintenance creates `._jatai` as a soft-delete marker instead of silently recreating and reactivating the node.
+11. **Manual local-config deletion safety:** If `.jatai` is manually deleted from an existing registered node directory, the daemon will record the node as auto-removed in `/tmp/jatai/removed.yaml` (appending ` --autoremoved` to the stored path) and will NOT recreate `._jatai` or any node directories/files. The `._jatai` soft-delete marker is only created by explicit CLI/TUI removal actions (for example `jatai remove`, which performs `.jatai` → `._jatai`).
 
 ## **🛠️ CLI & TUI Toolbox**
 

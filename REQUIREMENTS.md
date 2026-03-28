@@ -55,6 +55,9 @@ Jataí explicitly separates user configuration from system state.
 
 ### **3.2 Migration, Removal & Data Retention**
 * **Soft-Delete:** Renaming `.jatai` to `._jatai` disables the node. The daemon strictly ignores the folder contents, only monitoring the root for reactivation.
+* **Automatic Soft-Remove Marking:** When the daemon detects that a registered node's local `.jatai` file no longer exists, it must:
+  * add the node address to `removed.yaml` using an appended ` --autoremoved` suffix on the stored path to indicate the entry was automatically created by the daemon;
+  * explicitly avoid recreating or reactivating the node's directories or files (INBOX/OUTBOX/.jatai) as part of this operation; reactivation requires explicit user action (restore/rename or re-registration).
 * **Data Retention & Garbage Collection:** * Applies *only* to `_` prefixed files.
   * **Defaults:** INBOX retains everything (`0` or `null` limit). OUTBOX retains a maximum of 11 files (`GC_MAX_SENT_FILES=11`), deleting the oldest first.
   * **Deletion Engine:** Uses OS Trash by default. Configurable to hard delete.

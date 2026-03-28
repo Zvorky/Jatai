@@ -26,6 +26,10 @@ This document details the Architecture Decision Records (ADR) for the Jataí pro
     * `uuid_map.yaml`: Maps every registered directory path to a unique UUID (reused if the path is removed and added back).
     * `removed.yaml`: A list of soft-deleted/disabled addresses. Paths automatically disabled by the system (e.g., local `.jatai` was deleted) receive an `--autoremoved` flag to differentiate them from paths commented out/ignored manually by the user.
     * `bkp/` subdirectory: Contains a copy of each local node's configuration named by its UUID (e.g., `<UUID>.yaml`). This acts as the ultimate truth cache for the daemon to perform safe prefix migrations without heuristic guessing.
+  * **Automatic Soft-Remove Marking:** When the daemon detects that a registered node's local `.jatai` file no longer exists, the daemon must:
+    * record the node address in `removed.yaml` with the suffix ` --autoremoved` appended to the stored path to indicate an automatic/daemon-triggered soft-delete;
+    * explicitly avoid recreating or reactivating the node directories or files (INBOX/OUTBOX/.jatai) as a result of this detection; reactivation must require an explicit user action (rename/restore or re-register).
+      * Note: The `._jatai` marker is an explicit soft-delete artifact and must only be created by user-driven CLI/TUI operations (for example `jatai remove`, which performs `.jatai` → `._jatai`). The daemon must NOT create `._jatai` when a user manually deletes `.jatai` — doing so would contradict the "do not recreate directories and files" policy and may fail if the directory no longer exists or is not writable.
   * **Overlap Handling & Suggestion:** If a user attempts to configure INBOX and OUTBOX in the exact same directory, Jataí strictly forbids it to avoid infinite broadcast loops. Instead, it will automatically suggest creating two separate subdirectories (e.g., `./dir/INBOX` and `./dir/OUTBOX`) and prompt for the user's interactive confirmation to build them.
 
 ## **5. Event-Driven Execution & OS Integration (Daemon)**
