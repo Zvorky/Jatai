@@ -19,6 +19,7 @@ from jatai.core.delivery import Delivery
 from jatai.core.prefix import Prefix
 from jatai.core.registry import Registry
 from jatai.core.node import Node
+from jatai.core.uninstall import cleanup_install_artifacts
 
 app = typer.Typer(
     name="jatai",
@@ -39,6 +40,7 @@ KNOWN_COMMANDS = {
     "config",
     "remove",
     "clear",
+    "cleanup",
     "_daemon-run",
 }
 DOCS_ROOT = Path(__file__).resolve().parents[3] / "docs"
@@ -673,6 +675,63 @@ def clear(
                 removed += 1
 
     typer.echo(f"✓ Removed {removed} processed file(s)")
+
+
+@app.command()
+def cleanup(
+    full: bool = typer.Option(
+        False,
+        "--full",
+        "-f",
+        help="Enable full uninstall cleanup mode.",
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        "-d",
+        help="Show what would be removed without changing files.",
+    ),
+    remove_logs: bool = typer.Option(
+        False,
+        "--remove-logs",
+        "-l",
+        help="Also remove /tmp/jatai/logs during cleanup.",
+    ),
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        "-y",
+        help="Skip interactive confirmation.",
+    ),
+) -> None:
+    """
+    Optional uninstall helper for cleaning Jatai config/control artifacts.
+
+    This command keeps INBOX/OUTBOX message contents untouched.
+    """
+    if not full:
+        typer.echo("✗ Refusing to run without --full.", err=True)
+        typer.echo("Use: jatai cleanup --full --dry-run", err=True)
+        raise typer.Exit(code=1)
+
+    if not yes and not dry_run:
+        confirmed = typer.confirm(
+            "This will remove Jatai config/control artifacts. Continue?",
+            default=False,
+        )
+        if not confirmed:
+            typer.echo("Cancelled.")
+            raise typer.Exit(code=1)
+
+    actions = cleanup_install_artifacts(remove_logs=remove_logs, dry_run=dry_run)
+    if not actions:
+        typer.echo("No cleanup actions required.")
+        return
+
+    mode = "dry-run" if dry_run else "applied"
+    typer.echo(f"Cleanup {mode}: {len(actions)} action(s)")
+    for action in actions:
+        typer.echo(f"- {action}")
 
 
 def _run_tui() -> None:

@@ -6,7 +6,7 @@ backoff.
 
 ## Retry state file
 
-Retry metadata is persisted in `~/.retry` (JSON), protected by a file lock.
+Retry metadata is persisted in `/tmp/jatai/retry.yaml` (JSON), protected by a file lock.
 The daemon reads and updates this file on every delivery attempt.
 
 ## Exponential backoff formula
@@ -72,7 +72,7 @@ tail -f ~/.jatai.log
 
 To inspect the retry state file directly:
 ```bash
-cat ~/.retry
+cat /tmp/jatai/retry.yaml
 ```
 
 You can also inspect operational output using CLI commands:

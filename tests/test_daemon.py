@@ -274,9 +274,9 @@ class TestDaemonHappyPath:
         new_config["PREFIX_ERROR"] = "error_"
         node.write_config(new_config)
 
-    def test_daemon_creates_softdelete_instead_of_recreating_node(self, temp_home):
-        """When local .jatai is deleted, daemon must create ._jatai (soft-delete)
-        and must not recreate INBOX/OUTBOX or .jatai automatically.
+    def test_daemon_marks_autoremoved_without_creating_softdelete(self, temp_home):
+        """When local .jatai is deleted, daemon records auto-removal and does not
+        create ._jatai, .jatai, INBOX, or OUTBOX.
         """
         registry_path = temp_home / ".jatai"
         node = register_node(registry_path, "node_a", temp_home / "node_a")
@@ -298,29 +298,18 @@ class TestDaemonHappyPath:
         assert node.outbox_path.exists()
 
         daemon = JataiDaemon(registry_path=registry_path, pid_path=temp_home / ".jatai.pid")
-        # This should call _ensure_node_onboarded and create ._jatai instead of recreating runtime files
-        daemon.load_registered_nodes()
+        nodes = daemon.load_registered_nodes()
 
-        assert node.disabled_config_path.exists(), "Expected ._jatai soft-delete marker to be created"
-        assert not node.local_config_path.exists(), ".jatai should not be recreated automatically"
-        # INBOX/OUTBOX are preserved so migration can operate on existing history files
-        assert node.inbox_path.exists(), "INBOX should be preserved for migration"
-        assert node.outbox_path.exists(), "OUTBOX should be preserved for migration"
+        assert nodes == []
+        assert not node.disabled_config_path.exists(), "._jatai must not be auto-created"
+        assert not node.local_config_path.exists(), ".jatai must not be recreated automatically"
+        assert node.inbox_path.exists(), "existing INBOX must be preserved"
+        assert node.outbox_path.exists(), "existing OUTBOX must be preserved"
 
-        daemon.handle_node_config_change(node.node_path)
+        from jatai.core.sysstate import SystemState
 
-        # Simulate a user updating local config to new prefixes so migration should run
-        new_config = dict(node.local_config)
-        new_config["PREFIX_IGNORE"] = "processed_"
-        new_config["PREFIX_ERROR"] = "error_"
-        node.write_config(new_config)
-        daemon.handle_node_config_change(node.node_path)
-
-        assert not old_success.exists()
-        assert not old_error.exists()
-        assert (node.outbox_path / "processed_done.txt").exists()
-        assert (node.inbox_path / "error_failed.txt").exists()
-        assert node.backup_config_path.exists()
+        entries = SystemState.read_yaml(SystemState.removed_path())
+        assert f"{node.node_path} --autoremoved" in entries
 
     def test_daemon_handle_node_config_change_rolls_back_on_prefix_collision(self, temp_home):
         registry_path = temp_home / ".jatai"
@@ -394,7 +383,7 @@ class TestDaemonHappyPath:
         assert not (manual_node_path / "messages" / "in").exists()
         assert not (manual_node_path / "messages" / "out").exists()
 
-    def test_daemon_missing_local_config_creates_softdelete_marker(self, temp_home):
+    def test_daemon_missing_local_config_is_marked_autoremoved(self, temp_home):
         registry_path = temp_home / ".jatai"
         node = register_node(registry_path, "node_a", temp_home / "node_a")
 
@@ -406,9 +395,9 @@ class TestDaemonHappyPath:
         daemon = JataiDaemon(registry_path=registry_path, pid_path=temp_home / ".jatai.pid")
         nodes = daemon.load_registered_nodes()
 
-        assert len(nodes) == 1
+        assert len(nodes) == 0
         assert not node.local_config_path.exists()
-        assert node.disabled_config_path.exists()
+        assert not node.disabled_config_path.exists()
 
     def test_daemon_auto_onboarding_skips_invalid_overlap(self, temp_home):
         registry_path = temp_home / ".jatai"

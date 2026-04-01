@@ -1,7 +1,7 @@
 # **Jataí 🐝**
 **The local micro-email and messaging bus for your file system. Connect scripts and AI agents instantly using a zero-config drop-folder pattern. Jataí uses OS file events to route data across directories via standardized INBOX/OUTBOX folders, without complex APIs or sockets. Drop a file, and it's delivered!**
 
-**Version:** `0.7.1` (_Alpha_) · **Author:** Zvorky
+**Version:** `0.7.2` (_Alpha_) · **Author:** Zvorky
 
 ## **🎯 Philosophy & Goal**
 
@@ -44,12 +44,13 @@ Current implementation status: core modules, basic CLI, daemon lifecycle, startu
 3. **Check Node Status (current command):** `jatai status`
 4. **Start the Daemon (current command):** `jatai start`
 5. **Stop the Daemon (current command):** `jatai stop`
-6. **Resilience behavior already implemented in core:** 5-state prefix matrix (`_`, `!`, `!_`, `!!`, `!!_`), global `.retry` state with exponential backoff, and `MAX_RETRIES` fatal transitions are covered by current code/tests.
+6. **Resilience behavior already implemented in core:** 5-state prefix matrix (`_`, `!`, `!_`, `!!`, `!!_`), retry state in `/tmp/jatai/retry.yaml` with exponential backoff, and `MAX_RETRIES` fatal transitions are covered by current code/tests.
 7. **Observability already implemented in core:** Global daemon log file output to `~/.jatai.log` is active.
 8. **Configuration reactivity already implemented in core:** Local `.jatai` overrides are applied over global defaults, `._jatai` nodes are ignored while their roots remain monitored, and reactivation via rename is handled by the daemon.
-9. **Prefix migration safety already implemented in core:** Prefix changes trigger historical file renames; collisions restore the previous config from `.jatai.bkp` and drop an error notice into the node INBOX.
+9. **Prefix migration safety already implemented in core:** Prefix changes trigger historical file renames; collisions restore the previous config from `/tmp/jatai/bkp/<UUID>.yaml` and drop an error notice into the node INBOX.
 10. **Onboarding and docs already implemented in core/CLI:** Registry-only nodes are auto-created by the daemon (including `!helloworld.md` in new INBOXes), `jatai docs` renders documentation in terminal by default, and `jatai docs [query]` renders matching markdown docs in terminal by default (`-i|--inbox` exports to files).
-11. **Manual local-config deletion safety:** If `.jatai` is manually deleted from an existing registered node directory, the daemon will record the node as auto-removed in `/tmp/jatai/removed.yaml` (appending ` --autoremoved` to the stored path) and will NOT recreate `._jatai` or any node directories/files. The `._jatai` soft-delete marker is only created by explicit CLI/TUI removal actions (for example `jatai remove`, which performs `.jatai` → `._jatai`).
+11. **Manual local-config deletion safety:** If `.jatai` is manually deleted from an existing registered node directory, the daemon will record the node as auto-removed in `/tmp/jatai/removed.yaml` (appending ` --autoremoved` to the stored path) and will NOT recreate `._jatai`, `.jatai`, `INBOX`, or `OUTBOX` automatically. The `._jatai` soft-delete marker is only created by explicit CLI/TUI removal actions (for example `jatai remove`, which performs `.jatai` → `._jatai`).
+12. **First-run interactive bootstrap:** Opening the TUI (`jatai` with no args in interactive terminal) creates `~/.jatai` with default settings if it does not exist yet.
 
 ## **🛠️ CLI & TUI Toolbox**
 
@@ -68,6 +69,7 @@ Current implementation status: core modules, basic CLI, daemon lifecycle, startu
 | `jatai unread <file>` | Removes the success prefix from a file in the INBOX. |
 | `jatai remove [path]` | Disables the node (current dir by default). Safeguarded against global origin. |
 | `jatai clear [-r\|--read] [-s\|--sent]` | Clears processed files (`_`) in INBOX/OUTBOX (both by default). |
+| `jatai cleanup --full [--dry-run] [--remove-logs] [-y\|--yes]` | Optional uninstall helper: removes local/global config artifacts and `/tmp/jatai` control state while preserving INBOX/OUTBOX contents (logs kept unless `--remove-logs`). |
 | `jatai log` | Prints the latest log content in terminal (use `-i\|--inbox` to export). |
 | `jatai log -a\|--all` | Prints the complete log output in terminal (use `-i\|--inbox` to export). |
 | `jatai docs [query]` | Prints matching documentation in terminal by default (use `-i\|--inbox` to export file(s)). |
@@ -96,6 +98,9 @@ Canonical abbreviated flags:
 - `-s` = `--sent`
 - `-f` = `--foreground`
 - `-G` = `--global`
+- `-d` = `--dry-run`
+- `-l` = `--remove-logs`
+- `-y` = `--yes`
 
 Config keys are positional arguments (for example, `PREFIX_IGNORE`) and intentionally do not use short-option aliases.
 
@@ -120,7 +125,8 @@ Config keys are positional arguments (for example, `PREFIX_IGNORE`) and intentio
 │   │   ├── prefix.py             # Prefix/state handling helpers
 │   │   ├── retry.py              # Global retry state and exponential backoff scheduling
 │   │   ├── node.py               # Node representation, config override, backup, and prefix migration
-│   │   └── sysstate.py           # System state storage under /tmp/jatai (uuid_map, removed, bkp)
+│   │   ├── sysstate.py           # System state storage under /tmp/jatai (uuid_map, removed, bkp)
+│   │   └── uninstall.py          # Optional uninstall cleanup helper logic
 │   ├── tui.py                    # Textual interactive terminal UI
 │   └── cli/                       # Command-line interface
 │       ├── __init__.py
@@ -135,6 +141,7 @@ Config keys are positional arguments (for example, `PREFIX_IGNORE`) and intentio
 │   ├── test_retry.py             # Retry state and exponential delay tests
 │   ├── test_node.py              # Node module tests (config override, backup, and path validation)
 │   ├── test_cli.py               # CLI tests using Typer's CliRunner
+│   ├── test_uninstall.py         # Uninstall cleanup helper and CLI cleanup tests
 │   └── test_sysstate.py          # /tmp/jatai system-state behavior tests
 ├── pyproject.toml                 # Packaging metadata and console_scripts entrypoint
 ├── pytest.ini                     # Pytest configuration

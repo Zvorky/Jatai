@@ -79,6 +79,10 @@ Refining the internal engines for long-term disk safety and observability.
 	- Related: [ADR-7]
 - [x] [BUGFIX] Align `Registry.DEFAULT_CONFIG` to ADR/REQUIREMENTS with `GC_MAX_SENT_FILES: 11` and `GC_MAX_READ_FILES: 0`.
 	- Related: [ADR-7], [REQ-3.7.3.1]
+- [x] [BUGFIX] Enforce control-state artifacts under `/tmp/jatai` and disable daemon auto-creation of `._jatai` on manual `.jatai` deletion.
+	- Related: [ADR-4], [ADR-5.2], [ADR-6.1], [REQ-3.5], [REQ-3.7.2], [REQ-4.1]
+- [x] [BUGFIX] Bootstrap global `~/.jatai` on first TUI launch and add explicit uninstall cleanup helper (`jatai cleanup --full`).
+	- Related: [ADR-4.6], [ADR-4.7], [REQ-9.12], [REQ-9.13]
 
 ---
 

@@ -6,6 +6,7 @@ import yaml
 from filelock import FileLock, Timeout
 from pathlib import Path
 from typing import Dict, Optional, Any
+from jatai.core.sysstate import SystemState
 
 
 class Registry:
@@ -44,7 +45,7 @@ class Registry:
     @property
     def lock_path(self) -> Path:
         """Return lock file path used to synchronize registry access."""
-        return Path(f"{self.registry_path}.lock")
+        return SystemState.BASE_PATH / "registry.lock"
 
     def _lock(self) -> FileLock:
         """Create a file lock for the registry file."""
@@ -195,3 +196,20 @@ class Registry:
             self.nodes[node_name][key] = value
         else:
             self.global_config[key] = value
+
+    @classmethod
+    def ensure_initialized(cls, registry_path: Optional[Path] = None) -> bool:
+        """
+        Create the global registry file with defaults if it does not exist yet.
+
+        Args:
+            registry_path: Override registry path (defaults to ~/.jatai).
+
+        Returns:
+            True if the registry was newly created; False if it already existed.
+        """
+        reg = cls(registry_path)
+        if reg.registry_path.exists():
+            return False
+        reg.save()
+        return True

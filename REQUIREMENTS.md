@@ -36,18 +36,22 @@ Jataí dictates message state via filename prefixes. Base prefixes are configura
 
 * **[REQ-3.1]** Node Structure: Configurable input and output subfolders.
 * **[REQ-3.2]** Global Registry (`~/.jatai`): YAML file containing absolute paths of all nodes. **Must be protected by a file lock** during reads/writes.
-* **[REQ-3.3]** Local Configuration (`.jatai`): Stores node metadata. Backups (`.jatai.bkp`) are maintained for rollback scenarios.
+* **[REQ-3.3]** Local Configuration (`.jatai`): Stores node metadata. Runtime lock/backup artifacts must not be created in the node directory by daemon control flows.
 
 Jataí explicitly separates user configuration from system state.
 
 * **[REQ-3.4]** User Configuration (File-System):
   * **[REQ-3.4.1]** Global Registry (`~/.jatai`): YAML file containing absolute paths of active nodes and global settings. **Must be protected by a filelock.**
-  * **[REQ-3.4.2]** Local Configuration (`.jatai`): Stores node metadata. Manual backups (`.jatai.bkp`) are maintained locally. Operations on `.jatai` (save/load) **must also be protected by a filelock**.
+  * **[REQ-3.4.2]** Local Configuration (`.jatai`): Stores node metadata. Operations on `.jatai` (save/load) **must also be protected by a filelock**.
 * **[REQ-3.5]** System Control State (OS Temporary Directory):
   * **[REQ-3.5.1]** Located at `/tmp/jatai/` (or OS equivalent). Contains UTF-8 YAML files.
   * **[REQ-3.5.2]** `uuid_map.yaml`: Dictionary mapping node paths to unique UUIDs.
   * **[REQ-3.5.3]** `removed.yaml`: List of soft-deleted addresses. Auto-removed addresses are explicitly marked (e.g., via an `--autoremoved` flag or property).
   * **[REQ-3.5.4]** `bkp/<UUID>.yaml`: Cached copies of local node configurations, used by the daemon as the ultimate source of truth for safe prefix rollbacks.
+  * **[REQ-3.5.5]** `registry.lock`: Global registry lock file.
+  * **[REQ-3.5.6]** `<UUID>.lock`: Per-node lock files.
+  * **[REQ-3.5.7]** `jatai.pid`, `jatai.pid.lock`: Daemon singleton PID/lock files.
+  * **[REQ-3.5.8]** `retry.yaml`, `retry.yaml.lock`: Retry scheduling state and lock files.
 
 ### **[REQ-3.6] Validation & Initialization**
 * **[REQ-3.6.1]** Overlap Prevention: `jatai init` and the Daemon must strictly validate that `INBOX_DIR` and `OUTBOX_DIR` are NOT the same path.
@@ -58,6 +62,7 @@ Jataí explicitly separates user configuration from system state.
 * **[REQ-3.7.2]** Automatic Soft-Remove Marking: When the daemon detects that a registered node's local `.jatai` file no longer exists, it must:
   * **[REQ-3.7.2.1]** add the node address to `removed.yaml` using an appended ` --autoremoved` suffix on the stored path to indicate the entry was automatically created by the daemon;
   * **[REQ-3.7.2.2]** explicitly avoid recreating or reactivating the node's directories or files (INBOX/OUTBOX/.jatai) as part of this operation; reactivation requires explicit user action (restore/rename or re-registration).
+  * **[REQ-3.7.2.3]** never create `._jatai` automatically when `.jatai` is manually removed; `._jatai` is reserved for explicit CLI/TUI user actions.
 * **[REQ-3.7.3]** Data Retention & Garbage Collection: Applies only to `_` prefixed files.
   * **[REQ-3.7.3.1]** Defaults: INBOX retains everything (`0` or `null` limit). OUTBOX retains a maximum of 11 files (`GC_MAX_SENT_FILES=11`), deleting the oldest first.
   * **[REQ-3.7.3.2]** Deletion Engine: Uses OS Trash by default. Configurable to hard delete.
@@ -65,7 +70,7 @@ Jataí explicitly separates user configuration from system state.
 
 ## **[REQ-4] Routing Engine (Daemon & Watchdog)**
 
-* **[REQ-4.1]** Exclusivity: The daemon must implement a PID/Lock file (e.g., `~/.jatai.pid`). Subsequent `jatai start` calls must abort with a friendly "Already running" message.
+* **[REQ-4.1]** Exclusivity: The daemon must implement PID/lock files under `/tmp/jatai/` (for example `jatai.pid` and `jatai.pid.lock`). Subsequent `jatai start` calls must abort with a friendly "Already running" message.
 * **[REQ-4.2]** OS Auto-Start: The daemon registers itself with the host OS (focusing on Linux/systemd). If registration fails or the OS is incompatible, the system must catch the exception and print an explicit warning to the user rather than failing silently.
 * **[REQ-4.3]** Startup Scan: Processes pending files on boot.
 * **[REQ-4.4]** Real-Time Trigger: `watchdog` listens for file creations/moves in `OUTBOX` folders.
@@ -101,7 +106,7 @@ Jataí explicitly separates user configuration from system state.
 * **[REQ-9.4]** Output Mode Policy: `docs` and `log` are terminal-first and only write files when `--inbox` is explicitly requested.
 * **[REQ-9.5]** System-Generated INBOX Prefix Policy: Any CLI/daemon artifact exported or dropped into INBOX by Jataí itself must be prefixed with `!` to differentiate it from node-delivered payload files.
 * **[REQ-9.6]** Canonical Short-Option Mapping: All optional flags must support abbreviated forms:
-  * **[REQ-9.6.1]** `-a` = `--all`, `-i` = `--inbox`, `-m` = `--move`, `-r` = `--read`, `-s` = `--sent`, `-f` = `--foreground`, `-G` = `--global`.
+  * **[REQ-9.6.1]** `-a` = `--all`, `-i` = `--inbox`, `-m` = `--move`, `-r` = `--read`, `-s` = `--sent`, `-f` = `--foreground`, `-G` = `--global`, `-d` = `--dry-run`, `-l` = `--remove-logs`, `-y` = `--yes`.
   * **[REQ-9.6.2]** Config key arguments (positional) explicitly exclude short-option mapping.
   * **[REQ-9.6.3]** (See ADR 13 for full policy and rationale).
 * **[REQ-9.7]** Config Operations: `jatai config get [key]` for reading.
@@ -110,3 +115,8 @@ Jataí explicitly separates user configuration from system state.
 * **[REQ-9.9]** TUI Coverage: The TUI must provide operator access to all CLI capabilities through interactive views and actions, without reducing the existing CLI command surface.
 * **[REQ-9.10]** TUI Consistency Rule: TUI actions must reuse the same underlying application logic as the CLI commands rather than maintaining separate behavior paths.
 * **[REQ-9.11]** TUI Context: The TUI includes "Browse Nodes" for interactive directory switching.
+* **[REQ-9.12]** TUI bootstrap behavior: On first interactive launch, if global `~/.jatai` does not exist, it must be created with default configuration values.
+* **[REQ-9.13]** Optional uninstall cleanup helper: A user-invoked cleanup command must be available to prepare a full uninstall by removing Jataí configuration/control artifacts while preserving INBOX/OUTBOX payload contents.
+  * **[REQ-9.13.1]** The helper must remove local `.jatai` and `._jatai` files from known nodes before removing the global `~/.jatai` file.
+  * **[REQ-9.13.2]** The helper must clean `/tmp/jatai/` control-state files and allow optionally preserving logs by default.
+  * **[REQ-9.13.3]** The helper must require explicit opt-in for destructive execution and support dry-run preview mode.

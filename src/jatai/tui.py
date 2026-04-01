@@ -167,12 +167,26 @@ class JataiApp(App):
     def on_mount(self) -> None:
         cwd = Path.cwd()
         self.sub_title = str(cwd)
-        self._output(
+
+        from jatai.core.registry import Registry
+
+        try:
+            created = Registry.ensure_initialized()
+        except Exception:
+            created = False
+
+        welcome = (
             "Welcome to [bold]Jataí TUI[/bold]. "
             "Select an action from the menu and press [bold]Enter[/bold].\n"
             f"Current directory: [italic]{cwd}[/italic]\n"
             "Press [bold]Q[/bold] to quit."
         )
+        if created:
+            from pathlib import Path as _Path
+            registry_path = _Path.home() / ".jatai"
+            welcome += f"\n\n[green]✓ Global registry initialized:[/green] {registry_path}"
+
+        self._output(welcome)
 
     # ------------------------------------------------------------------
     # Internal helpers

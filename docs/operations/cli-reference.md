@@ -24,8 +24,8 @@ Registers the node in the global registry (`~/.jatai`). Fails with a friendly
 message if `INBOX_DIR` and `OUTBOX_DIR` would resolve to the same path.
 
 If a user manually deletes `.jatai` from an already registered node directory,
-daemon maintenance writes `._jatai` as a soft-delete marker rather than
-silently recreating and reactivating the node.
+daemon maintenance records the path in `/tmp/jatai/removed.yaml` with
+`--autoremoved` and does not recreate `.jatai`, `._jatai`, `INBOX`, or `OUTBOX`.
 
 ---
 
@@ -262,6 +262,30 @@ jatai clear -s
 
 ---
 
+### `jatai cleanup --full [--dry-run] [--remove-logs] [-y|--yes]`
+
+Optional helper to prepare complete uninstall cleanup.
+
+```bash
+# Preview what would be removed
+jatai cleanup --full --dry-run
+
+# Apply cleanup (with interactive confirmation)
+jatai cleanup --full
+
+# Apply cleanup non-interactively and also remove logs
+jatai cleanup --full --remove-logs --yes
+```
+
+Behavior:
+
+- preserves INBOX/OUTBOX payload contents
+- removes local `.jatai` / `._jatai` from known nodes
+- removes global `~/.jatai`
+- removes control-state under `/tmp/jatai/` (logs preserved unless `--remove-logs`)
+
+---
+
 ## Short-option policy
 
 Canonical mapping:
@@ -273,6 +297,9 @@ Canonical mapping:
 - `-s` = `--sent`
 - `-f` = `--foreground`
 - `-G` = `--global`
+- `-d` = `--dry-run`
+- `-l` = `--remove-logs`
+- `-y` = `--yes`
 
 ---
 

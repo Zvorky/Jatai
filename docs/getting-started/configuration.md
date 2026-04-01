@@ -83,7 +83,7 @@ a change is detected:
 
 1. The node config is re-read.
 2. If the prefix keys changed, historical file renames are attempted.
-3. If a rename collision occurs, the previous config is restored from `.jatai.bkp`
+3. If a rename collision occurs, the previous config is restored from the daemon cache in `/tmp/jatai/bkp/<UUID>.yaml`
    and a notice file is dropped in INBOX. See [Prefix States](../operations/prefix-states.md).
 4. Watchdog observers are updated to reflect any changed OUTBOX paths.
 
@@ -99,8 +99,8 @@ jatai config
 jatai config -G
 
 # Read single key
-jatai config PREFIX_IGNORE
-jatai config -G PREFIX_IGNORE
+jatai config get PREFIX_IGNORE
+jatai config get -G PREFIX_IGNORE
 
 # Write key/value
 jatai config PREFIX_IGNORE __

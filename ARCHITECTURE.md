@@ -24,27 +24,34 @@ This document details the Architecture Decision Records (ADR) for the Jataí pro
 
 ## [ADR-4] Configuration vs. System State Separation (The Dual Registry)
 
-* **[ADR-4.1]** **Global User Config (`~/.jatai`):** A pure YAML configuration file. Contains only global default settings and the list of active registered addresses (node paths). It contains **no** system control data.
-* **[ADR-4.2]** **Local User Config (`.jatai`):** Stores node-specific metadata overrides. A `.jatai.bkp` is kept locally so users can manually easily rollback if desired.
-* **[ADR-4.3]** **System Control State (`/tmp/jatai/`):** All daemon control data, status flags, and caches are stored in the OS temporary directory, formatted as human-readable UTF-8 YAML files.
+* **[ADR-4.1]** **Global User Config (`~/.jatai`):** A pure YAML configuration file. Contains only global default settings and the list of active registered addresses (node paths). It contains **no** system control data. The only additional user-home artifact allowed is the latest-log symlink/copy (location configurable).
+* **[ADR-4.2]** **Local User Config (`.jatai`):** Stores node-specific metadata overrides only. No lock or backup files are persisted in the node directory.
+* **[ADR-4.3]** **System Control State (`/tmp/jatai/`):** All daemon control data, status flags, locks, and caches are stored in the OS temporary directory, formatted as human-readable UTF-8 YAML files.
     * **[ADR-4.3.1]** `uuid_map.yaml`: Maps every registered directory path to a unique UUID (reused if the path is removed and added back).
     * **[ADR-4.3.2]** `removed.yaml`: A list of soft-deleted/disabled addresses. Paths automatically disabled by the system (e.g., local `.jatai` was deleted) receive an `--autoremoved` flag to differentiate them from paths commented out/ignored manually by the user.
     * **[ADR-4.3.3]** `bkp/` subdirectory: Contains a copy of each local node's configuration named by its UUID (e.g., `<UUID>.yaml`). This acts as the ultimate truth cache for the daemon to perform safe prefix migrations without heuristic guessing.
+    * **[ADR-4.3.4]** `registry.lock`: Lock file used for global registry synchronization.
+    * **[ADR-4.3.5]** `<UUID>.lock`: Per-node lock files named by node UUID.
+    * **[ADR-4.3.6]** `jatai.pid`, `jatai.pid.lock`: Daemon singleton PID and lock files.
+    * **[ADR-4.3.7]** `retry.yaml` (+ lock): Retry scheduling state file and lock.
 * **[ADR-4.4]** **Automatic Soft-Remove Marking:** When the daemon detects that a registered node's local `.jatai` file no longer exists, the daemon must:
     * **[ADR-4.4.1]** record the node address in `removed.yaml` with the suffix ` --autoremoved` appended to the stored path to indicate an automatic/daemon-triggered soft-delete;
     * **[ADR-4.4.2]** explicitly avoid recreating or reactivating the node directories or files (INBOX/OUTBOX/.jatai) as a result of this detection; reactivation must require an explicit user action (rename/restore or re-register).
+    * **[ADR-4.4.3]** no lock or backup files are written to node directories or home-directory control paths; those artifacts remain strictly under `/tmp/jatai/`.
         * Note: The `._jatai` marker is an explicit soft-delete artifact and must only be created by user-driven CLI/TUI operations (for example `jatai remove`, which performs `.jatai` → `._jatai`). The daemon must NOT create `._jatai` when a user manually deletes `.jatai` — doing so would contradict the "do not recreate directories and files" policy and may fail if the directory no longer exists or is not writable.
 * **[ADR-4.5]** **Overlap Handling & Suggestion:** If a user attempts to configure INBOX and OUTBOX in the exact same directory, Jataí strictly forbids it to avoid infinite broadcast loops. Instead, it will automatically suggest creating two separate subdirectories (e.g., `./dir/INBOX` and `./dir/OUTBOX`) and prompt for the user's interactive confirmation to build them.
+* **[ADR-4.6]** **Global Registry Bootstrap:** The global user config file (`~/.jatai`) is bootstrapped with defaults when the interactive TUI starts, if it does not exist yet. This keeps first-run interactive usage self-contained without requiring prior node initialization.
+* **[ADR-4.7]** **Optional Uninstall Cleanup Helper:** Package uninstall must not implicitly remove user/system data. Cleanup is explicit and user-invoked via CLI helper mode, preserving INBOX/OUTBOX message contents while removing configuration/control artifacts.
 
 ## [ADR-5] Event-Driven Execution & OS Integration (Daemon)
 
 * **[ADR-5.1]** The main synchronization engine operates as a background Daemon based on OS file events (using `watchdog`). Upon installation/setup, Jataí must register itself to **auto-start with the Operating System**. It performs a "Startup Scan" on OS boot to process any files dropped during downtime.
-* **[ADR-5.2]** Exclusivity (Singleton): The `jatai start` command must implement a PID/Lock file. If another daemon is already running, the second execution fails gracefully ("Already running") to prevent duplicate broadcasts.
+* **[ADR-5.2]** Exclusivity (Singleton): The `jatai start` command must implement a PID/Lock file under `/tmp/jatai/`. If another daemon is already running, the second execution fails gracefully ("Already running") to prevent duplicate broadcasts.
 * **[ADR-5.3]** OS Auto-Start Constraints: The primary target is Linux with `systemd`. If `systemd` is unavailable or the enablement command fails, the CLI must not fail silently. It must output a clear, explicit warning to the operator indicating that manual auto-start configuration is required.
 
 ## [ADR-6] Dynamic Resiliency and Exponential Retry
 
-* **[ADR-6.1]** An exponential retry mechanism managed by a global `~/.retry` state file, calculated dynamically per node: `[Node's RETRY_DELAY_BASE] * (2 ^ retry_index)`.
+* **[ADR-6.1]** An exponential retry mechanism managed by `/tmp/jatai/retry.yaml` (with lock), calculated dynamically per node: `[Node's RETRY_DELAY_BASE] * (2 ^ retry_index)`.
 * **[ADR-6.2]** Max Retries: A strict `MAX_RETRIES` limit exists. Once reached, files transition to `!!` or `!!_` and are no longer retried. Soft-deleted nodes (`._jatai`) are simply ignored and do not count as delivery failures.
 
 ## [ADR-7] Data Safety and Controlled Garbage Collection

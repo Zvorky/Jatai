@@ -337,3 +337,56 @@ class TestRegistryMaliciousAdversarialScenarios:
         verify = Registry(registry_path=registry_path)
         verify.load()
         assert "waiter" in verify.nodes
+
+
+class TestRegistryEnsureInitialized:
+    """Tests for Registry.ensure_initialized()."""
+
+    def test_ensure_initialized_creates_file_when_missing(self, temp_dir):
+        """Returns True and creates the file when registry does not exist."""
+        registry_path = temp_dir / ".jatai"
+        assert not registry_path.exists()
+
+        result = Registry.ensure_initialized(registry_path)
+
+        assert result is True
+        assert registry_path.exists()
+
+    def test_ensure_initialized_file_contains_default_config(self, temp_dir):
+        """Newly created registry file contains all DEFAULT_CONFIG keys."""
+        import yaml
+
+        registry_path = temp_dir / ".jatai"
+        Registry.ensure_initialized(registry_path)
+
+        data = yaml.safe_load(registry_path.read_text())
+        for key in Registry.DEFAULT_CONFIG:
+            assert key in data, f"Missing key: {key}"
+
+    def test_ensure_initialized_idempotent_when_file_exists(self, temp_dir):
+        """Returns False and does not overwrite an existing registry."""
+        registry_path = temp_dir / ".jatai"
+        registry_path.write_text("PREFIX_IGNORE: custom\n")
+        mtime_before = registry_path.stat().st_mtime
+
+        result = Registry.ensure_initialized(registry_path)
+
+        assert result is False
+        assert registry_path.stat().st_mtime == mtime_before
+        assert "custom" in registry_path.read_text()
+
+    def test_ensure_initialized_creates_parent_dirs(self, temp_dir):
+        """Creates parent directories if they do not exist."""
+        registry_path = temp_dir / "nested" / "deep" / ".jatai"
+        Registry.ensure_initialized(registry_path)
+
+        assert registry_path.exists()
+
+    def test_ensure_initialized_default_path_uses_home(self, temp_home):
+        """Without an argument, uses ~/.jatai."""
+        expected = temp_home / ".jatai"
+        assert not expected.exists()
+
+        Registry.ensure_initialized()
+
+        assert expected.exists()

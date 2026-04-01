@@ -99,8 +99,8 @@ class JataiDaemon:
         observer_factory=Observer,
     ) -> None:
         self.registry_path = Path(registry_path) if registry_path is not None else Path.home() / ".jatai"
-        self.pid_path = Path(pid_path) if pid_path is not None else Path.home() / ".jatai.pid"
-        self.retry_path = Path(retry_path) if retry_path is not None else Path.home() / ".retry"
+        self.pid_path = Path(pid_path) if pid_path is not None else SystemState.BASE_PATH / "jatai.pid"
+        self.retry_path = Path(retry_path) if retry_path is not None else SystemState.BASE_PATH / "retry.yaml"
         SystemState.ensure_base()
         self.log_path = Path(log_path) if log_path is not None else SystemState.BASE_PATH / "logs" / f"jatai_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.log"
         self.latest_log_path = Path(os.path.expanduser(Registry(self.registry_path).global_config.get("LATEST_LOG_PATH", "~/.jatai_latest.log"))).expanduser() if log_path is None else None
@@ -210,33 +210,14 @@ class JataiDaemon:
 
         has_any_local_config = node.local_config_path.exists() or node.disabled_config_path.exists()
         if not has_any_local_config:
-            # If the node directory existed before (user removed .jatai manually),
-            # create a soft-delete marker and do not recreate runtime files.
-            softdelete_config = {
-                "node_path": str(node.node_path),
-                "INBOX_DIR": str(inbox_path),
-                "OUTBOX_DIR": str(outbox_path),
-            }
-            for key in ("PREFIX_IGNORE", "PREFIX_ERROR", "RETRY_DELAY_BASE", "MAX_RETRIES"):
-                if key in effective:
-                    softdelete_config[key] = effective[key]
-            node.write_config(softdelete_config, node.disabled_config_path)
-            # Ensure the disabled config file exists; attempt a safe fallback if necessary.
-            if not node.disabled_config_path.exists():
-                try:
-                    node.disabled_config_path.parent.mkdir(parents=True, exist_ok=True)
-                    with open(node.disabled_config_path, "w", encoding="utf-8") as f:
-                        yaml.safe_dump(softdelete_config, f, default_flow_style=False)
-                except Exception:
-                    pass
-            # Record this auto-removal in the system state per ADR-4.4.1 and REQ-3.7.2.1.
+            # Record auto-removal and do not recreate node config/directories.
             try:
                 SystemState.mark_autoremoved(str(node.node_path))
             except Exception:
                 pass
             self.logger.info(
-                "Detected missing local config; created soft-delete marker at %s",
-                node.disabled_config_path,
+                "Detected missing local config; marked node as auto-removed without recreating files node=%s",
+                node.node_path,
             )
             return
 
@@ -247,7 +228,7 @@ class JataiDaemon:
 
     @property
     def pid_lock_path(self) -> Path:
-        return Path(f"{self.pid_path}.lock")
+        return SystemState.BASE_PATH / "jatai.pid.lock"
 
     def _pid_lock(self) -> FileLock:
         self.pid_path.parent.mkdir(parents=True, exist_ok=True)
