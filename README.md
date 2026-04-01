@@ -133,7 +133,6 @@ Config keys are positional arguments (for example, `PREFIX_PROCESSED`) and inten
 │   ├── test_retry.py             # Retry state and exponential delay tests
 │   ├── test_node.py              # Node module tests (config override, backup, and path validation)
 │   └── test_cli.py               # CLI tests using Typer's CliRunner
-├── requirements.txt               # Python dependencies currently in use
 ├── pyproject.toml                 # Packaging metadata and console_scripts entrypoint
 ├── pytest.ini                     # Pytest configuration
 ├── .gitignore                     # Git ignore rules

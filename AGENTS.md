@@ -23,11 +23,11 @@ This file defines mandatory rules for any agent executing development tasks in t
    - Which files were updated.
    - Which tasks in `ToDo.md` were changed.
    - If there was an update to `README.md` (including "File Structure").
-8. Keep Python dependencies file (`requirements.txt` or `pyproject.toml`) always updated:
-   - Add new external library dependencies immediately when they are first used.
-   - Update versions when upgrading packages.
-   - Remove dependencies no longer in use.
-   - Maintain consistency with code changes.
+8. Keep `pyproject.toml` as the source of truth for Python dependencies:
+   - Add new external library dependencies immediately to `[project].dependencies` in `pyproject.toml` when they are first used.
+   - Update versions in `pyproject.toml` when upgrading packages and remove unused dependencies there.
+   - If a `requirements.txt` file is needed for pinned environment reproducibility, generate or update it from `pyproject.toml` (for example via `pip-tools` ou `poetry export`).
+   - Maintain consistency between `pyproject.toml` and any generated `requirements.txt` files; prefer `pyproject.toml` for packaging and distribution.
 9. Keep all explicit project version citations synchronized whenever the version changes:
    - Run `tools/set_version <new_version>` instead of editing version references manually.
    - At minimum, keep `pyproject.toml`, `src/jatai/__init__.py`, `README.md`, `docs/jatai.1`, and `tools/set_version` aligned with the same current version.
@@ -66,6 +66,17 @@ Whenever `ARCHITECTURE.md` or `REQUIREMENTS.md` are changed:
 When reviewing pending ADR/requirement items:
 
 5. If an ADR/requirement defines behavior that is not fully implemented yet, add explicit implementation task(s) to `ToDo.md` even when no file in `ARCHITECTURE.md` or `REQUIREMENTS.md` was changed in that turn.
+
+## ADR / REQ Reference Rules
+
+- All architecture decisions in `ARCHITECTURE.md` MUST use the `[ADR-x]` header format and decision items MUST use `[ADR-x.y]` unique identifiers.
+- All requirements in `REQUIREMENTS.md` MUST use the `[REQ-x]` identifiers for top-level groups and `[REQ-x.y]` for subitems.
+- When mapping a user prompt to `ToDo.md`, every task that implements, fixes, or depends on an ADR or a REQ MUST include a `Related:` reference listing the exact identifier(s). Example:
+   - `- [ ] Implement feature X`
+      - `Related: [ADR-3], [REQ-2.1]`
+- Do NOT add ADR prefixes to content items explicitly marked as "Context" inside `ARCHITECTURE.md` — context notes are documentation only and are not ADR entries.
+- Do NOT create, rename, or merge ADR/REQ identifiers without explicit user approval. Propose identifier changes and get approval before applying them.
+- Tasks in `ToDo.md` marked with `[ARCH]` are architecture decision placeholders and MUST NOT be implemented unless the user converts them to actionable tasks and provides ADR/REQ references.
 
 ## Quick Operational Checklist
 
