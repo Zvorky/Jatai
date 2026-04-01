@@ -83,6 +83,10 @@ Refining the internal engines for long-term disk safety and observability.
 	- Related: [ADR-4], [ADR-5.2], [ADR-6.1], [REQ-3.5], [REQ-3.7.2], [REQ-4.1]
 - [x] [BUGFIX] Bootstrap global `~/.jatai` on first TUI launch and add explicit uninstall cleanup helper (`jatai cleanup --full`).
 	- Related: [ADR-4.6], [ADR-4.7], [REQ-9.12], [REQ-9.13]
+- [x] [BUGFIX] Make CLI log retrieval and daemon latest-log pointer honor persisted global config and `/tmp/jatai/logs/`.
+	- Related: [ADR-12], [REQ-6.2], [REQ-6.3], [REQ-9.3], [REQ-9.4]
+- [x] [BUGFIX] Align retry defaults, README, and user-facing docs with `/tmp/jatai/retry.yaml` and current filesystem-first behavior.
+	- Related: [ADR-4], [ADR-12], [REQ-3.5.8], [REQ-6], [REQ-8], [REQ-9]
 
 ---
 

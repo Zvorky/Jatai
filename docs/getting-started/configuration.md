@@ -9,7 +9,7 @@ document describes all available keys, their defaults, and where to set them.
 
 Defines system-wide defaults for all nodes and stores their paths.
 Protected by a file lock. Edited by `jatai init` automatically; can also be
-edited manually (the daemon auto-onboards any new path it finds there).
+edited manually.
 
 Example `~/.jatai`:
 ```yaml
@@ -19,6 +19,10 @@ RETRY_DELAY_BASE: 60
 MAX_RETRIES: 3
 INBOX_DIR: INBOX
 OUTBOX_DIR: OUTBOX
+GC_MAX_READ_FILES: 0
+GC_MAX_SENT_FILES: 11
+GC_DELETE_MODE: trash
+LATEST_LOG_PATH: ~/.jatai_latest.log
 
 my-project:
   path: /home/user/my-project
@@ -46,8 +50,10 @@ contents but continues watching the root for reactivation.
 | `MAX_RETRIES` | `3` | global / local | Maximum delivery attempts before transitioning to fatal prefix |
 | `INBOX_DIR` | `INBOX` | global / local | Subdirectory name or absolute path for the node's incoming folder |
 | `OUTBOX_DIR` | `OUTBOX` | global / local | Subdirectory name or absolute path for the node's outgoing folder |
-| `GC_MAX_READ_FILES` | `0` | global / local | Maximum number of `_`-prefixed files to keep in INBOX. `0` disables auto-cleanup |
-| `GC_MAX_SENT_FILES` | `0` | global / local | Maximum number of `_`-prefixed files to keep in OUTBOX. `0` disables auto-cleanup |
+| `GC_MAX_READ_FILES` | `0` | global / local | Maximum number of `_`-prefixed files to keep in INBOX. `0` keeps all read history |
+| `GC_MAX_SENT_FILES` | `11` | global / local | Maximum number of `_`-prefixed files to keep in OUTBOX before oldest sent history is trimmed |
+| `GC_DELETE_MODE` | `trash` | global / local | Deletion backend for GC: `trash` by default, or permanent delete when configured otherwise |
+| `LATEST_LOG_PATH` | `~/.jatai_latest.log` | global | Location of the latest-log symlink/copy used by `jatai log` |
 
 ### Relative vs absolute paths for INBOX/OUTBOX
 
@@ -89,15 +95,9 @@ a change is detected:
 
 ## Editing config via CLI
 
-`jatai config` is available for reading and writing local or global settings.
+`jatai config` writes settings. `jatai config get` is the canonical read path.
 
 ```bash
-# Show local config
-jatai config
-
-# Show global config
-jatai config -G
-
 # Read single key
 jatai config get PREFIX_IGNORE
 jatai config get -G PREFIX_IGNORE
@@ -141,7 +141,8 @@ This prevents INBOX and OUTBOX from growing unbounded over time.
 When the limit is exceeded, the oldest processed files (by modification time) are
 deleted automatically during the startup scan and on every delivery cycle.
 
-Set either key to `0` (the default) to disable auto-cleanup for that location.
+Set `GC_MAX_READ_FILES` to `0` to keep all read history. OUTBOX history keeps 11
+files by default unless `GC_MAX_SENT_FILES` is overridden.
 
 See [Garbage Collection](../operations/garbage-collection.md) for the full reference.
 

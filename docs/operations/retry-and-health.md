@@ -57,7 +57,11 @@ inactive.
 ## Monitoring with the log file
 
 The daemon writes all delivery events — successes, failures, retries, and
-onboarding events — to `~/.jatai.log`.
+maintenance events — to rotated log files under `/tmp/jatai/logs/`.
+
+`jatai log` resolves the latest output via the configured `LATEST_LOG_PATH`
+pointer (default `~/.jatai_latest.log`) and falls back to the newest rotated log
+when the pointer is unavailable.
 
 Log format:
 ```
@@ -67,7 +71,7 @@ Log format:
 
 To follow the log in real time:
 ```bash
-tail -f ~/.jatai.log
+tail -f ~/.jatai_latest.log
 ```
 
 To inspect the retry state file directly:

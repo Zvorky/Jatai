@@ -11,6 +11,7 @@ from typer.testing import CliRunner
 from jatai.cli.main import app, run, _run_tui
 from jatai.core.registry import Registry
 from jatai.core.node import Node
+from jatai.core.sysstate import SystemState
 
 runner = CliRunner()
 
@@ -249,6 +250,36 @@ class TestCLIHappyPath:
         for f in node.inbox_path.iterdir():
             assert f.name.startswith("!"), f"Expected ! prefix on system artifact: {f.name}"
 
+    def test_cli_log_reads_configured_latest_log_pointer(self, temp_home, monkeypatch):
+        registry = Registry()
+        registry.set_config("LATEST_LOG_PATH", str(temp_home / "custom-latest.log"))
+        registry.save()
+
+        log_path = temp_home / "custom-latest.log"
+        log_path.write_text("configured log line\n", encoding="utf-8")
+
+        result = runner.invoke(app, ["log"])
+
+        assert result.exit_code == 0
+        assert "configured log line" in result.stdout
+
+    def test_cli_log_falls_back_to_latest_rotated_log(self, temp_home, temp_dir, monkeypatch):
+        state_root = temp_dir / "tmp_state"
+        monkeypatch.setattr(SystemState, "BASE_PATH", state_root)
+        SystemState.ensure_base()
+
+        older = state_root / "logs" / "jatai_older.log"
+        newer = state_root / "logs" / "jatai_newer.log"
+        older.write_text("older\n", encoding="utf-8")
+        newer.write_text("newer\n", encoding="utf-8")
+        older.touch()
+        newer.touch()
+
+        result = runner.invoke(app, ["log"])
+
+        assert result.exit_code == 0
+        assert "newer" in result.stdout
+
 
 class TestCLIErrorFailureScenarios:
     """Error and failure scenario tests for CLI."""
@@ -390,6 +421,7 @@ class TestCLIErrorFailureScenarios:
     def test_cli_log_missing_file(self, temp_home, monkeypatch):
         """Test log command fails gracefully when log file doesn't exist."""
         monkeypatch.setenv("HOME", str(temp_home))
+        monkeypatch.setattr(SystemState, "BASE_PATH", temp_home / "tmp_state")
         result = runner.invoke(app, ["log"])
 
         assert result.exit_code == 1
@@ -500,8 +532,10 @@ class TestCLIPhase6Toolbox:
     """Phase 6 command surface tests."""
 
     def test_cli_log_latest_and_all(self, temp_home, monkeypatch):
-        monkeypatch.setenv("HOME", str(temp_home))
-        log_path = temp_home / ".jatai.log"
+        registry = Registry()
+        log_path = temp_home / ".jatai_latest.log"
+        registry.set_config("LATEST_LOG_PATH", str(log_path))
+        registry.save()
         log_path.write_text("line1\nline2\nline3\n", encoding="utf-8")
 
         latest = runner.invoke(app, ["log"])
@@ -514,8 +548,11 @@ class TestCLIPhase6Toolbox:
         assert "line3" in full.stdout
 
     def test_cli_log_inbox_exports_rendered_output(self, temp_dir, temp_home, monkeypatch):
-        monkeypatch.setenv("HOME", str(temp_home))
-        (temp_home / ".jatai.log").write_text("abc\ndef\n", encoding="utf-8")
+        registry = Registry()
+        latest_log = temp_home / ".jatai_latest.log"
+        registry.set_config("LATEST_LOG_PATH", str(latest_log))
+        registry.save()
+        latest_log.write_text("abc\ndef\n", encoding="utf-8")
         node = Node(temp_dir / "log_export_node")
         node.create()
 

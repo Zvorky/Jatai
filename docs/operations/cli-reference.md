@@ -171,19 +171,9 @@ jatai unread _message.txt
 
 ### `jatai config [key] [value] [-G|--global]`
 
-Read or write config values locally (default) or globally.
+Write config values locally (default) or globally.
 
 ```bash
-# Show local config
-jatai config
-
-# Show global config
-jatai config -G
-
-# Read a key
-jatai config MAX_RETRIES
-jatai config -G MAX_RETRIES
-
 # Write a key
 jatai config MAX_RETRIES 5
 jatai config -G MAX_RETRIES 5
@@ -191,13 +181,8 @@ jatai config -G MAX_RETRIES 5
 
 Config keys are positional arguments and intentionally do not have short-option aliases.
 
-When reading config values (`jatai config`, `jatai config KEY`, or global variants),
-terminal output includes a source header:
-
-```text
-# source: /home/user/my-node/.jatai
-MAX_RETRIES=5
-```
+If `value` is missing, the command fails with a syntax error and instructs the
+operator to use `jatai config get [key]` for reads.
 
 ### `jatai config get [key] [-G|--global] [-i|--inbox]`
 

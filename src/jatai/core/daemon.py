@@ -90,6 +90,14 @@ class JataiDaemon:
     GC_DEFAULT_SENT = 11
     GC_DEFAULT_MODE = "trash"
 
+    def _load_global_config(self) -> Dict[str, object]:
+        registry = Registry(self.registry_path)
+        try:
+            registry.load()
+        except FileNotFoundError:
+            pass
+        return dict(registry.global_config)
+
     def __init__(
         self,
         registry_path: Optional[Path] = None,
@@ -102,8 +110,9 @@ class JataiDaemon:
         self.pid_path = Path(pid_path) if pid_path is not None else SystemState.BASE_PATH / "jatai.pid"
         self.retry_path = Path(retry_path) if retry_path is not None else SystemState.BASE_PATH / "retry.yaml"
         SystemState.ensure_base()
+        global_config = self._load_global_config()
         self.log_path = Path(log_path) if log_path is not None else SystemState.BASE_PATH / "logs" / f"jatai_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.log"
-        self.latest_log_path = Path(os.path.expanduser(Registry(self.registry_path).global_config.get("LATEST_LOG_PATH", "~/.jatai_latest.log"))).expanduser() if log_path is None else None
+        self.latest_log_path = Path(os.path.expanduser(str(global_config.get("LATEST_LOG_PATH", "~/.jatai_latest.log")))).expanduser()
         self.observer_factory = observer_factory
         self.stop_event = threading.Event()
         self.observer: Optional[Observer] = None
@@ -596,7 +605,7 @@ class JataiDaemon:
 
     def _delete_path(self, path: Path, mode: Optional[str] = None) -> None:
         if mode is None:
-            mode = str(Registry(self.registry_path).global_config.get("GC_DELETE_MODE", self.GC_DEFAULT_MODE))
+            mode = str(self._load_global_config().get("GC_DELETE_MODE", self.GC_DEFAULT_MODE))
 
         if mode == "trash":
             try:

@@ -88,7 +88,7 @@ Common patterns:
 
 | Pattern | When dropped |
 |---|---|
-| `!helloworld.md` | First-time auto-onboarding welcome message |
+| `!helloworld.md` | Welcome message dropped during explicit node initialization |
 | `!_config-migration-error*.md` | Prefix migration aborted due to naming collision |
 | `!docs-index.md` | Docs index exported via `jatai docs -i` |
 | `!log-latest.txt` | Log snapshot exported via `jatai log -i` |

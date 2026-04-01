@@ -19,6 +19,7 @@ from jatai.core.delivery import Delivery
 from jatai.core.prefix import Prefix
 from jatai.core.registry import Registry
 from jatai.core.node import Node
+from jatai.core.sysstate import SystemState
 from jatai.core.uninstall import cleanup_install_artifacts
 
 app = typer.Typer(
@@ -210,6 +211,31 @@ def _render_docs_terminal(matches: List[Path]) -> str:
         content = path.read_text(encoding="utf-8")
         blocks.append(f"# {rel}\n\n{content.strip()}\n")
     return "\n---\n\n".join(blocks).strip() + "\n"
+
+
+def _load_global_config() -> dict:
+    registry = Registry()
+    try:
+        registry.load()
+    except FileNotFoundError:
+        pass
+    return dict(registry.global_config)
+
+
+def _resolve_latest_log_path() -> Path:
+    configured_latest = Path(
+        os.path.expanduser(str(_load_global_config().get("LATEST_LOG_PATH", "~/.jatai_latest.log")))
+    ).expanduser()
+    if configured_latest.exists() or configured_latest.is_symlink():
+        return configured_latest
+
+    logs_dir = SystemState.BASE_PATH / "logs"
+    if logs_dir.exists():
+        candidates = [path for path in logs_dir.glob("*.log") if path.is_file()]
+        if candidates:
+            return max(candidates, key=lambda path: path.stat().st_mtime)
+
+    return configured_latest
 
 
 def _tail_lines(text: str, max_lines: int) -> str:
@@ -445,7 +471,7 @@ def log(
     inbox: bool = typer.Option(False, "--inbox", "-i", help="Export log output to current node INBOX."),
 ) -> None:
     """Show daemon logs in terminal, with optional export to INBOX."""
-    log_path = Path.home() / ".jatai.log"
+    log_path = _resolve_latest_log_path()
     if not log_path.exists():
         typer.echo(f"✗ Error: log file not found at {log_path}", err=True)
         raise typer.Exit(code=1)

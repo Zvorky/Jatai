@@ -99,8 +99,10 @@ Lifecycle:
 4. Main loop: `stop_event.wait(POLL_INTERVAL_SECONDS)` — retries due files.
 5. On `SIGTERM`/`SIGINT`: sets `stop_event`, tears down observer, releases lock.
 
-Auto-onboarding: `_ensure_node_onboarded()` creates missing folders for any
-path registered in `~/.jatai` without a local `.jatai` config.
+Node onboarding and validation: `_ensure_node_onboarded()` validates registered
+paths, applies effective directory settings for existing nodes, persists UUID
+state, and marks missing local configs as `--autoremoved` without recreating
+node files or directories.
 
 Logging: rotating daemon logs written to `/tmp/jatai/logs/` via Python's `logging` module
 (INFO level, format: `timestamp LEVEL message`).
@@ -159,7 +161,7 @@ All tests use `pytest`. Run with:
 | `test_delivery.py` | Atomic delivery, collision resolution |
 | `test_prefix.py` | Prefix state machine, max retries |
 | `test_retry.py` | Retry scheduling, exponential delay, fatal transitions |
-| `test_daemon.py` | Daemon lifecycle, watchdog events, auto-onboarding |
+| `test_daemon.py` | Daemon lifecycle, watchdog events, logging, GC, retry, and config/reactivation flows |
 | `test_cli.py` | CLI commands via Typer CliRunner |
 
 ---

@@ -1,7 +1,7 @@
 # **Jataí 🐝**
 **The local micro-email and messaging bus for your file system. Connect scripts and AI agents instantly using a zero-config drop-folder pattern. Jataí uses OS file events to route data across directories via standardized INBOX/OUTBOX folders, without complex APIs or sockets. Drop a file, and it's delivered!**
 
-**Version:** `0.7.2` (_Alpha_) · **Author:** Zvorky
+**Version:** `0.7.3` (_Alpha_) · **Author:** Zvorky
 
 ## **🎯 Philosophy & Goal**
 
@@ -37,7 +37,7 @@ OUTBOX/
 
 ## **🐝 Usage (The File-System Way)**
 
-Current implementation status: core modules, basic CLI, daemon lifecycle, startup scan, watchdog-based routing, 5-state prefix handling, exponential retry management, global logging, local config override handling, soft-delete/hot-reload monitoring, prefix hot-swap rollback, auto-onboarding from the global registry, and in-band docs delivery are available for local development and testing.
+Current implementation status: core modules, basic CLI, daemon lifecycle, startup scan, watchdog-based routing, 5-state prefix handling, exponential retry management, rotating logs under `/tmp/jatai/logs/`, local config override handling, soft-delete/hot-reload monitoring, prefix hot-swap rollback, and in-band docs delivery are available for local development and testing.
 
 1. **Initialize a Node (current command):** `jatai init ./my-folder`
 2. **Initialize via Alias (current command):** `jatai ./my-folder`
@@ -45,10 +45,10 @@ Current implementation status: core modules, basic CLI, daemon lifecycle, startu
 4. **Start the Daemon (current command):** `jatai start`
 5. **Stop the Daemon (current command):** `jatai stop`
 6. **Resilience behavior already implemented in core:** 5-state prefix matrix (`_`, `!`, `!_`, `!!`, `!!_`), retry state in `/tmp/jatai/retry.yaml` with exponential backoff, and `MAX_RETRIES` fatal transitions are covered by current code/tests.
-7. **Observability already implemented in core:** Global daemon log file output to `~/.jatai.log` is active.
+7. **Observability already implemented in core:** Daemon logs rotate under `/tmp/jatai/logs/`, and `jatai log` resolves the latest log via the configured `LATEST_LOG_PATH` pointer with fallback to the newest rotated log.
 8. **Configuration reactivity already implemented in core:** Local `.jatai` overrides are applied over global defaults, `._jatai` nodes are ignored while their roots remain monitored, and reactivation via rename is handled by the daemon.
 9. **Prefix migration safety already implemented in core:** Prefix changes trigger historical file renames; collisions restore the previous config from `/tmp/jatai/bkp/<UUID>.yaml` and drop an error notice into the node INBOX.
-10. **Onboarding and docs already implemented in core/CLI:** Registry-only nodes are auto-created by the daemon (including `!helloworld.md` in new INBOXes), `jatai docs` renders documentation in terminal by default, and `jatai docs [query]` renders matching markdown docs in terminal by default (`-i|--inbox` exports to files).
+10. **Onboarding and docs already implemented in core/CLI:** `jatai init` drops `!helloworld.md` in the node INBOX, `jatai docs` renders documentation in terminal by default, and `jatai docs [query]` renders matching markdown docs in terminal by default (`-i|--inbox` exports to files).
 11. **Manual local-config deletion safety:** If `.jatai` is manually deleted from an existing registered node directory, the daemon will record the node as auto-removed in `/tmp/jatai/removed.yaml` (appending ` --autoremoved` to the stored path) and will NOT recreate `._jatai`, `.jatai`, `INBOX`, or `OUTBOX` automatically. The `._jatai` soft-delete marker is only created by explicit CLI/TUI removal actions (for example `jatai remove`, which performs `.jatai` → `._jatai`).
 12. **First-run interactive bootstrap:** Opening the TUI (`jatai` with no args in interactive terminal) creates `~/.jatai` with default settings if it does not exist yet.
 

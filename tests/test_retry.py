@@ -9,10 +9,19 @@ from pathlib import Path
 import pytest
 
 from jatai.core.retry import RetryState
+from jatai.core.sysstate import SystemState
 
 
 class TestRetryHappyPath:
     """Happy path tests for retry state handling."""
+
+    def test_retry_defaults_to_system_state_path(self, monkeypatch, temp_dir):
+        state_root = temp_dir / "tmp_state"
+        monkeypatch.setattr(SystemState, "BASE_PATH", state_root)
+
+        retry = RetryState()
+
+        assert retry.retry_path == state_root / "retry.yaml"
 
     def test_retry_register_failure_exponential_delay(self, temp_dir):
         retry_path = temp_dir / ".retry"
