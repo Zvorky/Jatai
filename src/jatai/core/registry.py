@@ -14,7 +14,7 @@ class Registry:
     LOCK_TIMEOUT_SECONDS = 10
 
     DEFAULT_CONFIG = {
-        "PREFIX_PROCESSED": "_",
+        "PREFIX_IGNORE": "_",
         "PREFIX_ERROR": "!_",
         "RETRY_DELAY_BASE": 60,
         "MAX_RETRIES": 3,
@@ -77,6 +77,7 @@ class Registry:
                         for k, v in data.items()
                         if k in self.DEFAULT_CONFIG
                     }
+
                     # Merge with defaults
                     config = self.DEFAULT_CONFIG.copy()
                     config.update(self.global_config)

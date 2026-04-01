@@ -13,7 +13,7 @@ edited manually (the daemon auto-onboards any new path it finds there).
 
 Example `~/.jatai`:
 ```yaml
-PREFIX_PROCESSED: "_"
+PREFIX_IGNORE: "_"
 PREFIX_ERROR: "!_"
 RETRY_DELAY_BASE: 60
 MAX_RETRIES: 3
@@ -40,7 +40,7 @@ contents but continues watching the root for reactivation.
 
 | Key | Default | Scope | Description |
 |---|---|---|---|
-| `PREFIX_PROCESSED` | `_` | global / local | Prefix added to OUTBOX files after successful delivery; also used in INBOX to mark read files |
+| `PREFIX_IGNORE` | `_` | global / local | Prefix added to OUTBOX files after successful delivery (ignore/skip in OUTBOX); also used in INBOX to mark files as read |
 | `PREFIX_ERROR` | `!_` | global / local | Base error prefix; daemon derives `!!` and `!!_` variants from this |
 | `RETRY_DELAY_BASE` | `60` | global / local | Base delay in seconds for exponential backoff: `base * (2 ^ index)` |
 | `MAX_RETRIES` | `3` | global / local | Maximum delivery attempts before transitioning to fatal prefix |
@@ -99,11 +99,11 @@ jatai config
 jatai config -G
 
 # Read single key
-jatai config PREFIX_PROCESSED
-jatai config -G PREFIX_PROCESSED
+jatai config PREFIX_IGNORE
+jatai config -G PREFIX_IGNORE
 
 # Write key/value
-jatai config PREFIX_PROCESSED __
+jatai config PREFIX_IGNORE __
 jatai config -G MAX_RETRIES 5
 ```
 
@@ -125,7 +125,7 @@ jatai config get MAX_RETRIES
 jatai config get -G
 
 # Export retrieval output to current node INBOX
-jatai config get PREFIX_PROCESSED -i
+jatai config get PREFIX_IGNORE -i
 ```
 
 `config get` is the safe read-only form for config inspection.

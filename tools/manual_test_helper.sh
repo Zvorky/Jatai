@@ -360,7 +360,7 @@ PY" || failures=$((failures + 1))
   # Write a new .jatai config directly to trigger migration
   run_cmd "cat > '$JATAI_TEST_A/.jatai' <<EOF
 node_path: '$JATAI_TEST_A'
-PREFIX_PROCESSED: 'processed_'
+PREFIX_IGNORE: 'processed_'
 PREFIX_ERROR: 'error_'
 EOF" || failures=$((failures + 1))
   run_cmd "'$VENV_PYTHON' - <<'PY'
@@ -599,11 +599,13 @@ suite_phase7() {
   fi
 
   echo "[$(timestamp)] Check Phase7 log path symlink"
-  run_cmd "python - <<'PY'\nfrom pathlib import Path\nfrom jatai.core.registry import Registry\nfrom jatai.core.daemon import JataiDaemon\nregistry_path = Path('$TEST_HOME') / '.jatai'\nRegistry(registry_path=registry_path).load()\nlog_path = Path(Registry(registry_path).global_config.get('LATEST_LOG_PATH', '~/.jatai_latest.log')).expanduser()\nprint('log symlink exists', log_path.exists())\nPY" || failures=$((failures + 1))
+  run_cmd "python -c \"from pathlib import Path; from jatai.core.registry import Registry; registry_path = Path('$TEST_HOME') / '.jatai'; reg = Registry(registry_path=registry_path); reg.load(); log_path = Path(reg.global_config.get('LATEST_LOG_PATH', '~/.jatai_latest.log')).expanduser(); print('log symlink exists', log_path.exists())\"" || failures=$((failures + 1))
 
   echo "[$(timestamp)] Ensure soft-delete path logic via config removal"
   run_cmd "rm -f '$JATAI_TEST_A/.jatai'" || failures=$((failures + 1))
   run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN start" || failures=$((failures + 1))
+  # Ensure no daemon process leaks into subsequent suites.
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN stop" || true
 
   snapshot_dirs
   echo "[$(timestamp)] phase7 suite failures=$failures"
@@ -616,6 +618,7 @@ suite_phase7_full() {
 
   echo "[$(timestamp)] ===== PHASE7-FULL SUITE ====="
   # setup two nodes and validate global .jatai operations + filesystem behavior
+  run_cmd "rm -f '$JATAI_TEST_A/._jatai' '$JATAI_TEST_B/._jatai'" || failures=$((failures + 1))
   run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN init '$JATAI_TEST_A'" || failures=$((failures + 1))
   run_cmd "cd '$JATAI_TEST_B' && export HOME='$TEST_HOME' && $JATAI_BIN init '$JATAI_TEST_B'" || failures=$((failures + 1))
 
@@ -625,12 +628,12 @@ suite_phase7_full() {
   sleep 2
   run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN stop" || failures=$((failures + 1))
   local retries=10
-  while [[ $retries -gt 0 ]] && [[ ! -f '$JATAI_TEST_B/INBOX/msg1.txt' ]]; do
+  while [[ $retries -gt 0 ]] && [[ ! -f "$JATAI_TEST_B/INBOX/msg1.txt" ]]; do
     sleep 0.5
     retries=$((retries - 1))
   done
 
-  if [[ ! -f '$JATAI_TEST_B/INBOX/msg1.txt' ]]; then
+  if [[ ! -f "$JATAI_TEST_B/INBOX/msg1.txt" ]]; then
     echo "[$(timestamp)] ✗ FAILED: phase7-full delivery across nodes"
     failures=$((failures + 1))
   else

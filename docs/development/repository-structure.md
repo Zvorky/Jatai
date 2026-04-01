@@ -48,7 +48,7 @@ Important constants:
 Manages the global registry file (`~/.jatai`).
 
 The registry is a YAML file with two kinds of entries:
-- Global config keys (`PREFIX_PROCESSED`, `OUTBOX_DIR`, etc.)
+- Global config keys (`PREFIX_IGNORE`, `OUTBOX_DIR`, etc.)
 - Node entries (dicts with a `path` key)
 
 All reads and writes are protected by a `filelock.FileLock`. Concurrent access
@@ -58,7 +58,7 @@ Default config values (code reference: `Registry.DEFAULT_CONFIG`):
 
 | Key | Default |
 |---|---|
-| `PREFIX_PROCESSED` | `_` |
+| `PREFIX_IGNORE` | `_` |
 | `PREFIX_ERROR` | `!_` |
 | `RETRY_DELAY_BASE` | `60` (seconds) |
 | `MAX_RETRIES` | `3` |

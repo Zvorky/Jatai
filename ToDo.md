@@ -46,14 +46,14 @@ Completing the operational toolset and fixing architectural compliance gaps from
 ## **Phase 7: Advanced Logging & Immediate Garbage Collection**
 Refining the internal engines for long-term disk safety and observability.
 
-- [ ] **State Architecture Refactor:**
-		- [ ] Remove "prefix guessing" heuristic (anti-heuristic): ensure the daemon never infers prefixes from historical files, only from configs/backups.
+- [x] **State Architecture Refactor:**
+		- [x] Remove "prefix guessing" heuristic (anti-heuristic): ensure the daemon never infers prefixes from historical files, only from configs/backups.
 			- Related: [ADR-3.3], [REQ-3.6]
-		- [ ] Implement writing/updating of `/tmp/jatai/removed.yaml` with ` --autoremoved` entries when manual `.jatai` removal is detected.
+		- [x] Implement writing/updating of `/tmp/jatai/removed.yaml` with ` --autoremoved` entries when manual `.jatai` removal is detected.
 			- Related: [ADR-4.4], [REQ-3.7.2]
-		- [ ] Implement generation and maintenance of `/tmp/jatai/uuid_map.yaml` (map node paths to UUIDs, reuse UUIDs for removed/re-added paths).
+		- [x] Implement generation and maintenance of `/tmp/jatai/uuid_map.yaml` (map node paths to UUIDs, reuse UUIDs for removed/re-added paths).
 			- Related: [ADR-4.3], [REQ-3.5.2]
-		- [ ] Implement/adjust backup cache in `/tmp/jatai/bkp/<UUID>.yaml` for prefix migrations.
+		- [x] Implement/adjust backup cache in `/tmp/jatai/bkp/<UUID>.yaml` for prefix migrations.
 			- Related: [ADR-4.3], [REQ-3.5.4]
 - [x] Implement Log Rotation: Name log files with datetime suffix + `.log` and store them in `/tmp/jatai/logs/`.
 	- Related: [ADR-12], [REQ-6.2]
@@ -67,11 +67,11 @@ Refining the internal engines for long-term disk safety and observability.
 	- Related: [ADR-7], [REQ-3.7.3.3]
 - [x] Implement default configuration constants: INBOX keeps all, OUTBOX keeps max 11 files.
 	- Related: [ADR-7], [REQ-3.7.3.1]
-- [ ] Rename `_` semantic references in code/docs from "processed" to "ignore" for OUTBOX contexts.
+- [x] Rename `_` semantic references in code/docs from "processed" to "ignore" for OUTBOX contexts.
 	- Related: [ADR-3], [REQ-2]
-- [ ] [BUGFIX] Remove/disable TUI "Browse Nodes" until future rework (still active in code).
+- [x] [BUGFIX] Remove/disable TUI "Browse Nodes" until future rework (still active in code).
 	- Related: [ADR-14]
-- [ ] [BUGFIX] Implement auto-start fallback for environments without systemd (e.g., crontab @reboot, Windows, macOS, etc.).
+- [x] [BUGFIX] Implement auto-start fallback for environments without systemd (e.g., crontab @reboot, Windows, macOS, etc.).
 	- Related: [ADR-5], [REQ-4.2]
 - [x] [BUGFIX] Apply local `.jatai` locking in `Node.save_config` and `Node.load_config` to match global registry lock style.
 	- Related: [ADR-11], [REQ-3.4.2]
@@ -85,7 +85,7 @@ Refining the internal engines for long-term disk safety and observability.
 ## **Future / Expansion (Post-Core)**
 Architectural discussions and network expansions.
 
-- [ ] Implement OS Auto-Start fallbacks (e.g., `crontab @reboot` for Alpine/minimal Linux) and native compatibility for Windows/macOS.
+- [x] Implement OS Auto-Start fallbacks (e.g., `crontab @reboot` for Alpine/minimal Linux) and native compatibility for Windows/macOS.
 - [ ] **[ARCH]** Define detailed TUI Navigation rules (separating INBOX/OUTBOX views, webapp layout mirroring).
 - [ ] **[ARCH]** Define the Prefix Customization Schema (how users will change `_`, `!`, etc., in the `.jatai` file).
 - [ ] **[ARCH]** Define directory structure logic for Smart Routing & Topics.

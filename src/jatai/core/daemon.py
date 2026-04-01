@@ -179,7 +179,7 @@ class JataiDaemon:
     ) -> None:
         effective = dict(global_config)
         for key in (
-            "PREFIX_PROCESSED",
+            "PREFIX_IGNORE",
             "PREFIX_ERROR",
             "RETRY_DELAY_BASE",
             "MAX_RETRIES",
@@ -202,6 +202,12 @@ class JataiDaemon:
             )
             return
 
+        # Ensure this node has a persistent UUID so migration caches are stable.
+        try:
+            SystemState.assign_uuid(str(node.node_path))
+        except Exception:
+            pass
+
         has_any_local_config = node.local_config_path.exists() or node.disabled_config_path.exists()
         if not has_any_local_config:
             # If the node directory existed before (user removed .jatai manually),
@@ -211,7 +217,7 @@ class JataiDaemon:
                 "INBOX_DIR": str(inbox_path),
                 "OUTBOX_DIR": str(outbox_path),
             }
-            for key in ("PREFIX_PROCESSED", "PREFIX_ERROR", "RETRY_DELAY_BASE", "MAX_RETRIES"):
+            for key in ("PREFIX_IGNORE", "PREFIX_ERROR", "RETRY_DELAY_BASE", "MAX_RETRIES"):
                 if key in effective:
                     softdelete_config[key] = effective[key]
             node.write_config(softdelete_config, node.disabled_config_path)
@@ -223,6 +229,11 @@ class JataiDaemon:
                         yaml.safe_dump(softdelete_config, f, default_flow_style=False)
                 except Exception:
                     pass
+            # Record this auto-removal in the system state per ADR-4.4.1 and REQ-3.7.2.1.
+            try:
+                SystemState.mark_autoremoved(str(node.node_path))
+            except Exception:
+                pass
             self.logger.info(
                 "Detected missing local config; created soft-delete marker at %s",
                 node.disabled_config_path,
@@ -321,6 +332,12 @@ class JataiDaemon:
 
     def _update_node_cache(self, node: Node) -> None:
         self.node_config_cache[node.node_path] = dict(node.local_config)
+        # Persist config to the system-level UUID backup so prefix migrations
+        # can survive daemon restarts (ADR-4.3.3, REQ-3.5.4).
+        try:
+            SystemState.write_bkp_config(str(node.node_path), dict(node.local_config))
+        except Exception:
+            pass
 
     def _remove_node_cache(self, node_path: Path) -> None:
         self.node_config_cache.pop(Path(node_path).resolve(), None)
@@ -391,81 +408,32 @@ class JataiDaemon:
                         if loaded:
                             previous_config = dict(loaded)
                             self.logger.info(
-                                "Recovered previous config from backup for node=%s",
+                                "Recovered previous config from local backup for node=%s",
                                 node_path,
                             )
             except Exception:
-                # If recovery fails, continue without previous_config.
-                previous_config = previous_config
+                pass
 
-        # If still no previous config, attempt to infer prefixes from existing
-        # history files in INBOX/OUTBOX. This helps when the user deleted
-        # `.jatai` manually but left historical files that indicate prior
-        # prefixes (for example `_` and `!_`). Use a simple frequency-based
-        # heuristic to pick likely processed/error prefixes.
+        # If still no previous config, try the system-level UUID backup
+        # (ADR-4.3.3, REQ-3.5.4). This is the anti-heuristic fallback —
+        # the daemon never guesses prefixes from file contents (ADR-3.3).
         if not previous_config:
             try:
-                prefix_counts: Dict[str, int] = {}
-                for directory in (node.inbox_path, node.outbox_path):
-                    if not directory.exists():
-                        continue
-                    for f in directory.iterdir():
-                        if not f.is_file():
-                            continue
-                        name = f.name
-                        if "_" not in name:
-                            continue
-                        idx = name.find("_")
-                        cand = name[: idx + 1]
-                        prefix_counts[cand] = prefix_counts.get(cand, 0) + 1
-
-                if prefix_counts:
-                    # prefer an error prefix containing '!' if present
-                    error_pref = None
-                    for p in prefix_counts:
-                        if "!" in p:
-                            error_pref = p
-                            break
-                    # choose most common as processed prefix
-                    processed_pref = max(prefix_counts.items(), key=lambda kv: kv[1])[0]
-                    if error_pref is None and processed_pref == "!_":
-                        # unlikely but handle edge case
-                        error_pref = processed_pref
-                        processed_pref = "_"
-                    previous_config = {
-                        "PREFIX_PROCESSED": processed_pref,
-                        "PREFIX_ERROR": error_pref or "!_",
-                    }
+                bkp = SystemState.read_bkp_config(str(node.node_path))
+                if bkp:
+                    previous_config = bkp
                     self.logger.info(
-                        "Inferred previous prefixes for node=%s processed=%s error=%s",
+                        "Recovered previous config from UUID backup for node=%s",
                         node_path,
-                        previous_config["PREFIX_PROCESSED"],
-                        previous_config["PREFIX_ERROR"],
                     )
             except Exception:
-                previous_config = previous_config
+                pass
 
         if previous_config:
             prefix_keys_changed = any(
                 previous_config.get(key) != node.local_config.get(key)
                 for key in Node.PREFIX_KEYS
             )
-
-            def _has_history_files_for_prefix(prev_cfg: dict) -> bool:
-                try:
-                    processed = str(prev_cfg.get("PREFIX_PROCESSED", "_"))
-                    error = str(prev_cfg.get("PREFIX_ERROR", "!_"))
-                    for directory in (node.inbox_path, node.outbox_path):
-                        if not directory.exists():
-                            continue
-                        for f in directory.iterdir():
-                            if not f.is_file():
-                                continue
-                            if f.name.startswith(processed) or f.name.startswith(error):
-                                return True
-                except Exception:
-                    return False
-                return False
 
             # Always attempt migration when a previous configuration exists. This
             # ensures historical files are migrated to the current prefixes even
@@ -506,7 +474,7 @@ class JataiDaemon:
         if source_node is None:
             return
 
-        success_prefix = str(source_node.get_config("PREFIX_PROCESSED", "_"))
+        success_prefix = str(source_node.get_config("PREFIX_IGNORE", "_"))
         prefix = Prefix(
             success_prefix=success_prefix,
             error_prefix=str(source_node.get_config("PREFIX_ERROR", "!_")),
@@ -568,13 +536,13 @@ class JataiDaemon:
         failed_nodes: List[str],
     ) -> bool:
         prefix = Prefix(
-            success_prefix=str(source_node.get_config("PREFIX_PROCESSED", "_")),
+            success_prefix=str(source_node.get_config("PREFIX_IGNORE", "_")),
             error_prefix=str(source_node.get_config("PREFIX_ERROR", "!_")),
         )
 
         if not failed_nodes:
             if source_file.exists():
-                prefix.set_state(source_file, "processed")
+                prefix.set_state(source_file, "ignore")
             self.retry_state.clear(canonical_retry_path)
             self.logger.info("Delivery succeeded for file=%s", source_file)
             # Immediate GC threshold enforcement
@@ -619,7 +587,7 @@ class JataiDaemon:
 
     def broadcast_file(self, source_node: Node, source_file: Path, nodes: List[Node]) -> bool:
         prefix = Prefix(
-            success_prefix=str(source_node.get_config("PREFIX_PROCESSED", "_")),
+            success_prefix=str(source_node.get_config("PREFIX_IGNORE", "_")),
             error_prefix=str(source_node.get_config("PREFIX_ERROR", "!_")),
         )
         canonical_retry_path = prefix.canonical_retry_path(source_file)
@@ -676,7 +644,7 @@ class JataiDaemon:
         return removed
 
     def _run_auto_gc_for_node(self, node: Node) -> None:
-        success_prefix = str(node.get_config("PREFIX_PROCESSED", "_"))
+        success_prefix = str(node.get_config("PREFIX_IGNORE", "_"))
         max_read = int(node.get_config("GC_MAX_READ_FILES", 0) or 0)
         max_sent = int(node.get_config("GC_MAX_SENT_FILES", 0) or 0)
 
@@ -693,7 +661,7 @@ class JataiDaemon:
 
     def process_pending_outbox(self, node: Node, nodes: List[Node]) -> None:
         prefix = Prefix(
-            success_prefix=str(node.get_config("PREFIX_PROCESSED", "_")),
+            success_prefix=str(node.get_config("PREFIX_IGNORE", "_")),
             error_prefix=str(node.get_config("PREFIX_ERROR", "!_")),
         )
         for file_path in sorted(node.list_outbox()):

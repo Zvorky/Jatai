@@ -30,7 +30,7 @@ class TestRegistryHappyPath:
         """Test Registry has correct default configuration."""
         registry = Registry()
         expected_keys = {
-            "PREFIX_PROCESSED",
+            "PREFIX_IGNORE",
             "PREFIX_ERROR",
             "RETRY_DELAY_BASE",
             "MAX_RETRIES",
@@ -51,7 +51,7 @@ class TestRegistryHappyPath:
         # Add some nodes
         registry.add_node("node1", "/path/to/node1")
         registry.add_node("node2", "/path/to/node2", {"CUSTOM_KEY": "value"})
-        registry.set_config("PREFIX_PROCESSED", "-processed")
+        registry.set_config("PREFIX_IGNORE", "-processed")
 
         # Save to disk
         registry.save()
@@ -63,7 +63,7 @@ class TestRegistryHappyPath:
 
         assert "node1" in registry2.nodes
         assert "node2" in registry2.nodes
-        assert registry2.global_config["PREFIX_PROCESSED"] == "-processed"
+        assert registry2.global_config["PREFIX_IGNORE"] == "-processed"
         assert registry2.nodes["node2"]["CUSTOM_KEY"] == "value"
 
     def test_registry_add_node(self):
@@ -106,7 +106,7 @@ class TestRegistryHappyPath:
     def test_registry_get_config_global(self):
         """Test getting global configuration."""
         registry = Registry()
-        config_value = registry.get_config("PREFIX_PROCESSED")
+        config_value = registry.get_config("PREFIX_IGNORE")
         assert config_value == "_"
 
     def test_registry_default_config_has_gc_options(self):
@@ -119,8 +119,8 @@ class TestRegistryHappyPath:
     def test_registry_set_config_global(self):
         """Test setting global configuration."""
         registry = Registry()
-        registry.set_config("PREFIX_PROCESSED", "-marked")
-        assert registry.get_config("PREFIX_PROCESSED") == "-marked"
+        registry.set_config("PREFIX_IGNORE", "-marked")
+        assert registry.get_config("PREFIX_IGNORE") == "-marked"
 
     def test_registry_uses_lock_file_on_save(self, temp_dir):
         """Test save operation creates and uses a lock file."""
@@ -233,19 +233,18 @@ class TestRegistryMaliciousAdversarialScenarios:
         assert True
 
     def test_registry_handles_symlink_target(self, temp_dir):
-        """Test that registry handles symlinks safely."""
+        """Test that registry handles symlinked registry files safely."""
         import os
 
         actual_file = temp_dir / "actual.yaml"
         link_file = temp_dir / "link.yaml"
 
-        # Create actual file
-        actual_file.write_text("PREFIX_PROCESSED: '_'\n")
+        actual_file.write_text("PREFIX_IGNORE: '_'\n")
         os.symlink(actual_file, link_file)
 
         registry = Registry(registry_path=link_file)
         registry.load()
-        assert registry.global_config["PREFIX_PROCESSED"] == "_"
+        assert registry.global_config["PREFIX_IGNORE"] == "_"
 
     def test_registry_unicode_node_names(self):
         """Test registry with unicode node names."""

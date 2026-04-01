@@ -218,7 +218,7 @@ jatai config get MAX_RETRIES -G
 
 # Export rendered output to current node INBOX
 jatai config get -i
-jatai config get PREFIX_PROCESSED -i
+jatai config get PREFIX_IGNORE -i
 ```
 
 Behavior:
@@ -283,16 +283,13 @@ Running `jatai` with no arguments in an interactive terminal opens the
 `jatai` without arguments prints the CLI help summary instead.
 
 The TUI exposes all CLI commands through a two-pane layout:
-- Left pane: scrollable command menu (17 actions, keyboard or mouse selection)
+- Left pane: scrollable command menu (16 actions, keyboard or mouse selection)
 - Right pane: command output display
 
 Actions available in the TUI:
 `init node`, `status`, `docs index`, `docs query`, `log latest`, `log all`, `list`,
 `send file`, `read file`, `unread file`, `config get`, `config set`,
-`remove node`, `clear processed`, `start daemon`, `stop daemon`, `browse nodes`.
-
-`browse nodes` reads registered entries from `~/.jatai` and changes the current
-working directory to the selected node.
+`remove node`, `clear processed`, `start daemon`, `stop daemon`.
 
 Press `Q` to quit. The TUI opens modal input dialogs for commands that require
 parameters (e.g. query text, file paths, config keys).

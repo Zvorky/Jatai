@@ -216,6 +216,7 @@ Versioning must strictly follow this scheme:
 
 - **Format:** `MAJOR.PHASE.ITERATION`
 - **Current channel:** While in `alpha`, versions stay in `0.x.x`.
+- **Alpha compatibility policy:** While the project version is `0.x.x` (ALPHA), backward compatibility is **not required**. Breaking changes are allowed when needed, as long as `ARCHITECTURE.md`, `REQUIREMENTS.md`, `ToDo.md`, and user-facing documentation are updated consistently.
 - **MAJOR:** Updated **only** when explicitly requested by the user (manual decision).
 - **PHASE:** Must match the current implementation phase in `ToDo.md` (e.g., if current phase is 4, use `0.4.x`).
 - **ITERATION:** Incremented on each commit iteration for the same phase (patch-like counter).

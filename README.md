@@ -1,7 +1,7 @@
 # **Jataí 🐝**
 **The local micro-email and messaging bus for your file system. Connect scripts and AI agents instantly using a zero-config drop-folder pattern. Jataí uses OS file events to route data across directories via standardized INBOX/OUTBOX folders, without complex APIs or sockets. Drop a file, and it's delivered!**
 
-**Version:** `0.7.0` (_Alpha_) · **Author:** Zvorky
+**Version:** `0.7.1` (_Alpha_) · **Author:** Zvorky
 
 ## **🎯 Philosophy & Goal**
 
@@ -77,7 +77,7 @@ Current implementation status: core modules, basic CLI, daemon lifecycle, startu
 `jatai` in an interactive terminal opens a menu-driven TUI that exposes the same handlers as CLI commands:
 
 - `status`, `start`, `stop`
-- `init`, `browse nodes` (navigate current working directory to a registered node)
+- `init` (initialize current/target node)
 - `docs` (index/query), `log` (latest/all)
 - `list`, `send`, `read`, `unread`
 - `config get`, `config set` (local/global, optional INBOX export for get)
@@ -97,7 +97,7 @@ Canonical abbreviated flags:
 - `-f` = `--foreground`
 - `-G` = `--global`
 
-Config keys are positional arguments (for example, `PREFIX_PROCESSED`) and intentionally do not use short-option aliases.
+Config keys are positional arguments (for example, `PREFIX_IGNORE`) and intentionally do not use short-option aliases.
 
 ## **🏗️ Architecture & Requirements**
 
@@ -119,7 +119,9 @@ Config keys are positional arguments (for example, `PREFIX_PROCESSED`) and inten
 │   │   ├── delivery.py           # Atomic file delivery (shutil.copy2 with .tmp)
 │   │   ├── prefix.py             # Prefix/state handling helpers
 │   │   ├── retry.py              # Global retry state and exponential backoff scheduling
-│   │   └── node.py               # Node representation, config override, backup, and prefix migration
+│   │   ├── node.py               # Node representation, config override, backup, and prefix migration
+│   │   └── sysstate.py           # System state storage under /tmp/jatai (uuid_map, removed, bkp)
+│   ├── tui.py                    # Textual interactive terminal UI
 │   └── cli/                       # Command-line interface
 │       ├── __init__.py
 │       └── main.py               # Typer CLI app and commands
@@ -132,7 +134,8 @@ Config keys are positional arguments (for example, `PREFIX_PROCESSED`) and inten
 │   ├── test_prefix.py            # Prefix state machine & max retries tests
 │   ├── test_retry.py             # Retry state and exponential delay tests
 │   ├── test_node.py              # Node module tests (config override, backup, and path validation)
-│   └── test_cli.py               # CLI tests using Typer's CliRunner
+│   ├── test_cli.py               # CLI tests using Typer's CliRunner
+│   └── test_sysstate.py          # /tmp/jatai system-state behavior tests
 ├── pyproject.toml                 # Packaging metadata and console_scripts entrypoint
 ├── pytest.ini                     # Pytest configuration
 ├── .gitignore                     # Git ignore rules

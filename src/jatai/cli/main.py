@@ -546,11 +546,11 @@ def read(
         raise typer.Exit(code=1)
 
     prefix = Prefix(
-        success_prefix=str(node.get_config("PREFIX_PROCESSED", "_")),
+        success_prefix=str(node.get_config("PREFIX_IGNORE", "_")),
         error_prefix=str(node.get_config("PREFIX_ERROR", "!_")),
     )
     try:
-        new_path = prefix.add_success_prefix(target)
+        new_path = prefix.add_ignore_prefix(target)
         typer.echo(f"✓ Marked as read: {new_path.name}")
     except Exception as e:
         typer.echo(f"✗ Error: {e}", err=True)
@@ -574,11 +574,11 @@ def unread(
         raise typer.Exit(code=1)
 
     prefix = Prefix(
-        success_prefix=str(node.get_config("PREFIX_PROCESSED", "_")),
+        success_prefix=str(node.get_config("PREFIX_IGNORE", "_")),
         error_prefix=str(node.get_config("PREFIX_ERROR", "!_")),
     )
     try:
-        new_path = prefix.remove_success_prefix(target)
+        new_path = prefix.remove_ignore_prefix(target)
         typer.echo(f"✓ Marked as unread: {new_path.name}")
     except Exception as e:
         typer.echo(f"✗ Error: {e}", err=True)
@@ -657,7 +657,7 @@ def clear(
         read = True
         sent = True
 
-    success_prefix = str(node.get_config("PREFIX_PROCESSED", "_"))
+    success_prefix = str(node.get_config("PREFIX_IGNORE", "_"))
     removed = 0
 
     if read:

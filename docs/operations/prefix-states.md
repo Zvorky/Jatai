@@ -50,13 +50,13 @@ State flow:
 
 Both prefixes are configurable. Defaults:
 
-- `PREFIX_PROCESSED` = `_` (success prefix for delivered files)
+- `PREFIX_IGNORE` = `_` (ignore/delivered prefix in OUTBOX; read prefix in INBOX)
 - `PREFIX_ERROR` = `!_` (base error prefix; daemon derives error variants from it)
 
 Set per-node in `.jatai` or globally in `~/.jatai`:
 
 ```yaml
-PREFIX_PROCESSED: "done_"
+PREFIX_IGNORE: "done_"
 PREFIX_ERROR: "err_"
 ```
 

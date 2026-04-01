@@ -18,7 +18,7 @@ class Node:
     LOCAL_CONFIG_BACKUP = ".jatai.bkp"
     INBOX_DIRNAME = "INBOX"
     OUTBOX_DIRNAME = "OUTBOX"
-    PREFIX_KEYS = ("PREFIX_PROCESSED", "PREFIX_ERROR")
+    PREFIX_KEYS = ("PREFIX_IGNORE", "PREFIX_ERROR")
     LOCK_TIMEOUT_SECONDS = 10
 
     @property
@@ -97,7 +97,7 @@ class Node:
         if global_config:
             # Copy relevant global config to local (allow override)
             for key in [
-                "PREFIX_PROCESSED",
+                "PREFIX_IGNORE",
                 "PREFIX_ERROR",
                 "RETRY_DELAY_BASE",
             ]:

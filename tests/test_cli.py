@@ -928,7 +928,7 @@ def test_jatai_app_dispatch_unknown_key_does_nothing():
 
 def test_jatai_app_has_expected_menu_item_count():
     from jatai.tui import MENU_ITEMS
-    assert len(MENU_ITEMS) == 17
+    assert len(MENU_ITEMS) == 16
 
 def test_jatai_app_menu_item_keys_are_unique():
     from jatai.tui import MENU_ITEMS
@@ -936,41 +936,28 @@ def test_jatai_app_menu_item_keys_are_unique():
     assert len(keys) == len(set(keys))
 
 def test_jatai_app_dispatch_browse_nodes_with_legacy_string_paths(monkeypatch):
-    from jatai.tui import JataiApp
+    """Browse Nodes key 'b' is disabled (ADR-14): not in menu, dispatch does nothing."""
+    from jatai.tui import JataiApp, MENU_ITEMS
 
     pushed = {}
     app = JataiApp()
     app.push_screen = lambda screen, cb=None: pushed.update({"screen": screen, "cb": cb})
 
-    class _FakeRegistry:
-        def __init__(self):
-            self.nodes = {"legacy": "/tmp/legacy_node", "bad": None}
+    menu_keys = {k for k, _ in MENU_ITEMS}
+    assert "b" not in menu_keys, "Browse Nodes key must not appear in menu (ADR-14)"
 
-        def load(self):
-            pass
-
-    monkeypatch.setattr("jatai.core.registry.Registry", _FakeRegistry)
     app._dispatch("b")
-
-    assert "screen" in pushed
+    assert pushed == {}, "Dispatching 'b' must not push any screen (ADR-14)"
 
 def test_jatai_app_dispatch_browse_nodes_registry_error_does_not_crash(monkeypatch):
+    """Dispatching any unrecognised key must not crash the application."""
     from jatai.tui import JataiApp
 
     pushed = {}
-    outputs = []
     app = JataiApp()
     app.push_screen = lambda screen, cb=None: pushed.update({"screen": screen, "cb": cb})
-    app._output = lambda text: outputs.append(text)
 
-    class _FakeRegistry:
-        nodes = {}
+    for unknown_key in ("b", "99", "z", ""):
+        app._dispatch(unknown_key)
 
-        def load(self):
-            raise RuntimeError("broken registry")
-
-    monkeypatch.setattr("jatai.core.registry.Registry", _FakeRegistry)
-    app._dispatch("b")
-
-    assert "screen" in pushed
-    assert any("Unable to read registry" in text for text in outputs)
+    assert pushed == {}, "Unknown keys should never push a screen"

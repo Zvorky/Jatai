@@ -19,8 +19,9 @@ jatai clear -r
 jatai clear -s
 ```
 
-Only files whose names begin with the configured `PREFIX_PROCESSED` (default `_`)
-are affected. Pending files, error files, and fatal error files are never touched.
+Only files whose names begin with the configured `PREFIX_IGNORE` (default `_`)
+are affected by `jatai clear`.
+Pending files, error files, and fatal error files are never touched.
 
 ## Automatic cleanup — `GC_MAX_READ_FILES` and `GC_MAX_SENT_FILES`
 
@@ -31,7 +32,7 @@ oldest files (by modification time) are deleted automatically.
 | Config key | Default | Applies to |
 |---|---|---|
 | `GC_MAX_READ_FILES` | `0` | INBOX — `_`-prefixed (read) files |
-| `GC_MAX_SENT_FILES` | `0` | OUTBOX — `_`-prefixed (sent/delivered) files |
+| `GC_MAX_SENT_FILES` | `11` | OUTBOX — `_`-prefixed (sent/delivered) files |
 
 `0` means no limit — auto-cleanup is disabled by default.
 
