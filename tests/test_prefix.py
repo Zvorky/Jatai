@@ -24,26 +24,26 @@ class TestPrefixHappyPath:
         assert prefix.success_prefix == "-done"
         assert prefix.error_prefix == "❌"
 
-    def test_prefix_add_success_prefix(self, temp_dir):
-        """Test adding success prefix to a file."""
+    def test_prefix_add_ignore_prefix(self, temp_dir):
+        """Test adding ignore prefix to a file."""
         file_path = temp_dir / "file.txt"
         file_path.write_text("content")
 
         prefix = Prefix()
-        result = prefix.add_success_prefix(file_path)
+        result = prefix.add_ignore_prefix(file_path)
 
         assert result.name == "_file.txt"
         assert result.exists()
         assert not file_path.exists()
         assert result.read_text() == "content"
 
-    def test_prefix_remove_success_prefix(self, temp_dir):
-        """Test removing success prefix from a file."""
+    def test_prefix_remove_ignore_prefix(self, temp_dir):
+        """Test removing ignore prefix from a file."""
         file_path = temp_dir / "_file.txt"
         file_path.write_text("content")
 
         prefix = Prefix()
-        result = prefix.remove_success_prefix(file_path)
+        result = prefix.remove_ignore_prefix(file_path)
 
         assert result.name == "file.txt"
         assert result.exists()
@@ -70,12 +70,12 @@ class TestPrefixHappyPath:
         assert prefix.get_state(file_path) == "pending"
 
     def test_prefix_get_state_processed(self, temp_dir):
-        """Test get_state returns 'processed' for success prefixed file."""
+        """Test get_state returns 'ignore' for ignore-prefixed file (OUTBOX context)."""
         file_path = temp_dir / "_file.txt"
         file_path.write_text("content")
 
         prefix = Prefix()
-        assert prefix.get_state(file_path) == "processed"
+        assert prefix.get_state(file_path) == "ignore"
 
     def test_prefix_get_state_error(self, temp_dir):
         """Test get_state returns 'error' for error prefixed file."""
@@ -99,7 +99,7 @@ class TestPrefixHappyPath:
 
         prefix = Prefix()
         assert prefix.get_detailed_state(pending) == "pending"
-        assert prefix.get_detailed_state(processed) == "processed"
+        assert prefix.get_detailed_state(processed) == "ignore"
         assert prefix.get_detailed_state(error_total) == "error_total"
         assert prefix.get_detailed_state(error_partial) == "error_partial"
         assert prefix.get_detailed_state(fatal_total) == "fatal_total"
@@ -127,16 +127,16 @@ class TestPrefixHappyPath:
         assert prefix.is_pending(pending)
         assert not prefix.is_pending(processed)
 
-    def test_prefix_is_processed(self, temp_dir):
-        """Test is_processed method."""
+    def test_prefix_is_ignored(self, temp_dir):
+        """Test is_ignored method."""
         pending = temp_dir / "file.txt"
         pending.write_text("x")
         processed = temp_dir / "_file.txt"
         processed.write_text("x")
 
         prefix = Prefix()
-        assert prefix.is_processed(processed)
-        assert not prefix.is_processed(pending)
+        assert prefix.is_ignored(processed)
+        assert not prefix.is_ignored(pending)
 
     def test_prefix_is_error(self, temp_dir):
         """Test is_error method."""
@@ -176,39 +176,39 @@ class TestPrefixHappyPath:
 class TestPrefixErrorFailureScenarios:
     """Error and failure scenario tests for Prefix."""
 
-    def test_prefix_add_success_prefix_nonexistent(self, temp_dir):
+    def test_prefix_add_ignore_prefix_nonexistent(self, temp_dir):
         """Test adding prefix to nonexistent file."""
         file_path = temp_dir / "nonexistent.txt"
 
         prefix = Prefix()
         with pytest.raises(FileNotFoundError):
-            prefix.add_success_prefix(file_path)
+            prefix.add_ignore_prefix(file_path)
 
-    def test_prefix_add_success_prefix_already_has_it(self, temp_dir):
-        """Test adding success prefix to file that already has it."""
+    def test_prefix_add_ignore_prefix_already_has_it(self, temp_dir):
+        """Test adding ignore prefix to file that already has it raises ValueError."""
         file_path = temp_dir / "_file.txt"
         file_path.write_text("content")
 
         prefix = Prefix()
         with pytest.raises(ValueError):
-            prefix.add_success_prefix(file_path)
+            prefix.add_ignore_prefix(file_path)
 
-    def test_prefix_remove_success_prefix_nonexistent(self, temp_dir):
+    def test_prefix_remove_ignore_prefix_nonexistent(self, temp_dir):
         """Test removing prefix from nonexistent file."""
         file_path = temp_dir / "nonexistent.txt"
 
         prefix = Prefix()
         with pytest.raises(FileNotFoundError):
-            prefix.remove_success_prefix(file_path)
+            prefix.remove_ignore_prefix(file_path)
 
-    def test_prefix_remove_success_prefix_no_prefix(self, temp_dir):
+    def test_prefix_remove_ignore_prefix_no_prefix(self, temp_dir):
         """Test removing prefix from file that doesn't have it."""
         file_path = temp_dir / "file.txt"
         file_path.write_text("content")
 
         prefix = Prefix()
         with pytest.raises(ValueError):
-            prefix.remove_success_prefix(file_path)
+            prefix.remove_ignore_prefix(file_path)
 
     def test_prefix_add_error_prefix_nonexistent(self, temp_dir):
         """Test adding error prefix to nonexistent file."""
@@ -236,7 +236,7 @@ class TestPrefixErrorFailureScenarios:
         colliding_path.write_text("old")
 
         prefix = Prefix()
-        result = prefix.add_success_prefix(file_path)
+        result = prefix.add_ignore_prefix(file_path)
 
         # Result should have a timestamp suffix
         assert result.name.startswith("_file_")
@@ -279,7 +279,7 @@ class TestPrefixMaliciousAdversarialScenarios:
         file_path.write_text("content")
 
         prefix = Prefix(success_prefix="✓✓", error_prefix="✗✗")
-        result = prefix.add_success_prefix(file_path)
+        result = prefix.add_ignore_prefix(file_path)
 
         assert result.name.startswith("✓✓")
 
@@ -289,7 +289,7 @@ class TestPrefixMaliciousAdversarialScenarios:
         file_path.write_text("content")
 
         prefix = Prefix()
-        result = prefix.add_success_prefix(file_path)
+        result = prefix.add_ignore_prefix(file_path)
 
         assert result.name == "_文件.txt"
 
@@ -299,7 +299,7 @@ class TestPrefixMaliciousAdversarialScenarios:
         file_path.write_text("content")
 
         prefix = Prefix()
-        result = prefix.add_success_prefix(file_path)
+        result = prefix.add_ignore_prefix(file_path)
 
         assert result.name == "_archive.tar.gz"
 
@@ -309,7 +309,7 @@ class TestPrefixMaliciousAdversarialScenarios:
         file_path.write_text("content")
 
         prefix = Prefix()
-        result = prefix.add_success_prefix(file_path)
+        result = prefix.add_ignore_prefix(file_path)
 
         assert result.name == "_README"
 
@@ -319,7 +319,7 @@ class TestPrefixMaliciousAdversarialScenarios:
         file_path.write_text("content")
 
         prefix = Prefix()
-        result = prefix.add_success_prefix(file_path)
+        result = prefix.add_ignore_prefix(file_path)
 
         assert result.name == "_" + ".hidden"
 
@@ -336,7 +336,7 @@ class TestPrefixMaliciousAdversarialScenarios:
 
         long_prefix = "x" * 100
         prefix = Prefix(success_prefix=long_prefix)
-        result = prefix.add_success_prefix(file_path)
+        result = prefix.add_ignore_prefix(file_path)
 
         assert result.name.startswith(long_prefix)
 
@@ -347,12 +347,12 @@ class TestPrefixMaliciousAdversarialScenarios:
 
         prefix = Prefix()
 
-        # pending -> processed
+        # pending -> ignored
         assert prefix.is_pending(file_path)
-        result1 = prefix.add_success_prefix(file_path)
-        assert prefix.is_processed(result1)
+        result1 = prefix.add_ignore_prefix(file_path)
+        assert prefix.is_ignored(result1)
 
-        # processed -> error (add error prefix to processed file)
+        # ignored -> error (add error prefix to ignored file)
         result2 = prefix.add_error_prefix(result1)
         # This creates _!_file.txt, mixed prefixes
         assert "!_" in result2.name
@@ -365,7 +365,7 @@ class TestPrefixMaliciousAdversarialScenarios:
         for i in range(5):
             file_path = temp_dir / f"file_{i}.txt"
             file_path.write_text(f"content {i}")
-            result = prefix.add_success_prefix(file_path)
+            result = prefix.add_ignore_prefix(file_path)
             assert result.exists()
             assert result.name.startswith("_")
 
@@ -380,7 +380,7 @@ class TestPrefixMaliciousAdversarialScenarios:
         os.symlink(actual, link)
 
         prefix = Prefix()
-        result = prefix.add_success_prefix(link)
+        result = prefix.add_ignore_prefix(link)
 
         # After rename, symlink should be renamed, not follow target
         assert result.name == "_link.txt"

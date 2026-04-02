@@ -1,4 +1,4 @@
-.TH JATAI 1 "2026-03-23" "0.6.9" "Jataí Manual"
+.TH JATAI 1 "2026-03-23" "0.7.3" "Jataí Manual"
 .SH NAME
 jatai \- local file-system message bus for scripts and agents
 .SH SYNOPSIS
@@ -21,8 +21,7 @@ with no arguments opens the interactive TUI when running in an interactive
 terminal. In non-interactive execution, it displays the CLI help summary.
 .PP
 Current TUI menu actions cover init, status, docs/log retrieval,
-list/send/read/unread, config get/set, remove, clear, daemon start/stop,
-and browse-node directory navigation.
+list/send/read/unread, config get/set, remove, clear, and daemon start/stop.
 .SH COMMANDS
 .TP
 .B jatai [\fIPATH\fR]
@@ -73,9 +72,9 @@ Mark an INBOX file as read by adding the success prefix.
 Mark an INBOX file as unread by removing the success prefix.
 .TP
 .B jatai config [\fIKEY\fR] [\fIVALUE\fR] [\fB-G\fR|\fB--global\fR]
-Read or write configuration values. \fB--global\fR targets global registry config.
-Config keys are positional arguments. Read-mode output includes a source header
-showing the config file path used.
+Write configuration values. \fB--global\fR targets global registry config.
+Config keys are positional arguments. If \fIVALUE\fR is omitted, the command
+fails and instructs the operator to use \fBjatai config get\fR.
 .TP
 .B jatai config get [\fIKEY\fR] [\fB-G\fR|\fB--global\fR] [\fB-i\fR|\fB--inbox\fR]
 Read-only config retrieval. Defaults to local scope, switches to global with
@@ -87,8 +86,8 @@ the rendered config payload.
 Soft-delete a node by renaming \fI.jatai\fR to \fI._jatai\fR.
 .PP
 If \fI.jatai\fR is manually deleted from an existing registered node directory,
-daemon maintenance writes \fI._jatai\fR to preserve soft-delete semantics
-instead of silently recreating an active node.
+daemon maintenance records the path in \fI/tmp/jatai/removed.yaml\fR with the
+\fB--autoremoved\fR marker and does not recreate node files or directories.
 .TP
 .B jatai clear [\fB-r\fR|\fB--read\fR] [\fB-s\fR|\fB--sent\fR]
 Clear processed history files from INBOX and/or OUTBOX.
@@ -123,10 +122,14 @@ Global registry and configuration file (YAML).
 .I ~/.jatai.pid
 PID file written by the daemon while it is running.
 .TP
-.I ~/.jatai.log
-Log file produced by the daemon.
+.I ~/.jatai_latest.log
+Latest-log symlink/copy used by \fBjatai log\fR. The target location is configurable
+via \fILATEST_LOG_PATH\fR in \fI~/.jatai\fR.
 .TP
-.I ~/.retry
+.I /tmp/jatai/logs/*.log
+Rotated daemon log files.
+.TP
+.I /tmp/jatai/retry.yaml
 Persistent retry-state file (JSON) tracking exponential back-off counters.
 .TP
 .I <NODE>/.jatai
@@ -136,9 +139,9 @@ Local node configuration file (YAML). Overrides global defaults for that node.
 Soft-delete marker. When present the node is considered disabled without
 removing its configuration.
 .TP
-.I <NODE>/.jatai.bkp
-Automatic backup of the previous local configuration, used for rollback when a
-configuration change causes a prefix collision.
+.I /tmp/jatai/bkp/<UUID>.yaml
+System-level backup of the previous local configuration, used for rollback when
+a configuration change causes a prefix collision.
 .SH FILE PREFIX CONVENTIONS
 Jataí uses filename prefixes to encode delivery state:
 .TP

@@ -1,6 +1,6 @@
 # !helloworld.md
 
-> Note: this file is always written by Jatai into a newly created node INBOX during first-time auto-onboarding.
+> Note: this file is written by Jatai into a node INBOX during explicit node initialization flows such as `jatai init`.
 
 Welcome to Jatai.
 

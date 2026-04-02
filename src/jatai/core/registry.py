@@ -6,6 +6,7 @@ import yaml
 from filelock import FileLock, Timeout
 from pathlib import Path
 from typing import Dict, Optional, Any
+from jatai.core.sysstate import SystemState
 
 
 class Registry:
@@ -14,14 +15,16 @@ class Registry:
     LOCK_TIMEOUT_SECONDS = 10
 
     DEFAULT_CONFIG = {
-        "PREFIX_PROCESSED": "_",
+        "PREFIX_IGNORE": "_",
         "PREFIX_ERROR": "!_",
         "RETRY_DELAY_BASE": 60,
         "MAX_RETRIES": 3,
         "INBOX_DIR": "INBOX",
         "OUTBOX_DIR": "OUTBOX",
         "GC_MAX_READ_FILES": 0,
-        "GC_MAX_SENT_FILES": 0,
+        "GC_MAX_SENT_FILES": 11,
+        "GC_DELETE_MODE": "trash",
+        "LATEST_LOG_PATH": "~/.jatai_latest.log",
     }
 
     def __init__(self, registry_path: Optional[Path] = None):
@@ -42,7 +45,7 @@ class Registry:
     @property
     def lock_path(self) -> Path:
         """Return lock file path used to synchronize registry access."""
-        return Path(f"{self.registry_path}.lock")
+        return SystemState.BASE_PATH / "registry.lock"
 
     def _lock(self) -> FileLock:
         """Create a file lock for the registry file."""
@@ -75,6 +78,7 @@ class Registry:
                         for k, v in data.items()
                         if k in self.DEFAULT_CONFIG
                     }
+
                     # Merge with defaults
                     config = self.DEFAULT_CONFIG.copy()
                     config.update(self.global_config)
@@ -192,3 +196,20 @@ class Registry:
             self.nodes[node_name][key] = value
         else:
             self.global_config[key] = value
+
+    @classmethod
+    def ensure_initialized(cls, registry_path: Optional[Path] = None) -> bool:
+        """
+        Create the global registry file with defaults if it does not exist yet.
+
+        Args:
+            registry_path: Override registry path (defaults to ~/.jatai).
+
+        Returns:
+            True if the registry was newly created; False if it already existed.
+        """
+        reg = cls(registry_path)
+        if reg.registry_path.exists():
+            return False
+        reg.save()
+        return True

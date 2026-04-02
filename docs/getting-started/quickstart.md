@@ -79,16 +79,17 @@ Shows the count of files in `INBOX` and `OUTBOX` for the current node.
 The output also shows the active local config file path (`.jatai`) so operators
 can quickly confirm which directory and config are active.
 
-## Auto-onboarding
+## Registration and explicit initialization
 
-If you manually add a path to the global registry (`~/.jatai`) without running
-`jatai init`, Jataí creates the missing structure automatically the next time the
-daemon starts. A `!helloworld.md` tutorial file is dropped in the new node's
-`INBOX` on first onboarding.
+Registering a path in the global registry alone is not enough to materialize a
+node on disk. The supported operator flow is explicit initialization with
+`jatai init`, which creates the node structure and drops `!helloworld.md` into
+`INBOX`.
 
 If `.jatai` is manually deleted from an existing registered node directory,
-daemon maintenance creates `._jatai` to keep the node in soft-delete state
-instead of silently recreating it as active.
+daemon maintenance records the path in `/tmp/jatai/removed.yaml` with the
+`--autoremoved` marker and does not recreate `.jatai`, `._jatai`, `INBOX`, or
+`OUTBOX`.
 
 ## Reading documentation and logs in-band
 
@@ -149,6 +150,6 @@ OUTBOX/
 > command prints the CLI help summary.
 >
 > The TUI provides a two-pane layout: a scrollable command menu on the left and
-> a live output display on the right. It covers the full CLI command set,
-> including node initialization and alpha directory navigation between
-> registered nodes.
+> a live output display on the right. It covers the implemented CLI command set,
+> including initialization, docs/log retrieval, config operations, and daemon
+> lifecycle actions.

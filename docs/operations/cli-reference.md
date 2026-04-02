@@ -24,8 +24,8 @@ Registers the node in the global registry (`~/.jatai`). Fails with a friendly
 message if `INBOX_DIR` and `OUTBOX_DIR` would resolve to the same path.
 
 If a user manually deletes `.jatai` from an already registered node directory,
-daemon maintenance writes `._jatai` as a soft-delete marker rather than
-silently recreating and reactivating the node.
+daemon maintenance records the path in `/tmp/jatai/removed.yaml` with
+`--autoremoved` and does not recreate `.jatai`, `._jatai`, `INBOX`, or `OUTBOX`.
 
 ---
 
@@ -171,19 +171,9 @@ jatai unread _message.txt
 
 ### `jatai config [key] [value] [-G|--global]`
 
-Read or write config values locally (default) or globally.
+Write config values locally (default) or globally.
 
 ```bash
-# Show local config
-jatai config
-
-# Show global config
-jatai config -G
-
-# Read a key
-jatai config MAX_RETRIES
-jatai config -G MAX_RETRIES
-
 # Write a key
 jatai config MAX_RETRIES 5
 jatai config -G MAX_RETRIES 5
@@ -191,13 +181,8 @@ jatai config -G MAX_RETRIES 5
 
 Config keys are positional arguments and intentionally do not have short-option aliases.
 
-When reading config values (`jatai config`, `jatai config KEY`, or global variants),
-terminal output includes a source header:
-
-```text
-# source: /home/user/my-node/.jatai
-MAX_RETRIES=5
-```
+If `value` is missing, the command fails with a syntax error and instructs the
+operator to use `jatai config get [key]` for reads.
 
 ### `jatai config get [key] [-G|--global] [-i|--inbox]`
 
@@ -218,7 +203,7 @@ jatai config get MAX_RETRIES -G
 
 # Export rendered output to current node INBOX
 jatai config get -i
-jatai config get PREFIX_PROCESSED -i
+jatai config get PREFIX_IGNORE -i
 ```
 
 Behavior:
@@ -262,6 +247,30 @@ jatai clear -s
 
 ---
 
+### `jatai cleanup --full [--dry-run] [--remove-logs] [-y|--yes]`
+
+Optional helper to prepare complete uninstall cleanup.
+
+```bash
+# Preview what would be removed
+jatai cleanup --full --dry-run
+
+# Apply cleanup (with interactive confirmation)
+jatai cleanup --full
+
+# Apply cleanup non-interactively and also remove logs
+jatai cleanup --full --remove-logs --yes
+```
+
+Behavior:
+
+- preserves INBOX/OUTBOX payload contents
+- removes local `.jatai` / `._jatai` from known nodes
+- removes global `~/.jatai`
+- removes control-state under `/tmp/jatai/` (logs preserved unless `--remove-logs`)
+
+---
+
 ## Short-option policy
 
 Canonical mapping:
@@ -273,6 +282,9 @@ Canonical mapping:
 - `-s` = `--sent`
 - `-f` = `--foreground`
 - `-G` = `--global`
+- `-d` = `--dry-run`
+- `-l` = `--remove-logs`
+- `-y` = `--yes`
 
 ---
 
@@ -283,16 +295,13 @@ Running `jatai` with no arguments in an interactive terminal opens the
 `jatai` without arguments prints the CLI help summary instead.
 
 The TUI exposes all CLI commands through a two-pane layout:
-- Left pane: scrollable command menu (17 actions, keyboard or mouse selection)
+- Left pane: scrollable command menu (16 actions, keyboard or mouse selection)
 - Right pane: command output display
 
 Actions available in the TUI:
 `init node`, `status`, `docs index`, `docs query`, `log latest`, `log all`, `list`,
 `send file`, `read file`, `unread file`, `config get`, `config set`,
-`remove node`, `clear processed`, `start daemon`, `stop daemon`, `browse nodes`.
-
-`browse nodes` reads registered entries from `~/.jatai` and changes the current
-working directory to the selected node.
+`remove node`, `clear processed`, `start daemon`, `stop daemon`.
 
 Press `Q` to quit. The TUI opens modal input dialogs for commands that require
 parameters (e.g. query text, file paths, config keys).

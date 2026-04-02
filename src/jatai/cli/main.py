@@ -19,6 +19,8 @@ from jatai.core.delivery import Delivery
 from jatai.core.prefix import Prefix
 from jatai.core.registry import Registry
 from jatai.core.node import Node
+from jatai.core.sysstate import SystemState
+from jatai.core.uninstall import cleanup_install_artifacts
 
 app = typer.Typer(
     name="jatai",
@@ -39,6 +41,7 @@ KNOWN_COMMANDS = {
     "config",
     "remove",
     "clear",
+    "cleanup",
     "_daemon-run",
 }
 DOCS_ROOT = Path(__file__).resolve().parents[3] / "docs"
@@ -208,6 +211,31 @@ def _render_docs_terminal(matches: List[Path]) -> str:
         content = path.read_text(encoding="utf-8")
         blocks.append(f"# {rel}\n\n{content.strip()}\n")
     return "\n---\n\n".join(blocks).strip() + "\n"
+
+
+def _load_global_config() -> dict:
+    registry = Registry()
+    try:
+        registry.load()
+    except FileNotFoundError:
+        pass
+    return dict(registry.global_config)
+
+
+def _resolve_latest_log_path() -> Path:
+    configured_latest = Path(
+        os.path.expanduser(str(_load_global_config().get("LATEST_LOG_PATH", "~/.jatai_latest.log")))
+    ).expanduser()
+    if configured_latest.exists() or configured_latest.is_symlink():
+        return configured_latest
+
+    logs_dir = SystemState.BASE_PATH / "logs"
+    if logs_dir.exists():
+        candidates = [path for path in logs_dir.glob("*.log") if path.is_file()]
+        if candidates:
+            return max(candidates, key=lambda path: path.stat().st_mtime)
+
+    return configured_latest
 
 
 def _tail_lines(text: str, max_lines: int) -> str:
@@ -443,7 +471,7 @@ def log(
     inbox: bool = typer.Option(False, "--inbox", "-i", help="Export log output to current node INBOX."),
 ) -> None:
     """Show daemon logs in terminal, with optional export to INBOX."""
-    log_path = Path.home() / ".jatai.log"
+    log_path = _resolve_latest_log_path()
     if not log_path.exists():
         typer.echo(f"✗ Error: log file not found at {log_path}", err=True)
         raise typer.Exit(code=1)
@@ -546,11 +574,11 @@ def read(
         raise typer.Exit(code=1)
 
     prefix = Prefix(
-        success_prefix=str(node.get_config("PREFIX_PROCESSED", "_")),
+        success_prefix=str(node.get_config("PREFIX_IGNORE", "_")),
         error_prefix=str(node.get_config("PREFIX_ERROR", "!_")),
     )
     try:
-        new_path = prefix.add_success_prefix(target)
+        new_path = prefix.add_ignore_prefix(target)
         typer.echo(f"✓ Marked as read: {new_path.name}")
     except Exception as e:
         typer.echo(f"✗ Error: {e}", err=True)
@@ -574,11 +602,11 @@ def unread(
         raise typer.Exit(code=1)
 
     prefix = Prefix(
-        success_prefix=str(node.get_config("PREFIX_PROCESSED", "_")),
+        success_prefix=str(node.get_config("PREFIX_IGNORE", "_")),
         error_prefix=str(node.get_config("PREFIX_ERROR", "!_")),
     )
     try:
-        new_path = prefix.remove_success_prefix(target)
+        new_path = prefix.remove_ignore_prefix(target)
         typer.echo(f"✓ Marked as unread: {new_path.name}")
     except Exception as e:
         typer.echo(f"✗ Error: {e}", err=True)
@@ -657,7 +685,7 @@ def clear(
         read = True
         sent = True
 
-    success_prefix = str(node.get_config("PREFIX_PROCESSED", "_"))
+    success_prefix = str(node.get_config("PREFIX_IGNORE", "_"))
     removed = 0
 
     if read:
@@ -673,6 +701,63 @@ def clear(
                 removed += 1
 
     typer.echo(f"✓ Removed {removed} processed file(s)")
+
+
+@app.command()
+def cleanup(
+    full: bool = typer.Option(
+        False,
+        "--full",
+        "-f",
+        help="Enable full uninstall cleanup mode.",
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        "-d",
+        help="Show what would be removed without changing files.",
+    ),
+    remove_logs: bool = typer.Option(
+        False,
+        "--remove-logs",
+        "-l",
+        help="Also remove /tmp/jatai/logs during cleanup.",
+    ),
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        "-y",
+        help="Skip interactive confirmation.",
+    ),
+) -> None:
+    """
+    Optional uninstall helper for cleaning Jatai config/control artifacts.
+
+    This command keeps INBOX/OUTBOX message contents untouched.
+    """
+    if not full:
+        typer.echo("✗ Refusing to run without --full.", err=True)
+        typer.echo("Use: jatai cleanup --full --dry-run", err=True)
+        raise typer.Exit(code=1)
+
+    if not yes and not dry_run:
+        confirmed = typer.confirm(
+            "This will remove Jatai config/control artifacts. Continue?",
+            default=False,
+        )
+        if not confirmed:
+            typer.echo("Cancelled.")
+            raise typer.Exit(code=1)
+
+    actions = cleanup_install_artifacts(remove_logs=remove_logs, dry_run=dry_run)
+    if not actions:
+        typer.echo("No cleanup actions required.")
+        return
+
+    mode = "dry-run" if dry_run else "applied"
+    typer.echo(f"Cleanup {mode}: {len(actions)} action(s)")
+    for action in actions:
+        typer.echo(f"- {action}")
 
 
 def _run_tui() -> None:

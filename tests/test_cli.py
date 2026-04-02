@@ -11,6 +11,7 @@ from typer.testing import CliRunner
 from jatai.cli.main import app, run, _run_tui
 from jatai.core.registry import Registry
 from jatai.core.node import Node
+from jatai.core.sysstate import SystemState
 
 runner = CliRunner()
 
@@ -249,6 +250,36 @@ class TestCLIHappyPath:
         for f in node.inbox_path.iterdir():
             assert f.name.startswith("!"), f"Expected ! prefix on system artifact: {f.name}"
 
+    def test_cli_log_reads_configured_latest_log_pointer(self, temp_home, monkeypatch):
+        registry = Registry()
+        registry.set_config("LATEST_LOG_PATH", str(temp_home / "custom-latest.log"))
+        registry.save()
+
+        log_path = temp_home / "custom-latest.log"
+        log_path.write_text("configured log line\n", encoding="utf-8")
+
+        result = runner.invoke(app, ["log"])
+
+        assert result.exit_code == 0
+        assert "configured log line" in result.stdout
+
+    def test_cli_log_falls_back_to_latest_rotated_log(self, temp_home, temp_dir, monkeypatch):
+        state_root = temp_dir / "tmp_state"
+        monkeypatch.setattr(SystemState, "BASE_PATH", state_root)
+        SystemState.ensure_base()
+
+        older = state_root / "logs" / "jatai_older.log"
+        newer = state_root / "logs" / "jatai_newer.log"
+        older.write_text("older\n", encoding="utf-8")
+        newer.write_text("newer\n", encoding="utf-8")
+        older.touch()
+        newer.touch()
+
+        result = runner.invoke(app, ["log"])
+
+        assert result.exit_code == 0
+        assert "newer" in result.stdout
+
 
 class TestCLIErrorFailureScenarios:
     """Error and failure scenario tests for CLI."""
@@ -390,6 +421,7 @@ class TestCLIErrorFailureScenarios:
     def test_cli_log_missing_file(self, temp_home, monkeypatch):
         """Test log command fails gracefully when log file doesn't exist."""
         monkeypatch.setenv("HOME", str(temp_home))
+        monkeypatch.setattr(SystemState, "BASE_PATH", temp_home / "tmp_state")
         result = runner.invoke(app, ["log"])
 
         assert result.exit_code == 1
@@ -500,8 +532,10 @@ class TestCLIPhase6Toolbox:
     """Phase 6 command surface tests."""
 
     def test_cli_log_latest_and_all(self, temp_home, monkeypatch):
-        monkeypatch.setenv("HOME", str(temp_home))
-        log_path = temp_home / ".jatai.log"
+        registry = Registry()
+        log_path = temp_home / ".jatai_latest.log"
+        registry.set_config("LATEST_LOG_PATH", str(log_path))
+        registry.save()
         log_path.write_text("line1\nline2\nline3\n", encoding="utf-8")
 
         latest = runner.invoke(app, ["log"])
@@ -514,8 +548,11 @@ class TestCLIPhase6Toolbox:
         assert "line3" in full.stdout
 
     def test_cli_log_inbox_exports_rendered_output(self, temp_dir, temp_home, monkeypatch):
-        monkeypatch.setenv("HOME", str(temp_home))
-        (temp_home / ".jatai.log").write_text("abc\ndef\n", encoding="utf-8")
+        registry = Registry()
+        latest_log = temp_home / ".jatai_latest.log"
+        registry.set_config("LATEST_LOG_PATH", str(latest_log))
+        registry.save()
+        latest_log.write_text("abc\ndef\n", encoding="utf-8")
         node = Node(temp_dir / "log_export_node")
         node.create()
 
@@ -928,7 +965,7 @@ def test_jatai_app_dispatch_unknown_key_does_nothing():
 
 def test_jatai_app_has_expected_menu_item_count():
     from jatai.tui import MENU_ITEMS
-    assert len(MENU_ITEMS) == 17
+    assert len(MENU_ITEMS) == 16
 
 def test_jatai_app_menu_item_keys_are_unique():
     from jatai.tui import MENU_ITEMS
@@ -936,41 +973,28 @@ def test_jatai_app_menu_item_keys_are_unique():
     assert len(keys) == len(set(keys))
 
 def test_jatai_app_dispatch_browse_nodes_with_legacy_string_paths(monkeypatch):
-    from jatai.tui import JataiApp
+    """Browse Nodes key 'b' is disabled (ADR-14): not in menu, dispatch does nothing."""
+    from jatai.tui import JataiApp, MENU_ITEMS
 
     pushed = {}
     app = JataiApp()
     app.push_screen = lambda screen, cb=None: pushed.update({"screen": screen, "cb": cb})
 
-    class _FakeRegistry:
-        def __init__(self):
-            self.nodes = {"legacy": "/tmp/legacy_node", "bad": None}
+    menu_keys = {k for k, _ in MENU_ITEMS}
+    assert "b" not in menu_keys, "Browse Nodes key must not appear in menu (ADR-14)"
 
-        def load(self):
-            pass
-
-    monkeypatch.setattr("jatai.core.registry.Registry", _FakeRegistry)
     app._dispatch("b")
-
-    assert "screen" in pushed
+    assert pushed == {}, "Dispatching 'b' must not push any screen (ADR-14)"
 
 def test_jatai_app_dispatch_browse_nodes_registry_error_does_not_crash(monkeypatch):
+    """Dispatching any unrecognised key must not crash the application."""
     from jatai.tui import JataiApp
 
     pushed = {}
-    outputs = []
     app = JataiApp()
     app.push_screen = lambda screen, cb=None: pushed.update({"screen": screen, "cb": cb})
-    app._output = lambda text: outputs.append(text)
 
-    class _FakeRegistry:
-        nodes = {}
+    for unknown_key in ("b", "99", "z", ""):
+        app._dispatch(unknown_key)
 
-        def load(self):
-            raise RuntimeError("broken registry")
-
-    monkeypatch.setattr("jatai.core.registry.Registry", _FakeRegistry)
-    app._dispatch("b")
-
-    assert "screen" in pushed
-    assert any("Unable to read registry" in text for text in outputs)
+    assert pushed == {}, "Unknown keys should never push a screen"

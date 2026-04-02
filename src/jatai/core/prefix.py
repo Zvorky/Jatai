@@ -3,7 +3,7 @@ Prefix module: Implements the state machine using file name prefixes.
 
 The prefix philosophy:
 - No prefix: Pending file, Jataí acts immediately
-- Success prefix (_): Processed/being written, Jataí ignores
+- Ignore prefix (_): Ignore/delivered (OUTBOX); or read (INBOX). Jataí skips these files.
 - Error prefix (!_): Failed transfer, requires retry or manual intervention
 """
 
@@ -44,7 +44,7 @@ class Prefix:
     def state_prefixes(self) -> Dict[str, str]:
         """Return the complete 5-state prefix matrix."""
         return {
-            "processed": self.success_prefix,
+            "ignore": self.success_prefix,
             "error_total": self.error_total_prefix,
             "error_partial": self.error_partial_prefix,
             "fatal_total": self.fatal_total_prefix,
@@ -64,7 +64,7 @@ class Prefix:
         if file_name.startswith(self.error_total_prefix):
             return "error_total"
         if file_name.startswith(self.success_prefix):
-            return "processed"
+            return "ignore"
         return "pending"
 
     def _strip_known_prefix(self, file_name: str) -> str:
@@ -112,9 +112,9 @@ class Prefix:
         """Remove any state prefix and return file to pending state."""
         return self.set_state(file_path, "pending")
 
-    def add_success_prefix(self, file_path: Path) -> Path:
+    def add_ignore_prefix(self, file_path: Path) -> Path:
         """
-        Add success prefix to a file (mark as processed).
+        Add ignore prefix to a file (mark as delivered in OUTBOX, or read in INBOX).
 
         Args:
             file_path: Path to the file
@@ -124,18 +124,18 @@ class Prefix:
 
         Raises:
             FileNotFoundError: If file doesn't exist
-            ValueError: If file already has success prefix
+            ValueError: If file already has the ignore prefix
         """
         if not file_path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
 
         if file_path.name.startswith(self.success_prefix):
-            raise ValueError(f"File already has success prefix: {file_path}")
-        return self.set_state(file_path, "processed")
+            raise ValueError(f"File already has ignore prefix: {file_path}")
+        return self.set_state(file_path, "ignore")
 
-    def remove_success_prefix(self, file_path: Path) -> Path:
+    def remove_ignore_prefix(self, file_path: Path) -> Path:
         """
-        Remove success prefix from a file (mark as unprocessed).
+        Remove ignore prefix from a file (mark as pending again).
 
         Args:
             file_path: Path to the file
@@ -145,13 +145,13 @@ class Prefix:
 
         Raises:
             FileNotFoundError: If file doesn't exist
-            ValueError: If file doesn't have success prefix
+            ValueError: If file doesn't have the ignore prefix
         """
         if not file_path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
 
         if not file_path.name.startswith(self.success_prefix):
-            raise ValueError(f"File doesn't have success prefix: {file_path}")
+            raise ValueError(f"File doesn't have ignore prefix: {file_path}")
 
         return self.to_pending(file_path)
 
@@ -186,11 +186,11 @@ class Prefix:
             file_path: Path to check
 
         Returns:
-            "pending", "processed", "error", or "unknown"
+            "pending", "ignore", "error", or "unknown"
         """
         state = self.get_detailed_state(file_path)
-        if state == "processed":
-            return "processed"
+        if state == "ignore":
+            return "ignore"
         if state == "pending":
             return "pending"
         return "error"
@@ -199,9 +199,9 @@ class Prefix:
         """Check if file is pending (no prefix)."""
         return self.get_state(file_path) == "pending"
 
-    def is_processed(self, file_path: Path) -> bool:
-        """Check if file is processed (success prefix)."""
-        return self.get_state(file_path) == "processed"
+    def is_ignored(self, file_path: Path) -> bool:
+        """Check if file has the ignore prefix (delivered in OUTBOX, or read in INBOX)."""
+        return self.get_state(file_path) == "ignore"
 
     def is_error(self, file_path: Path) -> bool:
         """Check if file has error state (error prefix)."""

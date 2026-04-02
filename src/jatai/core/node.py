@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import yaml
+from jatai.core.sysstate import SystemState
 
 
 class Node:
@@ -15,18 +16,25 @@ class Node:
 
     LOCAL_CONFIG_FILENAME = ".jatai"
     LOCAL_CONFIG_DISABLED = "._jatai"
-    LOCAL_CONFIG_BACKUP = ".jatai.bkp"
     INBOX_DIRNAME = "INBOX"
     OUTBOX_DIRNAME = "OUTBOX"
-    PREFIX_KEYS = ("PREFIX_PROCESSED", "PREFIX_ERROR")
+    PREFIX_KEYS = ("PREFIX_IGNORE", "PREFIX_ERROR")
     LOCK_TIMEOUT_SECONDS = 10
 
     @property
+    def uuid(self) -> str:
+        return SystemState.assign_uuid(str(self.node_path))
+
+    @property
     def lock_path(self) -> Path:
-        return Path(f"{self.local_config_path}.lock")
+        return SystemState.BASE_PATH / f"{self.uuid}.lock"
+
+    @property
+    def backup_config_path(self) -> Path:
+        return SystemState.bkp_path(self.uuid)
 
     def _lock(self) -> FileLock:
-        self.node_path.mkdir(parents=True, exist_ok=True)
+        SystemState.ensure_base()
         return FileLock(str(self.lock_path), timeout=self.LOCK_TIMEOUT_SECONDS)
 
     def __init__(self, node_path: Path):
@@ -41,7 +49,6 @@ class Node:
         self.outbox_path = self.node_path / self.OUTBOX_DIRNAME
         self.local_config_path = self.node_path / self.LOCAL_CONFIG_FILENAME
         self.disabled_config_path = self.node_path / self.LOCAL_CONFIG_DISABLED
-        self.backup_config_path = self.node_path / self.LOCAL_CONFIG_BACKUP
         self.local_config: Dict[str, Any] = {}
 
     @staticmethod
@@ -97,7 +104,7 @@ class Node:
         if global_config:
             # Copy relevant global config to local (allow override)
             for key in [
-                "PREFIX_PROCESSED",
+                "PREFIX_IGNORE",
                 "PREFIX_ERROR",
                 "RETRY_DELAY_BASE",
             ]:
@@ -198,7 +205,10 @@ class Node:
 
         with self._lock():
             shutil.copy2(self.backup_config_path, self.local_config_path)
-            self.load_config()
+
+        # Load configuration after releasing lock to avoid reentrant locking
+        # deadlocks when FileLock is non-recursive.
+        self.load_config()
 
     def is_enabled(self) -> bool:
         """

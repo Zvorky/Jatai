@@ -50,13 +50,13 @@ State flow:
 
 Both prefixes are configurable. Defaults:
 
-- `PREFIX_PROCESSED` = `_` (success prefix for delivered files)
+- `PREFIX_IGNORE` = `_` (ignore/delivered prefix in OUTBOX; read prefix in INBOX)
 - `PREFIX_ERROR` = `!_` (base error prefix; daemon derives error variants from it)
 
 Set per-node in `.jatai` or globally in `~/.jatai`:
 
 ```yaml
-PREFIX_PROCESSED: "done_"
+PREFIX_IGNORE: "done_"
 PREFIX_ERROR: "err_"
 ```
 
@@ -88,7 +88,7 @@ Common patterns:
 
 | Pattern | When dropped |
 |---|---|
-| `!helloworld.md` | First-time auto-onboarding welcome message |
+| `!helloworld.md` | Welcome message dropped during explicit node initialization |
 | `!_config-migration-error*.md` | Prefix migration aborted due to naming collision |
 | `!docs-index.md` | Docs index exported via `jatai docs -i` |
 | `!log-latest.txt` | Log snapshot exported via `jatai log -i` |

@@ -38,7 +38,7 @@ class TestNodeHappyPath:
         node = Node(node_path)
 
         global_config = {
-            "PREFIX_PROCESSED": "-done",
+            "PREFIX_IGNORE": "-done",
             "PREFIX_ERROR": "❌",
             "RETRY_DELAY_BASE": 120,
         }
@@ -46,7 +46,7 @@ class TestNodeHappyPath:
         node.create(global_config=global_config)
 
         node.load_config()
-        assert node.local_config["PREFIX_PROCESSED"] == "-done"
+        assert node.local_config["PREFIX_IGNORE"] == "-done"
         assert node.local_config["PREFIX_ERROR"] == "❌"
         assert node.local_config["RETRY_DELAY_BASE"] == 120
 
@@ -55,19 +55,19 @@ class TestNodeHappyPath:
         node = Node(node_path)
         node.create()
         node.local_config = {
-            "PREFIX_PROCESSED": "local_",
+            "PREFIX_IGNORE": "local_",
             "INBOX_DIR": "custom_inbox",
         }
 
         effective = node.apply_effective_config(
             {
-                "PREFIX_PROCESSED": "global_",
+                "PREFIX_IGNORE": "global_",
                 "PREFIX_ERROR": "global_error_",
                 "OUTBOX_DIR": "custom_outbox",
             }
         )
 
-        assert effective["PREFIX_PROCESSED"] == "local_"
+        assert effective["PREFIX_IGNORE"] == "local_"
         assert effective["PREFIX_ERROR"] == "global_error_"
         assert node.inbox_path == node_path / "custom_inbox"
         assert node.outbox_path == node_path / "custom_outbox"
@@ -75,14 +75,14 @@ class TestNodeHappyPath:
     def test_node_restore_backup_restores_previous_config(self, temp_dir):
         node_path = temp_dir / "my_node"
         node = Node(node_path)
-        node.create(global_config={"PREFIX_PROCESSED": "original_"})
+        node.create(global_config={"PREFIX_IGNORE": "original_"})
         original_config = dict(node.local_config)
 
         node.backup_current_config(original_config)
-        node.write_config({"PREFIX_PROCESSED": "changed_"})
+        node.write_config({"PREFIX_IGNORE": "changed_"})
         node.restore_backup()
 
-        assert node.local_config["PREFIX_PROCESSED"] == original_config["PREFIX_PROCESSED"]
+        assert node.local_config["PREFIX_IGNORE"] == original_config["PREFIX_IGNORE"]
 
     def test_node_load_config(self, temp_dir):
         node_path = temp_dir / "my_node"

@@ -8,15 +8,16 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from filelock import FileLock, Timeout
+from jatai.core.sysstate import SystemState
 
 
 class RetryState:
-    """Manage the global ~/.retry file and retry scheduling metadata."""
+    """Manage the global retry state file and retry scheduling metadata."""
 
     LOCK_TIMEOUT_SECONDS = 10
 
     def __init__(self, retry_path: Optional[Path] = None) -> None:
-        self.retry_path = Path(retry_path) if retry_path is not None else Path.home() / ".retry"
+        self.retry_path = Path(retry_path) if retry_path is not None else SystemState.BASE_PATH / "retry.yaml"
         self.data: Dict[str, Dict[str, Any]] = {}
 
     @property

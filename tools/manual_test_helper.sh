@@ -82,8 +82,17 @@ run_cmd() {
   local cmd="$*"
   echo "[$(timestamp)] >>> $cmd"
   set +e
-  bash -lc "$cmd"
-  local rc=$?
+  local rc
+  if [[ "$cmd" == *" jatai stop"* || "$cmd" == *"/jatai stop"* ]]; then
+    timeout 30s bash -lc "$cmd"
+    rc=$?
+    if [[ $rc -eq 124 ]]; then
+      echo "[$(timestamp)] !!! timeout while running stop command"
+    fi
+  else
+    bash -lc "$cmd"
+    rc=$?
+  fi
   set -e
   echo "[$(timestamp)] <<< exit=$rc"
   return $rc
@@ -108,11 +117,13 @@ log_file_changes() {
   local prev_file="$TEST_ROOT/$MANIFEST_PREV_REL"
   local curr_file="$TEST_ROOT/$MANIFEST_CURR_REL"
 
+  mkdir -p "$TEST_ROOT"
   build_file_manifest "$curr_file"
+  [[ -f "$curr_file" ]] || : > "$curr_file"
 
   if [[ ! -f "$prev_file" ]]; then
     echo "[$(timestamp)] File changes: first snapshot (no previous baseline)."
-    cp "$curr_file" "$prev_file"
+    cp "$curr_file" "$prev_file" || true
     return 0
   fi
 
@@ -150,7 +161,7 @@ log_file_changes() {
     echo "[$(timestamp)]     (none)"
   fi
 
-  cp "$curr_file" "$prev_file"
+  cp "$curr_file" "$prev_file" || true
 }
 
 dump_all_files() {
@@ -234,6 +245,14 @@ suite_smoke() {
   run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN init '$JATAI_TEST_A'" || failures=$((failures + 1))
   run_cmd "cd '$JATAI_TEST_B' && export HOME='$TEST_HOME' && $JATAI_BIN init '$JATAI_TEST_B'" || failures=$((failures + 1))
   run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN status" || failures=$((failures + 1))
+
+  run_cmd "cd '$JATAI_TEST_A' && export MANPATH='$ROOT_DIR/docs:${MANPATH:-}' && man jatai | head -n 20 > '$TEST_ROOT/man_jatai.out'" || failures=$((failures + 1))
+  if grep -q "JATAI(1)" "$TEST_ROOT/man_jatai.out"; then
+    echo "[$(timestamp)] ✓ man jatai resolved from docs/jatai.1"
+  else
+    echo "[$(timestamp)] ✗ man jatai did not resolve expected jatai.1 content"
+    failures=$((failures + 1))
+  fi
 
   snapshot_dirs
   echo "[$(timestamp)] smoke suite failures=$failures"
@@ -360,7 +379,7 @@ PY" || failures=$((failures + 1))
   # Write a new .jatai config directly to trigger migration
   run_cmd "cat > '$JATAI_TEST_A/.jatai' <<EOF
 node_path: '$JATAI_TEST_A'
-PREFIX_PROCESSED: 'processed_'
+PREFIX_IGNORE: 'processed_'
 PREFIX_ERROR: 'error_'
 EOF" || failures=$((failures + 1))
   run_cmd "'$VENV_PYTHON' - <<'PY'
@@ -573,10 +592,116 @@ print('TUI dispatch tests passed')
   return 0
 }
 
+suite_phase7() {
+  load_state
+  local failures=0
+
+  echo "[$(timestamp)] ===== PHASE7 SUITE ====="
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN init '$JATAI_TEST_A'" || failures=$((failures + 1))
+  run_cmd "cd '$JATAI_TEST_B' && export HOME='$TEST_HOME' && $JATAI_BIN init '$JATAI_TEST_B'" || failures=$((failures + 1))
+
+  echo "[$(timestamp)] Validate auto-onboarding and defaults"
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN status" || failures=$((failures + 1))
+
+  echo "[$(timestamp)] Create processed file and run daemon for GC cycle"
+  run_cmd "printf 'x' > '$JATAI_TEST_A/OUTBOX/_old-1.txt'" || failures=$((failures + 1))
+  run_cmd "printf 'x' > '$JATAI_TEST_A/OUTBOX/_old-2.txt'" || failures=$((failures + 1))
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && nohup $VENV_PYTHON -m jatai.cli.main _daemon-run > /tmp/jatai_phase7_daemon.log 2>&1 & echo \$! > /tmp/jatai_phase7.pid" || failures=$((failures + 1))
+  sleep 2
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN stop" || failures=$((failures + 1))
+  if [[ -f /tmp/jatai_phase7.pid ]]; then
+    DAEMON_PID=$(cat /tmp/jatai_phase7.pid)
+    if kill -0 "$DAEMON_PID" 2>/dev/null; then
+      kill "$DAEMON_PID" 2>/dev/null || true
+      rm -f /tmp/jatai_phase7.pid
+    fi
+  fi
+
+  echo "[$(timestamp)] Check Phase7 log path symlink"
+  run_cmd "'$VENV_PYTHON' -c \"from pathlib import Path; from jatai.core.registry import Registry; registry_path = Path('$TEST_HOME') / '.jatai'; reg = Registry(registry_path=registry_path); reg.load(); log_path = Path(reg.global_config.get('LATEST_LOG_PATH', '~/.jatai_latest.log')).expanduser(); print('log symlink exists', log_path.exists())\"" || failures=$((failures + 1))
+
+  echo "[$(timestamp)] Ensure soft-delete path logic via config removal"
+  run_cmd "rm -f '$JATAI_TEST_A/.jatai'" || failures=$((failures + 1))
+  if [[ -f "$JATAI_TEST_A/._jatai" ]]; then
+    echo "[$(timestamp)] ✗ Unexpected ._jatai auto-created by daemon"
+    failures=$((failures + 1))
+  fi
+  if run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN start"; then
+    echo "[$(timestamp)] ✓ start succeeded; daemon kept node auto-removed without recreating local config"
+  else
+    echo "[$(timestamp)] ✗ start failed unexpectedly after manual .jatai deletion"
+    failures=$((failures + 1))
+  fi
+  if grep -q "$JATAI_TEST_A --autoremoved" /tmp/jatai/removed.yaml 2>/dev/null; then
+    echo "[$(timestamp)] ✓ removed.yaml contains --autoremoved marker for node_a"
+  else
+    echo "[$(timestamp)] ✗ missing --autoremoved marker in /tmp/jatai/removed.yaml"
+    failures=$((failures + 1))
+  fi
+  # Ensure no daemon process leaks into subsequent suites.
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN stop" || true
+
+  snapshot_dirs
+  echo "[$(timestamp)] phase7 suite failures=$failures"
+  return 0
+}
+
+suite_phase7_full() {
+  load_state
+  local failures=0
+
+  echo "[$(timestamp)] ===== PHASE7-FULL SUITE ====="
+  # setup two nodes and validate global .jatai operations + filesystem behavior
+  run_cmd "rm -f '$JATAI_TEST_A/._jatai' '$JATAI_TEST_B/._jatai'" || failures=$((failures + 1))
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN init '$JATAI_TEST_A'" || failures=$((failures + 1))
+  run_cmd "cd '$JATAI_TEST_B' && export HOME='$TEST_HOME' && $JATAI_BIN init '$JATAI_TEST_B'" || failures=$((failures + 1))
+
+  # switch to node_a and verify OUTBOX/inbox operations
+  run_cmd "printf 'hello' > '$JATAI_TEST_A/OUTBOX/msg1.txt'" || failures=$((failures + 1))
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN start" || failures=$((failures + 1))
+  sleep 2
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN stop" || failures=$((failures + 1))
+  local retries=10
+  while [[ $retries -gt 0 ]] && [[ ! -f "$JATAI_TEST_B/INBOX/msg1.txt" ]]; do
+    sleep 0.5
+    retries=$((retries - 1))
+  done
+
+  if [[ ! -f "$JATAI_TEST_B/INBOX/msg1.txt" ]]; then
+    echo "[$(timestamp)] ✗ FAILED: phase7-full delivery across nodes"
+    failures=$((failures + 1))
+  else
+    echo "[$(timestamp)] ✓ phase7-full delivery across nodes succeeded"
+  fi
+
+  # auto-removed behavior from registry on existing path w/o local .jatai
+  run_cmd "rm -f '$JATAI_TEST_A/.jatai'" || failures=$((failures + 1))
+  if [[ -f "$JATAI_TEST_A/._jatai" ]]; then
+    echo "[$(timestamp)] ✗ Unexpected ._jatai auto-created by daemon"
+    failures=$((failures + 1))
+  else
+    echo "[$(timestamp)] ✓ ._jatai not auto-created after manual .jatai deletion"
+  fi
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN status" && failures=$((failures + 1)) || true
+  if grep -q "$JATAI_TEST_A --autoremoved" /tmp/jatai/removed.yaml 2>/dev/null; then
+    echo "[$(timestamp)] ✓ removed.yaml contains --autoremoved marker for node_a"
+  else
+    echo "[$(timestamp)] ✗ missing --autoremoved marker in /tmp/jatai/removed.yaml"
+    failures=$((failures + 1))
+  fi
+
+  # ensure global registration still present but not in-memory created to new path
+  run_cmd "cd '$JATAI_TEST_B' && export HOME='$TEST_HOME' && $JATAI_BIN list" || failures=$((failures + 1))
+
+  snapshot_dirs
+  echo "[$(timestamp)] phase7-full suite failures=$failures"
+  return 0
+}
+
 action_suite() {
   if [[ $# -eq 0 ]]; then
     echo "ERROR: suite expects a suite name"
-    echo "Available suites: smoke, filesystem, advanced, startup-scan, config, tui-config-get"
+    echo "Available suites: smoke, filesystem, phase7, advanced, startup-scan, config, tui-config-get"
     exit 1
   fi
 
@@ -586,6 +711,12 @@ action_suite() {
       ;;
     filesystem)
       suite_filesystem
+      ;;
+    phase7)
+      suite_phase7
+      ;;
+    phase7-full)
+      suite_phase7_full
       ;;
     migration)
       suite_migration
@@ -616,7 +747,7 @@ action_suite() {
       ;;
     *)
       echo "ERROR: unknown suite '$1'"
-      echo "Available suites: smoke, filesystem, advanced, startup-scan, config, tui-config-get"
+      echo "Available suites: smoke, filesystem, phase7, advanced, startup-scan, config, tui-config-get"
       exit 1
       ;;
   esac
@@ -642,7 +773,7 @@ action_all() {
   local setup_done="0"
 
   all_cleanup_trap() {
-    if [[ "$setup_done" == "1" ]]; then
+    if [[ "${setup_done:-0}" == "1" ]]; then
       action_cleanup || true
     fi
   }
@@ -654,6 +785,8 @@ action_all() {
   setup_done="1"
   action_suite smoke
   action_suite filesystem
+  action_suite phase7
+  action_suite phase7-full
   action_suite advanced
   action_suite startup-scan
   action_suite config
@@ -673,7 +806,7 @@ Usage:
   tools/manual_test_helper.sh setup
   tools/manual_test_helper.sh snapshot
   tools/manual_test_helper.sh run -- <command>
-  tools/manual_test_helper.sh suite <smoke|filesystem|advanced|startup-scan|config|tui-config-get>
+  tools/manual_test_helper.sh suite <smoke|filesystem|phase7|phase7-full|advanced|startup-scan|config|tui-config-get>
   tools/manual_test_helper.sh cleanup
   tools/manual_test_helper.sh all
 
@@ -684,7 +817,7 @@ Behavior:
   - Keeps state in ./tmp_tests/.manual_test_state.env
 
 Test Suites (File-System First Architecture):
-  - smoke: CLI initialization and status commands
+  - smoke: CLI initialization/status plus man-page validation with `man jatai` (docs/jatai.1)
   - filesystem: Direct file delivery - drop files in OUTBOX, verify arrival in destination INBOX
   - advanced: Soft-delete/re-enable, collision resolution, prefix state verification
   - startup-scan: Startup scan behavior - files dropped when daemon offline

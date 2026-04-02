@@ -106,7 +106,7 @@ def main() -> int:
         print(f"Version already set to {args.new_version} (from README reference).")
 
     print(f"Updated version to {args.new_version} in {len(VERSION_TARGETS)} files ({changed} replacements).")
-    print("Verify with: rg --line-number --fixed-strings \"" + args.new_version + "\"")
+    print("Verify with: grep -RIn --fixed-strings \"" + args.new_version + "\" .")
     return 0
 
 

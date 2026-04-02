@@ -6,6 +6,8 @@ import logging
 import os
 import signal
 import threading
+import shutil
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -14,11 +16,13 @@ from filelock import FileLock, Timeout
 from watchdog.events import FileCreatedEvent, FileMovedEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
+from send2trash import send2trash
 from jatai.core.delivery import Delivery
 from jatai.core.node import Node
 from jatai.core.prefix import Prefix
 from jatai.core.registry import Registry
 from jatai.core.retry import RetryState
+from jatai.core.sysstate import SystemState
 import yaml
 import re
 
@@ -80,8 +84,19 @@ class JataiDaemon:
 
     POLL_INTERVAL_SECONDS = 0.2
     LOCK_TIMEOUT_SECONDS = 2
-    MAINTENANCE_INTERVAL_TICKS = 25
+    MAINTENANCE_INTERVAL_TICKS = int(15 * 60 / POLL_INTERVAL_SECONDS)
     HELLOWORLD_FILENAME = "!helloworld.md"
+    GC_DEFAULT_READ = 0
+    GC_DEFAULT_SENT = 11
+    GC_DEFAULT_MODE = "trash"
+
+    def _load_global_config(self) -> Dict[str, object]:
+        registry = Registry(self.registry_path)
+        try:
+            registry.load()
+        except FileNotFoundError:
+            pass
+        return dict(registry.global_config)
 
     def __init__(
         self,
@@ -92,9 +107,12 @@ class JataiDaemon:
         observer_factory=Observer,
     ) -> None:
         self.registry_path = Path(registry_path) if registry_path is not None else Path.home() / ".jatai"
-        self.pid_path = Path(pid_path) if pid_path is not None else Path.home() / ".jatai.pid"
-        self.retry_path = Path(retry_path) if retry_path is not None else Path.home() / ".retry"
-        self.log_path = Path(log_path) if log_path is not None else Path.home() / ".jatai.log"
+        self.pid_path = Path(pid_path) if pid_path is not None else SystemState.BASE_PATH / "jatai.pid"
+        self.retry_path = Path(retry_path) if retry_path is not None else SystemState.BASE_PATH / "retry.yaml"
+        SystemState.ensure_base()
+        global_config = self._load_global_config()
+        self.log_path = Path(log_path) if log_path is not None else SystemState.BASE_PATH / "logs" / f"jatai_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.log"
+        self.latest_log_path = Path(os.path.expanduser(str(global_config.get("LATEST_LOG_PATH", "~/.jatai_latest.log")))).expanduser()
         self.observer_factory = observer_factory
         self.stop_event = threading.Event()
         self.observer: Optional[Observer] = None
@@ -112,7 +130,23 @@ class JataiDaemon:
             handler = logging.FileHandler(log_path, encoding="utf-8")
             handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
             logger.addHandler(handler)
+            self._update_latest_log_link(log_path)
         return logger
+
+    def _update_latest_log_link(self, new_log_path: Path) -> None:
+        if not self.latest_log_path:
+            return
+
+        try:
+            if self.latest_log_path.exists() or self.latest_log_path.is_symlink():
+                self.latest_log_path.unlink(missing_ok=True)
+            self.latest_log_path.parent.mkdir(parents=True, exist_ok=True)
+            self.latest_log_path.symlink_to(new_log_path)
+        except Exception:
+            try:
+                shutil.copy2(new_log_path, self.latest_log_path)
+            except Exception:
+                pass
 
     def _load_registry(self) -> Registry:
         registry = Registry(self.registry_path)
@@ -154,7 +188,7 @@ class JataiDaemon:
     ) -> None:
         effective = dict(global_config)
         for key in (
-            "PREFIX_PROCESSED",
+            "PREFIX_IGNORE",
             "PREFIX_ERROR",
             "RETRY_DELAY_BASE",
             "MAX_RETRIES",
@@ -170,43 +204,30 @@ class JataiDaemon:
 
         existed_before = node.node_path.exists()
         if not existed_before:
-            node.node_path.mkdir(parents=True, exist_ok=True)
+            # Node path is registered globally but not present on disk: do not create files.
+            self.logger.warning(
+                "Node path missing; skipping auto-onboarding for node=%s",
+                node.node_path,
+            )
+            return
+
+        # Ensure this node has a persistent UUID so migration caches are stable.
+        try:
+            SystemState.assign_uuid(str(node.node_path))
+        except Exception:
+            pass
 
         has_any_local_config = node.local_config_path.exists() or node.disabled_config_path.exists()
         if not has_any_local_config:
-            # If the node directory existed before (user removed .jatai manually),
-            # create a soft-delete marker and do not recreate runtime files.
-            if existed_before:
-                softdelete_config = {
-                    "node_path": str(node.node_path),
-                    "INBOX_DIR": str(inbox_path),
-                    "OUTBOX_DIR": str(outbox_path),
-                }
-                for key in ("PREFIX_PROCESSED", "PREFIX_ERROR", "RETRY_DELAY_BASE", "MAX_RETRIES"):
-                    if key in effective:
-                        softdelete_config[key] = effective[key]
-                node.write_config(softdelete_config, node.disabled_config_path)
-                # Ensure the disabled config file exists; attempt a safe fallback if necessary.
-                if not node.disabled_config_path.exists():
-                    try:
-                        node.disabled_config_path.parent.mkdir(parents=True, exist_ok=True)
-                        with open(node.disabled_config_path, "w", encoding="utf-8") as f:
-                            yaml.safe_dump(softdelete_config, f, default_flow_style=False)
-                    except Exception:
-                        pass
-                self.logger.info(
-                    "Detected missing local config; created soft-delete marker at %s",
-                    node.disabled_config_path,
-                )
-                return
-
-            # Otherwise, node path did not exist and this is a registry-only node: auto-onboard.
-            node.create(global_config=effective, inbox_path=inbox_path, outbox_path=outbox_path)
+            # Record auto-removal and do not recreate node config/directories.
             try:
-                self._drop_helloworld(node)
+                SystemState.mark_autoremoved(str(node.node_path))
             except Exception:
                 pass
-            self.logger.info("Auto-onboarded node at %s", node.node_path)
+            self.logger.info(
+                "Detected missing local config; marked node as auto-removed without recreating files node=%s",
+                node.node_path,
+            )
             return
 
         inbox_path.mkdir(parents=True, exist_ok=True)
@@ -216,7 +237,7 @@ class JataiDaemon:
 
     @property
     def pid_lock_path(self) -> Path:
-        return Path(f"{self.pid_path}.lock")
+        return SystemState.BASE_PATH / "jatai.pid.lock"
 
     def _pid_lock(self) -> FileLock:
         self.pid_path.parent.mkdir(parents=True, exist_ok=True)
@@ -301,6 +322,12 @@ class JataiDaemon:
 
     def _update_node_cache(self, node: Node) -> None:
         self.node_config_cache[node.node_path] = dict(node.local_config)
+        # Persist config to the system-level UUID backup so prefix migrations
+        # can survive daemon restarts (ADR-4.3.3, REQ-3.5.4).
+        try:
+            SystemState.write_bkp_config(str(node.node_path), dict(node.local_config))
+        except Exception:
+            pass
 
     def _remove_node_cache(self, node_path: Path) -> None:
         self.node_config_cache.pop(Path(node_path).resolve(), None)
@@ -371,81 +398,32 @@ class JataiDaemon:
                         if loaded:
                             previous_config = dict(loaded)
                             self.logger.info(
-                                "Recovered previous config from backup for node=%s",
+                                "Recovered previous config from local backup for node=%s",
                                 node_path,
                             )
             except Exception:
-                # If recovery fails, continue without previous_config.
-                previous_config = previous_config
+                pass
 
-        # If still no previous config, attempt to infer prefixes from existing
-        # history files in INBOX/OUTBOX. This helps when the user deleted
-        # `.jatai` manually but left historical files that indicate prior
-        # prefixes (for example `_` and `!_`). Use a simple frequency-based
-        # heuristic to pick likely processed/error prefixes.
+        # If still no previous config, try the system-level UUID backup
+        # (ADR-4.3.3, REQ-3.5.4). This is the anti-heuristic fallback —
+        # the daemon never guesses prefixes from file contents (ADR-3.3).
         if not previous_config:
             try:
-                prefix_counts: Dict[str, int] = {}
-                for directory in (node.inbox_path, node.outbox_path):
-                    if not directory.exists():
-                        continue
-                    for f in directory.iterdir():
-                        if not f.is_file():
-                            continue
-                        name = f.name
-                        if "_" not in name:
-                            continue
-                        idx = name.find("_")
-                        cand = name[: idx + 1]
-                        prefix_counts[cand] = prefix_counts.get(cand, 0) + 1
-
-                if prefix_counts:
-                    # prefer an error prefix containing '!' if present
-                    error_pref = None
-                    for p in prefix_counts:
-                        if "!" in p:
-                            error_pref = p
-                            break
-                    # choose most common as processed prefix
-                    processed_pref = max(prefix_counts.items(), key=lambda kv: kv[1])[0]
-                    if error_pref is None and processed_pref == "!_":
-                        # unlikely but handle edge case
-                        error_pref = processed_pref
-                        processed_pref = "_"
-                    previous_config = {
-                        "PREFIX_PROCESSED": processed_pref,
-                        "PREFIX_ERROR": error_pref or "!_",
-                    }
+                bkp = SystemState.read_bkp_config(str(node.node_path))
+                if bkp:
+                    previous_config = bkp
                     self.logger.info(
-                        "Inferred previous prefixes for node=%s processed=%s error=%s",
+                        "Recovered previous config from UUID backup for node=%s",
                         node_path,
-                        previous_config["PREFIX_PROCESSED"],
-                        previous_config["PREFIX_ERROR"],
                     )
             except Exception:
-                previous_config = previous_config
+                pass
 
         if previous_config:
             prefix_keys_changed = any(
                 previous_config.get(key) != node.local_config.get(key)
                 for key in Node.PREFIX_KEYS
             )
-
-            def _has_history_files_for_prefix(prev_cfg: dict) -> bool:
-                try:
-                    processed = str(prev_cfg.get("PREFIX_PROCESSED", "_"))
-                    error = str(prev_cfg.get("PREFIX_ERROR", "!_"))
-                    for directory in (node.inbox_path, node.outbox_path):
-                        if not directory.exists():
-                            continue
-                        for f in directory.iterdir():
-                            if not f.is_file():
-                                continue
-                            if f.name.startswith(processed) or f.name.startswith(error):
-                                return True
-                except Exception:
-                    return False
-                return False
 
             # Always attempt migration when a previous configuration exists. This
             # ensures historical files are migrated to the current prefixes even
@@ -486,7 +464,7 @@ class JataiDaemon:
         if source_node is None:
             return
 
-        success_prefix = str(source_node.get_config("PREFIX_PROCESSED", "_"))
+        success_prefix = str(source_node.get_config("PREFIX_IGNORE", "_"))
         prefix = Prefix(
             success_prefix=success_prefix,
             error_prefix=str(source_node.get_config("PREFIX_ERROR", "!_")),
@@ -548,15 +526,20 @@ class JataiDaemon:
         failed_nodes: List[str],
     ) -> bool:
         prefix = Prefix(
-            success_prefix=str(source_node.get_config("PREFIX_PROCESSED", "_")),
+            success_prefix=str(source_node.get_config("PREFIX_IGNORE", "_")),
             error_prefix=str(source_node.get_config("PREFIX_ERROR", "!_")),
         )
 
         if not failed_nodes:
             if source_file.exists():
-                prefix.set_state(source_file, "processed")
+                prefix.set_state(source_file, "ignore")
             self.retry_state.clear(canonical_retry_path)
             self.logger.info("Delivery succeeded for file=%s", source_file)
+            # Immediate GC threshold enforcement
+            try:
+                self._run_auto_gc_for_node(source_node)
+            except Exception:
+                pass
             return True
 
         retry_delay_base = int(source_node.get_config("RETRY_DELAY_BASE", 60))
@@ -594,7 +577,7 @@ class JataiDaemon:
 
     def broadcast_file(self, source_node: Node, source_file: Path, nodes: List[Node]) -> bool:
         prefix = Prefix(
-            success_prefix=str(source_node.get_config("PREFIX_PROCESSED", "_")),
+            success_prefix=str(source_node.get_config("PREFIX_IGNORE", "_")),
             error_prefix=str(source_node.get_config("PREFIX_ERROR", "!_")),
         )
         canonical_retry_path = prefix.canonical_retry_path(source_file)
@@ -620,6 +603,18 @@ class JataiDaemon:
             self._run_auto_gc_for_node(node)
         self.logger.info("Startup scan complete")
 
+    def _delete_path(self, path: Path, mode: Optional[str] = None) -> None:
+        if mode is None:
+            mode = str(self._load_global_config().get("GC_DELETE_MODE", self.GC_DEFAULT_MODE))
+
+        if mode == "trash":
+            try:
+                send2trash(str(path))
+                return
+            except Exception:
+                pass
+        path.unlink(missing_ok=True)
+
     def _trim_processed_history(self, files: List[Path], success_prefix: str, max_files: int) -> int:
         if max_files <= 0:
             return 0
@@ -634,12 +629,12 @@ class JataiDaemon:
 
         removed = 0
         for file_path in processed_files[:excess]:
-            file_path.unlink(missing_ok=True)
+            self._delete_path(file_path)
             removed += 1
         return removed
 
     def _run_auto_gc_for_node(self, node: Node) -> None:
-        success_prefix = str(node.get_config("PREFIX_PROCESSED", "_"))
+        success_prefix = str(node.get_config("PREFIX_IGNORE", "_"))
         max_read = int(node.get_config("GC_MAX_READ_FILES", 0) or 0)
         max_sent = int(node.get_config("GC_MAX_SENT_FILES", 0) or 0)
 
@@ -656,7 +651,7 @@ class JataiDaemon:
 
     def process_pending_outbox(self, node: Node, nodes: List[Node]) -> None:
         prefix = Prefix(
-            success_prefix=str(node.get_config("PREFIX_PROCESSED", "_")),
+            success_prefix=str(node.get_config("PREFIX_IGNORE", "_")),
             error_prefix=str(node.get_config("PREFIX_ERROR", "!_")),
         )
         for file_path in sorted(node.list_outbox()):
