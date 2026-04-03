@@ -902,6 +902,18 @@ class TestCLITUI:
         _run_tui()
         assert calls["run"] == 1
 
+    def test_jatai_app_on_mount_bootstraps_global_registry(self, temp_home):
+        from jatai.tui import JataiApp
+
+        outputs = []
+        app = JataiApp()
+        app._output = lambda text: outputs.append(text)
+
+        app.on_mount()
+
+        assert (temp_home / ".jatai").exists()
+        assert any("Global registry initialized" in text for text in outputs)
+
     def test_jatai_app_capture_call_returns_output(self):
         from jatai.tui import _capture_call
 
@@ -994,8 +1006,8 @@ def test_jatai_app_menu_item_keys_are_unique():
     keys = [k for k, _ in MENU_ITEMS]
     assert len(keys) == len(set(keys))
 
-def test_jatai_app_dispatch_browse_nodes_with_legacy_string_paths(monkeypatch):
-    """Browse Nodes key 'b' is disabled (ADR-14): not in menu, dispatch does nothing."""
+def test_jatai_app_dispatch_legacy_browse_key_does_not_crash(monkeypatch):
+    """Legacy/unrecognised keys must be ignored safely by the dispatcher."""
     from jatai.tui import JataiApp, MENU_ITEMS
 
     pushed = {}
@@ -1003,12 +1015,12 @@ def test_jatai_app_dispatch_browse_nodes_with_legacy_string_paths(monkeypatch):
     app.push_screen = lambda screen, cb=None: pushed.update({"screen": screen, "cb": cb})
 
     menu_keys = {k for k, _ in MENU_ITEMS}
-    assert "b" not in menu_keys, "Browse Nodes key must not appear in menu (ADR-14)"
+    assert "b" not in menu_keys
 
     app._dispatch("b")
-    assert pushed == {}, "Dispatching 'b' must not push any screen (ADR-14)"
+    assert pushed == {}
 
-def test_jatai_app_dispatch_browse_nodes_registry_error_does_not_crash(monkeypatch):
+def test_jatai_app_dispatch_unknown_keys_do_not_crash(monkeypatch):
     """Dispatching any unrecognised key must not crash the application."""
     from jatai.tui import JataiApp
 

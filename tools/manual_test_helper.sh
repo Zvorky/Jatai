@@ -650,6 +650,115 @@ print('TUI dispatch tests passed')
   return 0
 }
 
+suite_cli_surface() {
+  load_state
+  local failures=0
+
+  echo "[$(timestamp)] ===== CLI SURFACE SUITE ====="
+
+  run_cmd "rm -f '$TEST_HOME/.jatai'" || failures=$((failures + 1))
+  run_cmd "'$VENV_PYTHON' -c \"from pathlib import Path; import os; from jatai.tui import JataiApp; home = Path(r'$TEST_HOME'); os.environ['HOME'] = str(home); app = JataiApp(); output = []; app._output = lambda text: output.append(text); app.on_mount(); assert (home / '.jatai').exists(); assert any('Global registry initialized' in text for text in output); print('tui-bootstrap-ok')\" > '$TEST_ROOT/tui_bootstrap.out'" || failures=$((failures + 1))
+  if grep -q "tui-bootstrap-ok" "$TEST_ROOT/tui_bootstrap.out"; then
+    echo "[$(timestamp)] ✓ TUI bootstrap created ~/.jatai defaults"
+  else
+    echo "[$(timestamp)] ✗ TUI bootstrap validation failed"
+    failures=$((failures + 1))
+  fi
+
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN init '$JATAI_TEST_A'" || failures=$((failures + 1))
+  run_cmd "cd '$JATAI_TEST_B' && export HOME='$TEST_HOME' && $JATAI_BIN init '$JATAI_TEST_B'" || failures=$((failures + 1))
+
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN status > '$TEST_ROOT/status.out'" || failures=$((failures + 1))
+  grep -q "Node:" "$TEST_ROOT/status.out" || { echo "[$(timestamp)] ✗ status output missing node summary"; failures=$((failures + 1)); }
+
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN list inbox > '$TEST_ROOT/list_inbox.out'" || failures=$((failures + 1))
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN list outbox > '$TEST_ROOT/list_outbox.out'" || failures=$((failures + 1))
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN list addrs > '$TEST_ROOT/list_addrs.out'" || failures=$((failures + 1))
+  grep -q "# registry:" "$TEST_ROOT/list_addrs.out" || { echo "[$(timestamp)] ✗ list addrs missing registry path"; failures=$((failures + 1)); }
+
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN config RETRY_DELAY_BASE 15" || failures=$((failures + 1))
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN config get RETRY_DELAY_BASE > '$TEST_ROOT/config_get_surface.out'" || failures=$((failures + 1))
+  grep -q "RETRY_DELAY_BASE=15" "$TEST_ROOT/config_get_surface.out" || { echo "[$(timestamp)] ✗ config get missing updated value"; failures=$((failures + 1)); }
+
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN docs > '$TEST_ROOT/docs_index.out'" || failures=$((failures + 1))
+  grep -q "Jatai Documentation Index" "$TEST_ROOT/docs_index.out" || { echo "[$(timestamp)] ✗ docs index output missing expected heading"; failures=$((failures + 1)); }
+
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN docs retry > '$TEST_ROOT/docs_retry.out'" || failures=$((failures + 1))
+  grep -q "retry-and-health.md" "$TEST_ROOT/docs_retry.out" || { echo "[$(timestamp)] ✗ docs query output missing retry doc"; failures=$((failures + 1)); }
+
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN docs --inbox" || failures=$((failures + 1))
+  if [[ -f "$JATAI_TEST_A/INBOX/!docs-index.md" ]]; then
+    echo "[$(timestamp)] ✓ docs --inbox exported !docs-index.md"
+  else
+    echo "[$(timestamp)] ✗ docs --inbox did not export !docs-index.md"
+    failures=$((failures + 1))
+  fi
+
+  run_cmd "printf 'surface-log\n' > '$JATAI_TEST_A/OUTBOX/surface_log.txt'" || failures=$((failures + 1))
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN start" || failures=$((failures + 1))
+  run_cmd "sleep 2"
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN stop" || failures=$((failures + 1))
+
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN log > '$TEST_ROOT/log_latest.out'" || failures=$((failures + 1))
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN log --all > '$TEST_ROOT/log_all.out'" || failures=$((failures + 1))
+  if [[ -e "$TEST_HOME/.jatai_latest.log" ]]; then
+    echo "[$(timestamp)] ✓ latest log pointer exists after daemon run"
+  else
+    echo "[$(timestamp)] ✗ latest log pointer was not created"
+    failures=$((failures + 1))
+  fi
+
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN log --inbox" || failures=$((failures + 1))
+  if [[ -f "$JATAI_TEST_A/INBOX/!log-latest.txt" ]]; then
+    echo "[$(timestamp)] ✓ log --inbox exported !log-latest.txt"
+  else
+    echo "[$(timestamp)] ✗ log --inbox did not export !log-latest.txt"
+    failures=$((failures + 1))
+  fi
+
+  run_cmd "printf 'send-surface\n' > '$TEST_ROOT/send_surface.txt'" || failures=$((failures + 1))
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN send '$TEST_ROOT/send_surface.txt'" || failures=$((failures + 1))
+  if [[ -f "$JATAI_TEST_A/OUTBOX/send_surface.txt" ]]; then
+    echo "[$(timestamp)] ✓ send enqueued payload in OUTBOX"
+  else
+    echo "[$(timestamp)] ✗ send did not enqueue payload"
+    failures=$((failures + 1))
+  fi
+
+  run_cmd "printf 'read-me\n' > '$JATAI_TEST_A/INBOX/read_surface.txt'" || failures=$((failures + 1))
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN read read_surface.txt" || failures=$((failures + 1))
+  [[ -f "$JATAI_TEST_A/INBOX/_read_surface.txt" ]] || { echo "[$(timestamp)] ✗ read did not apply ignore prefix"; failures=$((failures + 1)); }
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN unread _read_surface.txt" || failures=$((failures + 1))
+  [[ -f "$JATAI_TEST_A/INBOX/read_surface.txt" ]] || { echo "[$(timestamp)] ✗ unread did not restore original filename"; failures=$((failures + 1)); }
+
+  run_cmd "printf 'done\n' > '$JATAI_TEST_A/INBOX/_clear_read.txt'" || failures=$((failures + 1))
+  run_cmd "printf 'done\n' > '$JATAI_TEST_A/OUTBOX/_clear_sent.txt'" || failures=$((failures + 1))
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN clear" || failures=$((failures + 1))
+  if [[ -f "$JATAI_TEST_A/INBOX/_clear_read.txt" || -f "$JATAI_TEST_A/OUTBOX/_clear_sent.txt" ]]; then
+    echo "[$(timestamp)] ✗ clear did not remove processed files"
+    failures=$((failures + 1))
+  else
+    echo "[$(timestamp)] ✓ clear removed processed files"
+  fi
+
+  run_cmd "cd '$TEST_ROOT' && export HOME='$TEST_HOME' && $JATAI_BIN init '$TEST_ROOT/node_c'" || failures=$((failures + 1))
+  run_cmd "cd '$TEST_ROOT/node_c' && export HOME='$TEST_HOME' && $JATAI_BIN remove" || failures=$((failures + 1))
+  if [[ -f "$TEST_ROOT/node_c/._jatai" ]]; then
+    echo "[$(timestamp)] ✓ remove converted .jatai to ._jatai"
+  else
+    echo "[$(timestamp)] ✗ remove did not create ._jatai"
+    failures=$((failures + 1))
+  fi
+
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN cleanup --full --dry-run --yes > '$TEST_ROOT/cleanup_dry_run.out'" || failures=$((failures + 1))
+  grep -q "Cleanup dry-run" "$TEST_ROOT/cleanup_dry_run.out" || { echo "[$(timestamp)] ✗ cleanup --full --dry-run output missing summary"; failures=$((failures + 1)); }
+  [[ -f "$JATAI_TEST_A/.jatai" ]] || { echo "[$(timestamp)] ✗ cleanup dry-run changed local config unexpectedly"; failures=$((failures + 1)); }
+
+  snapshot_dirs
+  echo "[$(timestamp)] cli-surface suite failures=$failures"
+  return 0
+}
+
 suite_phase7() {
   load_state
   local failures=0
@@ -684,10 +793,10 @@ suite_phase7() {
     echo "[$(timestamp)] ✗ Unexpected ._jatai auto-created by daemon"
     failures=$((failures + 1))
   fi
-  if run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN start"; then
-    echo "[$(timestamp)] ✓ start succeeded; daemon kept node auto-removed without recreating local config"
+  if run_cmd "'$VENV_PYTHON' -c \"from pathlib import Path; from jatai.core.daemon import JataiDaemon; daemon = JataiDaemon(registry_path=Path(r'$TEST_HOME/.jatai')); daemon.load_registered_nodes(); print('autoremoved-scan-ok')\""; then
+    echo "[$(timestamp)] ✓ daemon registry scan completed after manual .jatai deletion"
   else
-    echo "[$(timestamp)] ✗ start failed unexpectedly after manual .jatai deletion"
+    echo "[$(timestamp)] ✗ daemon registry scan failed after manual .jatai deletion"
     failures=$((failures + 1))
   fi
   if grep -q "$JATAI_TEST_A --autoremoved" /tmp/jatai/removed.yaml 2>/dev/null; then
@@ -696,8 +805,6 @@ suite_phase7() {
     echo "[$(timestamp)] ✗ missing --autoremoved marker in /tmp/jatai/removed.yaml"
     failures=$((failures + 1))
   fi
-  # Ensure no daemon process leaks into subsequent suites.
-  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN stop" || true
 
   snapshot_dirs
   echo "[$(timestamp)] phase7 suite failures=$failures"
@@ -759,7 +866,7 @@ suite_phase7_full() {
 action_suite() {
   if [[ $# -eq 0 ]]; then
     echo "ERROR: suite expects a suite name"
-    echo "Available suites: smoke, filesystem, phase7, advanced, startup-scan, config, dir-recreate, tui-config-get"
+    echo "Available suites: smoke, filesystem, phase7, phase7-full, migration, registry-onboard, retry, gc, error-handling, advanced, startup-scan, config, dir-recreate, tui-config-get, cli-surface"
     exit 1
   fi
 
@@ -806,9 +913,12 @@ action_suite() {
     tui-config-get)
       suite_tui_config_get
       ;;
+    cli-surface)
+      suite_cli_surface
+      ;;
     *)
       echo "ERROR: unknown suite '$1'"
-      echo "Available suites: smoke, filesystem, phase7, advanced, startup-scan, config, dir-recreate, tui-config-get"
+      echo "Available suites: smoke, filesystem, phase7, phase7-full, migration, registry-onboard, retry, gc, error-handling, advanced, startup-scan, config, dir-recreate, tui-config-get, cli-surface"
       exit 1
       ;;
   esac
@@ -853,6 +963,7 @@ action_all() {
   action_suite config
   action_suite dir-recreate
   action_suite tui-config-get
+  action_suite cli-surface
 
   trap - EXIT
   action_cleanup
@@ -868,7 +979,7 @@ Usage:
   tools/manual_test_helper.sh setup
   tools/manual_test_helper.sh snapshot
   tools/manual_test_helper.sh run -- <command>
-  tools/manual_test_helper.sh suite <smoke|filesystem|phase7|phase7-full|advanced|startup-scan|config|dir-recreate|tui-config-get>
+  tools/manual_test_helper.sh suite <smoke|filesystem|phase7|phase7-full|migration|registry-onboard|retry|gc|error-handling|advanced|startup-scan|config|dir-recreate|tui-config-get|cli-surface>
   tools/manual_test_helper.sh cleanup
   tools/manual_test_helper.sh all
 
@@ -881,6 +992,7 @@ Behavior:
 Test Suites (File-System First Architecture):
   - smoke: CLI initialization/status plus man-page validation with `man jatai` (docs/jatai.1)
   - filesystem: Direct file delivery - drop files in OUTBOX, verify arrival in destination INBOX
+  - cli-surface: README command surface validation including TUI bootstrap, docs/log/list/config/send/read/unread/remove/clear/cleanup dry-run
   - advanced: Soft-delete/re-enable, collision resolution, prefix state verification
   - startup-scan: Startup scan behavior - files dropped when daemon offline
   - config: Custom INBOX/OUTBOX paths, custom prefix settings via local .jatai
@@ -897,8 +1009,9 @@ Recommended comprehensive flow:
   7) suite config       (configuration customization)
   8) suite dir-recreate (directory deletion/recreation)
   9) suite tui-config-get (interactive + config retrieval)
-  10) snapshot
-  11) cleanup
+  10) suite cli-surface (README command surface)
+  11) snapshot
+  12) cleanup
 EOF
 }
 

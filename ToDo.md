@@ -99,6 +99,8 @@ Architectural discussions and network expansions.
 - [ ] **[ARCH]** Define directory structure logic for Smart Routing & Topics.
 - [ ] **[ARCH]** Design the Node Addressing protocol (ID generation based on the existing UUID map for direct resolution).
 - [ ] **[ARCH]** Design payload structures and UI for the Built-in Chat Application.
+- [ ] Reintroduce TUI "Browse Nodes" to restore interactive node switching across registered addresses.
+	- Related: [ADR-14.1.7], [REQ-9.11]
 - [ ] Implement Built-in Chat Application using INBOX/OUTBOX for transport.
 - [ ] Implement Jataí Over Internet (IP/Port exposition).
 - [ ] Implement Global P2P & SaaS (Addressing providers).
