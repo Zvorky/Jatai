@@ -233,6 +233,28 @@ class TestCLIHappyPath:
         copied = list(node.inbox_path.glob("*retry*.md"))
         assert copied
 
+    def test_cli_send_recreates_missing_outbox_and_enqueues_file(self, temp_dir):
+        """Test send command recreates OUTBOX when directory was deleted."""
+        node = Node(temp_dir / "send_recreate_outbox_node")
+        node.create()
+        node.outbox_path.rmdir()
+        assert not node.outbox_path.exists()
+
+        external_source = temp_dir / "external_payload.txt"
+        external_source.write_text("payload", encoding="utf-8")
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            result = runner.invoke(app, ["send", str(external_source)])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 0
+        assert node.outbox_path.exists()
+        assert (node.outbox_path / "external_payload.txt").exists()
+
     def test_cli_docs_query_inbox_applies_bang_prefix(self, temp_dir):
         """Test docs query --inbox names all exported files with ! prefix (ADR 15)."""
         node = Node(temp_dir / "docs_bang_prefix_node")

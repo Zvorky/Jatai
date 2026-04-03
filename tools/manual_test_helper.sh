@@ -501,6 +501,64 @@ suite_config() {
   return 0
 }
 
+suite_dir_recreate() {
+  load_state
+  local failures=0
+
+  echo "[$(timestamp)] ===== DIRECTORY RECREATE SUITE ====="
+
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN init '$JATAI_TEST_A'" || failures=$((failures + 1))
+  run_cmd "cd '$JATAI_TEST_B' && export HOME='$TEST_HOME' && $JATAI_BIN init '$JATAI_TEST_B'" || failures=$((failures + 1))
+
+  echo "[$(timestamp)] Test 1: remove INBOX on destination and deliver new file"
+  run_cmd "rm -rf '$JATAI_TEST_B/INBOX'" || failures=$((failures + 1))
+  run_cmd "printf 'missing-inbox\n' > '$JATAI_TEST_A/OUTBOX/missing_inbox.txt'" || failures=$((failures + 1))
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN stop || true"
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN start" || failures=$((failures + 1))
+  run_cmd "sleep 2"
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN stop" || failures=$((failures + 1))
+  if [[ -f "$JATAI_TEST_B/INBOX/missing_inbox.txt" ]]; then
+    echo "[$(timestamp)] ✓ INBOX recreated on incoming delivery"
+  else
+    echo "[$(timestamp)] ✗ INBOX was not recreated for delivery"
+    failures=$((failures + 1))
+  fi
+  if [[ -f "$JATAI_TEST_B/._jatai" ]]; then
+    echo "[$(timestamp)] ✗ Unexpected soft-delete marker after INBOX recreation"
+    failures=$((failures + 1))
+  fi
+
+  echo "[$(timestamp)] Test 2: remove OUTBOX and enqueue via CLI send"
+  run_cmd "rm -rf '$JATAI_TEST_A/OUTBOX'" || failures=$((failures + 1))
+  run_cmd "printf 'send-source\n' > '$TEST_ROOT/send_source.txt'" || failures=$((failures + 1))
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN send '$TEST_ROOT/send_source.txt'" || failures=$((failures + 1))
+  if [[ -f "$JATAI_TEST_A/OUTBOX/send_source.txt" ]]; then
+    echo "[$(timestamp)] ✓ OUTBOX recreated by CLI send"
+  else
+    echo "[$(timestamp)] ✗ OUTBOX was not recreated by CLI send"
+    failures=$((failures + 1))
+  fi
+
+  echo "[$(timestamp)] Test 3: manual OUTBOX recreation keeps daemon delivery working"
+  run_cmd "rm -rf '$JATAI_TEST_A/OUTBOX'" || failures=$((failures + 1))
+  run_cmd "mkdir -p '$JATAI_TEST_A/OUTBOX'" || failures=$((failures + 1))
+  run_cmd "printf 'manual-recreate\n' > '$JATAI_TEST_A/OUTBOX/manual_recreate.txt'" || failures=$((failures + 1))
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN stop || true"
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN start" || failures=$((failures + 1))
+  run_cmd "sleep 2"
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN stop" || failures=$((failures + 1))
+  if [[ -f "$JATAI_TEST_B/INBOX/manual_recreate.txt" ]]; then
+    echo "[$(timestamp)] ✓ Delivery still works after manual OUTBOX recreation"
+  else
+    echo "[$(timestamp)] ✗ Delivery failed after manual OUTBOX recreation"
+    failures=$((failures + 1))
+  fi
+
+  snapshot_dirs
+  echo "[$(timestamp)] dir-recreate suite failures=$failures"
+  return 0
+}
+
 suite_tui_config_get() {
   load_state
   local failures=0
@@ -701,7 +759,7 @@ suite_phase7_full() {
 action_suite() {
   if [[ $# -eq 0 ]]; then
     echo "ERROR: suite expects a suite name"
-    echo "Available suites: smoke, filesystem, phase7, advanced, startup-scan, config, tui-config-get"
+    echo "Available suites: smoke, filesystem, phase7, advanced, startup-scan, config, dir-recreate, tui-config-get"
     exit 1
   fi
 
@@ -742,12 +800,15 @@ action_suite() {
     config)
       suite_config
       ;;
+    dir-recreate)
+      suite_dir_recreate
+      ;;
     tui-config-get)
       suite_tui_config_get
       ;;
     *)
       echo "ERROR: unknown suite '$1'"
-      echo "Available suites: smoke, filesystem, phase7, advanced, startup-scan, config, tui-config-get"
+      echo "Available suites: smoke, filesystem, phase7, advanced, startup-scan, config, dir-recreate, tui-config-get"
       exit 1
       ;;
   esac
@@ -790,6 +851,7 @@ action_all() {
   action_suite advanced
   action_suite startup-scan
   action_suite config
+  action_suite dir-recreate
   action_suite tui-config-get
 
   trap - EXIT
@@ -806,7 +868,7 @@ Usage:
   tools/manual_test_helper.sh setup
   tools/manual_test_helper.sh snapshot
   tools/manual_test_helper.sh run -- <command>
-  tools/manual_test_helper.sh suite <smoke|filesystem|phase7|phase7-full|advanced|startup-scan|config|tui-config-get>
+  tools/manual_test_helper.sh suite <smoke|filesystem|phase7|phase7-full|advanced|startup-scan|config|dir-recreate|tui-config-get>
   tools/manual_test_helper.sh cleanup
   tools/manual_test_helper.sh all
 
@@ -822,6 +884,7 @@ Test Suites (File-System First Architecture):
   - advanced: Soft-delete/re-enable, collision resolution, prefix state verification
   - startup-scan: Startup scan behavior - files dropped when daemon offline
   - config: Custom INBOX/OUTBOX paths, custom prefix settings via local .jatai
+  - dir-recreate: INBOX/OUTBOX deletion + recreation behavior and no unintended soft-delete
   - tui-config-get: Dedicated pseudo-terminal TUI flow + config get validation
 
 Recommended comprehensive flow:
@@ -832,9 +895,10 @@ Recommended comprehensive flow:
   5) suite advanced     (prefix states, soft-delete)
   6) suite startup-scan (offline file pickup)
   7) suite config       (configuration customization)
-  8) suite tui-config-get (interactive + config retrieval)
-  9) snapshot
-  10) cleanup
+  8) suite dir-recreate (directory deletion/recreation)
+  9) suite tui-config-get (interactive + config retrieval)
+  10) snapshot
+  11) cleanup
 EOF
 }
 

@@ -185,6 +185,45 @@ class TestDaemonHappyPath:
         assert log_path.exists()
         assert "Delivery succeeded" in log_path.read_text(encoding="utf-8")
 
+    def test_daemon_recreates_missing_destination_inbox_on_delivery(self, temp_home):
+        registry_path = temp_home / ".jatai"
+        node_a = register_node(registry_path, "node_a", temp_home / "node_a")
+        node_b = register_node(registry_path, "node_b", temp_home / "node_b")
+
+        shutil.rmtree(node_b.inbox_path)
+        assert not node_b.inbox_path.exists()
+        assert node_b.local_config_path.exists()
+        assert not node_b.disabled_config_path.exists()
+
+        source_file = node_a.outbox_path / "recreate-inbox.txt"
+        source_file.write_text("payload")
+
+        daemon = JataiDaemon(registry_path=registry_path, pid_path=temp_home / ".jatai.pid")
+        daemon.startup_scan()
+
+        assert node_b.inbox_path.exists()
+        assert (node_b.inbox_path / "recreate-inbox.txt").exists()
+        assert node_b.local_config_path.exists()
+        assert not node_b.disabled_config_path.exists()
+
+    def test_daemon_continues_delivery_after_manual_outbox_recreation(self, temp_home):
+        registry_path = temp_home / ".jatai"
+        node_a = register_node(registry_path, "node_a", temp_home / "node_a")
+        node_b = register_node(registry_path, "node_b", temp_home / "node_b")
+
+        shutil.rmtree(node_a.outbox_path)
+        assert not node_a.outbox_path.exists()
+
+        node_a.outbox_path.mkdir(parents=True, exist_ok=True)
+        source_file = node_a.outbox_path / "recreated-outbox.txt"
+        source_file.write_text("payload")
+
+        daemon = JataiDaemon(registry_path=registry_path, pid_path=temp_home / ".jatai.pid")
+        daemon.startup_scan()
+
+        assert (node_b.inbox_path / "recreated-outbox.txt").exists()
+        assert (node_a.outbox_path / "_recreated-outbox.txt").exists()
+
     def test_daemon_load_active_nodes_applies_local_override(self, temp_home):
         registry_path = temp_home / ".jatai"
         node = register_node(registry_path, "node_a", temp_home / "node_a")

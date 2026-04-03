@@ -1,7 +1,7 @@
 # **Jataí 🐝**
 **The local micro-email and messaging bus for your file system. Connect scripts and AI agents instantly using a zero-config drop-folder pattern. Jataí uses OS file events to route data across directories via standardized INBOX/OUTBOX folders, without complex APIs or sockets. Drop a file, and it's delivered!**
 
-**Version:** `0.7.3` (_Alpha_) · **Author:** Zvorky
+**Version:** `0.7.4` (_Alpha_) · **Author:** Zvorky
 
 ## **🎯 Philosophy & Goal**
 
@@ -51,6 +51,7 @@ Current implementation status: core modules, basic CLI, daemon lifecycle, startu
 10. **Onboarding and docs already implemented in core/CLI:** `jatai init` drops `!helloworld.md` in the node INBOX, `jatai docs` renders documentation in terminal by default, and `jatai docs [query]` renders matching markdown docs in terminal by default (`-i|--inbox` exports to files).
 11. **Manual local-config deletion safety:** If `.jatai` is manually deleted from an existing registered node directory, the daemon will record the node as auto-removed in `/tmp/jatai/removed.yaml` (appending ` --autoremoved` to the stored path) and will NOT recreate `._jatai`, `.jatai`, `INBOX`, or `OUTBOX` automatically. The `._jatai` soft-delete marker is only created by explicit CLI/TUI removal actions (for example `jatai remove`, which performs `.jatai` → `._jatai`).
 12. **First-run interactive bootstrap:** Opening the TUI (`jatai` with no args in interactive terminal) creates `~/.jatai` with default settings if it does not exist yet.
+13. **Directory deletion resilience:** Deleting `INBOX` or `OUTBOX` does not soft-delete the node while `.jatai` still exists. `INBOX` is recreated when new deliveries arrive, and `OUTBOX` is recreated when enqueueing files (CLI `send`) or when recreated manually before new file drops.
 
 ## **🛠️ CLI & TUI Toolbox**
 

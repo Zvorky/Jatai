@@ -548,6 +548,7 @@ def send(
         raise typer.Exit(code=1)
 
     try:
+        node.outbox_path.mkdir(parents=True, exist_ok=True)
         delivered = Delivery(source, node.outbox_path).deliver()
         if move:
             source.unlink()

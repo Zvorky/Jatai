@@ -59,24 +59,24 @@ class JataiNodeConfigHandler(FileSystemEventHandler):
         self.node_path = Path(node_path).resolve()
 
     def on_created(self, event: FileCreatedEvent) -> None:
-        if event.is_directory:
-            return
-        self._handle_path(Path(event.src_path))
+        self._handle_path(Path(event.src_path), event.is_directory)
 
     def on_modified(self, event) -> None:
         if event.is_directory:
             return
-        self._handle_path(Path(event.src_path))
+        self._handle_path(Path(event.src_path), False)
 
     def on_moved(self, event: FileMovedEvent) -> None:
-        if event.is_directory:
-            return
-        self._handle_path(Path(event.src_path))
-        self._handle_path(Path(event.dest_path))
+        self._handle_path(Path(event.src_path), event.is_directory)
+        self._handle_path(Path(event.dest_path), event.is_directory)
 
-    def _handle_path(self, path: Path) -> None:
+    def _handle_path(self, path: Path, is_directory: bool) -> None:
         if path.name in self.CONFIG_FILENAMES:
             self.daemon.handle_node_config_change(self.node_path)
+            return
+
+        if is_directory:
+            self.daemon.handle_node_directory_change(self.node_path, path)
 
 
 class JataiDaemon:
@@ -455,6 +455,27 @@ class JataiDaemon:
 
         self._refresh_observer_watches()
 
+    def handle_node_directory_change(self, node_path: Path, changed_path: Path) -> None:
+        """Refresh watches when configured node directories are recreated."""
+        try:
+            registry = self._load_registry()
+        except FileNotFoundError:
+            return
+
+        node = Node(node_path)
+        try:
+            node.load_any_config()
+        except FileNotFoundError:
+            return
+
+        node.apply_effective_config(registry.global_config)
+        resolved_changed = Path(changed_path).resolve()
+        if resolved_changed not in {node.inbox_path.resolve(), node.outbox_path.resolve()}:
+            return
+
+        self.logger.info("Node directory recreated node=%s path=%s", node_path, resolved_changed)
+        self._refresh_observer_watches()
+
     def process_outbox_candidate(self, file_path: Path, source_node_path: Optional[Path] = None) -> None:
         if not file_path.exists() or not file_path.is_file():
             return
@@ -504,6 +525,7 @@ class JataiDaemon:
             if destination_node.node_path == source_node.node_path:
                 continue
             try:
+                destination_node.inbox_path.mkdir(parents=True, exist_ok=True)
                 Delivery(source_file, destination_node.inbox_path).deliver()
                 delivered_count += 1
             except Exception as exc:
