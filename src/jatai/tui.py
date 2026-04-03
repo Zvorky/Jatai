@@ -423,7 +423,7 @@ class JataiApp(App):
                 if result is not None:
                     clear_read = result[0].strip().lower() not in {"0", "n", "no", "false"}
                     clear_sent = result[1].strip().lower() not in {"0", "n", "no", "false"}
-                    self._run(clear_cmd, clear_read, clear_sent)
+                    self._run(clear_cmd, clear_read, clear_sent, True)
 
             self.push_screen(
                 _InputModal("Clear Processed", [

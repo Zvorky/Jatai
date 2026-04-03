@@ -87,6 +87,10 @@ Refining the internal engines for long-term disk safety and observability.
 	- Related: [ADR-12], [REQ-6.2], [REQ-6.3], [REQ-9.3], [REQ-9.4]
 - [x] [BUGFIX] Align retry defaults, README, and user-facing docs with `/tmp/jatai/retry.yaml` and current filesystem-first behavior.
 	- Related: [ADR-4], [ADR-12], [REQ-3.5.8], [REQ-6], [REQ-8], [REQ-9]
+- [x] [BUGFIX] Add explicit removal warnings in CLI/TUI (`remove`, `clear`, `cleanup`) and align `clear` behavior with `GC_DELETE_MODE` (`trash` vs permanent).
+	- Related: [ADR-7], [ADR-14], [REQ-3.7.3.2], [REQ-9.10]
+- [x] [BUGFIX] Separate automatic GC deletion policy into `GC_AUTO_DELETE_MODE` (default `trash`) with local `.jatai` override support, keeping `clear` policy independent.
+	- Related: [ADR-16], [REQ-3.7.3.2], [REQ-3.7.3.4]
 
 ---
 

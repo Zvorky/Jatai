@@ -228,9 +228,12 @@ jatai remove
 jatai remove /path/to/node
 ```
 
+The command prints an explicit warning stating this is a soft-delete operation
+(reversible by renaming `._jatai` back to `.jatai`).
+
 ---
 
-### `jatai clear [-r|--read] [-s|--sent]`
+### `jatai clear [-r|--read] [-s|--sent] [-y|--yes]`
 
 Clear processed (`_`-prefixed) files from INBOX and/or OUTBOX.
 
@@ -244,6 +247,18 @@ jatai clear -r
 # Clear only OUTBOX processed files
 jatai clear -s
 ```
+
+The command prints an explicit warning before deletion, based on
+`GC_DELETE_MODE`:
+
+- `trash`: files are moved to OS Trash (soft-delete)
+- any other value (including `permanent`): files are permanently deleted
+
+By default, `jatai clear` asks for interactive confirmation before removal.
+Use `-y`/`--yes` to skip the confirmation prompt.
+
+Periodic automatic GC uses `GC_AUTO_DELETE_MODE` (default `trash`) and is
+independent from manual `jatai clear` policy.
 
 ---
 
@@ -268,6 +283,8 @@ Behavior:
 - removes local `.jatai` / `._jatai` from known nodes
 - removes global `~/.jatai`
 - removes control-state under `/tmp/jatai/` (logs preserved unless `--remove-logs`)
+- prints an explicit warning that applied cleanup is permanent (no Trash/soft-delete)
+- with `--dry-run`, prints that no file is deleted
 
 ---
 

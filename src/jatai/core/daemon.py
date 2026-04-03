@@ -637,7 +637,13 @@ class JataiDaemon:
                 pass
         path.unlink(missing_ok=True)
 
-    def _trim_processed_history(self, files: List[Path], success_prefix: str, max_files: int) -> int:
+    def _trim_processed_history(
+        self,
+        files: List[Path],
+        success_prefix: str,
+        max_files: int,
+        delete_mode: str,
+    ) -> int:
         if max_files <= 0:
             return 0
 
@@ -651,7 +657,7 @@ class JataiDaemon:
 
         removed = 0
         for file_path in processed_files[:excess]:
-            self._delete_path(file_path)
+            self._delete_path(file_path, mode=delete_mode)
             removed += 1
         return removed
 
@@ -659,16 +665,22 @@ class JataiDaemon:
         success_prefix = str(node.get_config("PREFIX_IGNORE", "_"))
         max_read = int(node.get_config("GC_MAX_READ_FILES", 0) or 0)
         max_sent = int(node.get_config("GC_MAX_SENT_FILES", 0) or 0)
+        delete_mode = str(node.get_config("GC_AUTO_DELETE_MODE", self.GC_DEFAULT_MODE))
 
-        removed_read = self._trim_processed_history(node.list_inbox(), success_prefix, max_read)
-        removed_sent = self._trim_processed_history(node.list_outbox(), success_prefix, max_sent)
+        removed_read = self._trim_processed_history(
+            node.list_inbox(), success_prefix, max_read, delete_mode
+        )
+        removed_sent = self._trim_processed_history(
+            node.list_outbox(), success_prefix, max_sent, delete_mode
+        )
 
         if removed_read or removed_sent:
             self.logger.info(
-                "Auto-GC removed node=%s inbox=%s outbox=%s",
+                "Auto-GC removed node=%s inbox=%s outbox=%s delete_mode=%s",
                 node.node_path,
                 removed_read,
                 removed_sent,
+                delete_mode,
             )
 
     def process_pending_outbox(self, node: Node, nodes: List[Node]) -> None:

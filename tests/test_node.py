@@ -43,6 +43,7 @@ class TestNodeHappyPath:
             "PREFIX_IGNORE": "-done",
             "PREFIX_ERROR": "❌",
             "RETRY_DELAY_BASE": 120,
+            "GC_AUTO_DELETE_MODE": "permanent",
         }
 
         node.create(global_config=global_config)
@@ -51,6 +52,7 @@ class TestNodeHappyPath:
         assert node.local_config["PREFIX_IGNORE"] == "-done"
         assert node.local_config["PREFIX_ERROR"] == "❌"
         assert node.local_config["RETRY_DELAY_BASE"] == 120
+        assert node.local_config["GC_AUTO_DELETE_MODE"] == "permanent"
 
     def test_node_apply_effective_config_prefers_local_over_global(self, temp_dir):
         node_path = temp_dir / "my_node"

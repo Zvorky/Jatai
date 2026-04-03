@@ -1,7 +1,7 @@
 # **Jataí 🐝**
 **The local micro-email and messaging bus for your file system. Connect scripts and AI agents instantly using a zero-config drop-folder pattern. Jataí uses OS file events to route data across directories via standardized INBOX/OUTBOX folders, without complex APIs or sockets. Drop a file, and it's delivered!**
 
-**Version:** `0.7.4` (_Alpha_) · **Author:** Zvorky
+**Version:** `0.7.5` (_Alpha_) · **Author:** Zvorky
 
 ## **🎯 Philosophy & Goal**
 
@@ -68,9 +68,9 @@ Current implementation status: core modules, basic CLI, daemon lifecycle, startu
 | `jatai send <file> [-m\|--move]` | Copies (or moves) an external file into the local OUTBOX. |
 | `jatai read <file>` | Renames a file in the INBOX, adding the success prefix. |
 | `jatai unread <file>` | Removes the success prefix from a file in the INBOX. |
-| `jatai remove [path]` | Disables the node (current dir by default). Safeguarded against global origin. |
-| `jatai clear [-r\|--read] [-s\|--sent]` | Clears processed files (`_`) in INBOX/OUTBOX (both by default). |
-| `jatai cleanup --full [--dry-run] [--remove-logs] [-y\|--yes]` | Optional uninstall helper: removes local/global config artifacts and `/tmp/jatai` control state while preserving INBOX/OUTBOX contents (logs kept unless `--remove-logs`). |
+| `jatai remove [path]` | Disables the node via soft-delete (`.jatai` -> `._jatai`) and prints a warning clarifying it is reversible. |
+| `jatai clear [-r\|--read] [-s\|--sent] [-y\|--yes]` | Clears processed files (`_`) in INBOX/OUTBOX (both by default), asks for confirmation by default, and prints whether files go to OS Trash (`GC_DELETE_MODE=trash`) or are permanently deleted. |
+| `jatai cleanup --full [--dry-run] [--remove-logs] [-y\|--yes]` | Optional uninstall helper: permanently removes local/global config artifacts and `/tmp/jatai` control state while preserving INBOX/OUTBOX contents (logs kept unless `--remove-logs`), with explicit warning/dry-run notice. |
 | `jatai log` | Prints the latest log content in terminal (use `-i\|--inbox` to export). |
 | `jatai log -a\|--all` | Prints the complete log output in terminal (use `-i\|--inbox` to export). |
 | `jatai docs [query]` | Prints matching documentation in terminal by default (use `-i\|--inbox` to export file(s)). |

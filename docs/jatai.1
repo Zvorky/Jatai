@@ -1,4 +1,4 @@
-.TH JATAI 1 "2026-03-23" "0.7.4" "Jataí Manual"
+.TH JATAI 1 "2026-03-23" "0.7.5" "Jataí Manual"
 .SH NAME
 jatai \- local file-system message bus for scripts and agents
 .SH SYNOPSIS
@@ -89,8 +89,10 @@ If \fI.jatai\fR is manually deleted from an existing registered node directory,
 daemon maintenance records the path in \fI/tmp/jatai/removed.yaml\fR with the
 \fB--autoremoved\fR marker and does not recreate node files or directories.
 .TP
-.B jatai clear [\fB-r\fR|\fB--read\fR] [\fB-s\fR|\fB--sent\fR]
+.B jatai clear [\fB-r\fR|\fB--read\fR] [\fB-s\fR|\fB--sent\fR] [\fB-y\fR|\fB--yes\fR]
 Clear processed history files from INBOX and/or OUTBOX.
+By default the command asks for confirmation. Deletion backend follows
+\fBGC_DELETE_MODE\fR (trash by default).
 .SH OPTIONS POLICY
 Canonical short-option mappings:
 .TP

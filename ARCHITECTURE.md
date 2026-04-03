@@ -133,3 +133,11 @@ This document details the Architecture Decision Records (ADR) for the Jataí pro
     * CLI-generated exports to INBOX (for example docs/log/config exports).
 * **[ADR-15.3]** Out of scope: Files delivered from other nodes through normal OUTBOX → INBOX routing are not affected by this rule.
 * **[ADR-15.4]** Goal: Preserve operator clarity by making system-originated artifacts immediately recognizable in the filesystem-first workflow.
+
+## [ADR-16] Deletion Policy Separation and Operator Confirmation
+
+* Context: Jataí has three distinct removal flows with different risk profiles: periodic automatic GC, manual `clear`, and uninstall `cleanup`. Operators need explicit guarantees for each path.
+* **[ADR-16.1]** Periodic automatic GC (`INBOX`/`OUTBOX` processed-history trimming) must use a dedicated config key `GC_AUTO_DELETE_MODE` resolved from node effective config (`.jatai` local overrides allowed, default `trash`).
+* **[ADR-16.2]** Default automatic GC deletion mode is `trash` so periodic cleanup is soft-delete by default.
+* **[ADR-16.3]** Manual `jatai clear` remains a separate deletion surface controlled by `GC_DELETE_MODE`, and must request explicit operator confirmation unless skipped with `--yes`.
+* **[ADR-16.4]** `jatai cleanup --full` is a permanent artifact-removal helper (config/control data scope), and must keep explicit destructive confirmation semantics (unless `--yes`, or `--dry-run` preview mode).

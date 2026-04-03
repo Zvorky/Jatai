@@ -783,17 +783,18 @@ class TestDaemonLogging:
         assert configured_latest.exists() or configured_latest.is_symlink()
         assert configured_latest.resolve() == daemon.log_path.resolve()
 
-    def test_daemon_gc_delete_mode_uses_persisted_global_config(self, temp_home, monkeypatch):
+    def test_daemon_auto_gc_delete_mode_uses_persisted_global_config(self, temp_home, monkeypatch):
         registry_path = temp_home / ".jatai"
         node = register_node(registry_path, "node_a", temp_home / "node_a")
 
         registry = Registry(registry_path=registry_path)
         registry.load()
-        registry.set_config("GC_DELETE_MODE", "permanent")
+        registry.set_config("GC_AUTO_DELETE_MODE", "permanent")
         registry.save()
 
-        target = node.outbox_path / "_old.txt"
-        target.write_text("payload")
+        node.set_config("GC_MAX_SENT_FILES", 1)
+        (node.outbox_path / "_old.txt").write_text("payload")
+        (node.outbox_path / "_new.txt").write_text("payload")
 
         send2trash_calls = {"count": 0}
 
@@ -803,10 +804,36 @@ class TestDaemonLogging:
         monkeypatch.setattr("jatai.core.daemon.send2trash", fake_send2trash)
 
         daemon = JataiDaemon(registry_path=registry_path, pid_path=temp_home / ".jatai.pid")
-        daemon._delete_path(target)
+        daemon.startup_scan()
 
         assert send2trash_calls["count"] == 0
-        assert not target.exists()
+
+    def test_daemon_auto_gc_delete_mode_local_override_wins(self, temp_home, monkeypatch):
+        registry_path = temp_home / ".jatai"
+        node = register_node(registry_path, "node_a", temp_home / "node_a")
+
+        registry = Registry(registry_path=registry_path)
+        registry.load()
+        registry.set_config("GC_AUTO_DELETE_MODE", "permanent")
+        registry.save()
+
+        node.set_config("GC_AUTO_DELETE_MODE", "trash")
+        node.set_config("GC_MAX_SENT_FILES", 1)
+        (node.outbox_path / "_old.txt").write_text("payload")
+        (node.outbox_path / "_new.txt").write_text("payload")
+
+        send2trash_calls = {"count": 0}
+
+        def fake_send2trash(path):
+            send2trash_calls["count"] += 1
+            Path(path).unlink(missing_ok=True)
+
+        monkeypatch.setattr("jatai.core.daemon.send2trash", fake_send2trash)
+
+        daemon = JataiDaemon(registry_path=registry_path, pid_path=temp_home / ".jatai.pid")
+        daemon.startup_scan()
+
+        assert send2trash_calls["count"] >= 1
 
     def test_log_delivery_failed_per_destination(self, temp_home, monkeypatch):
         registry_path = temp_home / ".jatai"

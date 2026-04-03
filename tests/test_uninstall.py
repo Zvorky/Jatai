@@ -103,5 +103,19 @@ def test_cli_cleanup_dry_run_succeeds(temp_dir, temp_home, monkeypatch):
     result = runner.invoke(app, ["cleanup", "--full", "--dry-run"])
 
     assert result.exit_code == 0
+    assert "does not delete files" in result.stdout
     assert "Cleanup dry-run" in result.stdout
     assert (state_root / "retry.yaml").exists()
+
+
+def test_cli_cleanup_yes_shows_permanent_delete_warning(temp_dir, temp_home, monkeypatch):
+    """CLI cleanup should explicitly warn about permanent deletion when applying."""
+    state_root = temp_dir / "tmp_state"
+    monkeypatch.setattr(SystemState, "BASE_PATH", state_root)
+    SystemState.ensure_base()
+    (state_root / "retry.yaml").write_text("{}\n", encoding="utf-8")
+
+    result = runner.invoke(app, ["cleanup", "--full", "--yes"])
+
+    assert result.exit_code == 0
+    assert "permanently deletes" in result.stdout

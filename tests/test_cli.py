@@ -740,6 +740,7 @@ class TestCLIPhase6Toolbox:
     def test_cli_remove_soft_delete_and_clear(self, temp_dir):
         node = Node(temp_dir / "remove_clear_node")
         node.create()
+        node.set_config("GC_DELETE_MODE", "permanent")
         (node.inbox_path / "_read.md").write_text("r")
         (node.outbox_path / "_sent.md").write_text("s")
 
@@ -747,16 +748,68 @@ class TestCLIPhase6Toolbox:
         old_cwd = os.getcwd()
         try:
             os.chdir(node.node_path)
-            clear_result = runner.invoke(app, ["clear"])
+            clear_result = runner.invoke(app, ["clear", "--yes"])
             assert clear_result.exit_code == 0
+            assert "WARNING: clear will permanently delete matched files." in clear_result.stdout
+            assert "permanently deleted: 2" in clear_result.stdout
             assert not (node.inbox_path / "_read.md").exists()
             assert not (node.outbox_path / "_sent.md").exists()
 
             remove_result = runner.invoke(app, ["remove"])
             assert remove_result.exit_code == 0
+            assert "soft-delete" in remove_result.stdout
             assert (node.node_path / "._jatai").exists()
         finally:
             os.chdir(old_cwd)
+
+    def test_cli_clear_trash_mode_emits_soft_delete_warning(self, temp_dir, monkeypatch):
+        node = Node(temp_dir / "clear_trash_mode_node")
+        node.create()
+        node.set_config("GC_DELETE_MODE", "trash")
+        target = node.inbox_path / "_read.md"
+        target.write_text("r")
+
+        calls = []
+
+        def _fake_send2trash(path: str) -> None:
+            calls.append(path)
+            Path(path).unlink(missing_ok=True)
+
+        monkeypatch.setattr("jatai.cli.main.send2trash", _fake_send2trash)
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            result = runner.invoke(app, ["clear", "-r", "--yes"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 0
+        assert "WARNING: clear will move matched files to OS Trash (soft-delete)." in result.stdout
+        assert "moved to trash: 1" in result.stdout
+        assert len(calls) == 1
+        assert not target.exists()
+
+    def test_cli_clear_requires_confirmation_and_can_cancel(self, temp_dir):
+        node = Node(temp_dir / "clear_confirm_node")
+        node.create()
+        node.set_config("GC_DELETE_MODE", "trash")
+        target = node.inbox_path / "_read.md"
+        target.write_text("r")
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            result = runner.invoke(app, ["clear", "-r"], input="n\n")
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 1
+        assert "Proceed with clear removal" in result.stdout
+        assert "Cancelled." in result.stdout
+        assert target.exists()
 
     def test_cli_status_shows_config_path(self, temp_dir, temp_home, monkeypatch):
         monkeypatch.setenv("HOME", str(temp_home))

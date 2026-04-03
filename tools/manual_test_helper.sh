@@ -733,7 +733,7 @@ suite_cli_surface() {
 
   run_cmd "printf 'done\n' > '$JATAI_TEST_A/INBOX/_clear_read.txt'" || failures=$((failures + 1))
   run_cmd "printf 'done\n' > '$JATAI_TEST_A/OUTBOX/_clear_sent.txt'" || failures=$((failures + 1))
-  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN clear" || failures=$((failures + 1))
+  run_cmd "cd '$JATAI_TEST_A' && export HOME='$TEST_HOME' && $JATAI_BIN clear --yes" || failures=$((failures + 1))
   if [[ -f "$JATAI_TEST_A/INBOX/_clear_read.txt" || -f "$JATAI_TEST_A/OUTBOX/_clear_sent.txt" ]]; then
     echo "[$(timestamp)] ✗ clear did not remove processed files"
     failures=$((failures + 1))

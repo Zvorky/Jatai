@@ -107,6 +107,7 @@ class Node:
                 "PREFIX_IGNORE",
                 "PREFIX_ERROR",
                 "RETRY_DELAY_BASE",
+                "GC_AUTO_DELETE_MODE",
             ]:
                 if key in global_config:
                     local_config[key] = global_config[key]

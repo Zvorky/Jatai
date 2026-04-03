@@ -38,6 +38,7 @@ class TestRegistryHappyPath:
             "OUTBOX_DIR",
             "GC_MAX_READ_FILES",
             "GC_MAX_SENT_FILES",
+            "GC_AUTO_DELETE_MODE",
             "GC_DELETE_MODE",
             "LATEST_LOG_PATH",
         }
@@ -113,6 +114,7 @@ class TestRegistryHappyPath:
         registry = Registry()
         assert registry.DEFAULT_CONFIG["GC_MAX_READ_FILES"] == 0
         assert registry.DEFAULT_CONFIG["GC_MAX_SENT_FILES"] == 11
+        assert registry.DEFAULT_CONFIG["GC_AUTO_DELETE_MODE"] == "trash"
         assert registry.DEFAULT_CONFIG["GC_DELETE_MODE"] == "trash"
         assert registry.DEFAULT_CONFIG["LATEST_LOG_PATH"] == "~/.jatai_latest.log"
 

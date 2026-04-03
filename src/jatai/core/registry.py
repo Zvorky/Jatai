@@ -23,6 +23,7 @@ class Registry:
         "OUTBOX_DIR": "OUTBOX",
         "GC_MAX_READ_FILES": 0,
         "GC_MAX_SENT_FILES": 11,
+        "GC_AUTO_DELETE_MODE": "trash",
         "GC_DELETE_MODE": "trash",
         "LATEST_LOG_PATH": "~/.jatai_latest.log",
     }

@@ -37,13 +37,13 @@ jatai
 
 ```bash
 jatai read message.txt     # adds _ prefix to file in INBOX
-jatai clear                # removes all _-prefixed files from INBOX and OUTBOX
+jatai clear                # warns and removes _-prefixed files (to Trash or permanent, per GC_DELETE_MODE)
 ```
 
 6. Disable this node temporarily (re-enable by renaming `._jatai` back to `.jatai`):
 
 ```bash
-jatai remove
+jatai remove               # warns and performs soft-delete (.jatai -> ._jatai)
 ```
 
 7. Export docs to your INBOX when needed:

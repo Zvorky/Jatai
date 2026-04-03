@@ -23,16 +23,25 @@ Only files whose names begin with the configured `PREFIX_IGNORE` (default `_`)
 are affected by `jatai clear`.
 Pending files, error files, and fatal error files are never touched.
 
+`jatai clear` follows `GC_DELETE_MODE` and prints a warning before execution:
+
+- `trash` (default): moves matched files to OS Trash
+- `permanent` (or any non-`trash` value): permanently deletes matched files
+
+By default, `jatai clear` requires interactive confirmation before removal.
+Use `-y`/`--yes` to skip the prompt.
+
 ## Automatic cleanup — `GC_MAX_READ_FILES` and `GC_MAX_SENT_FILES`
 
 The daemon enforces optional file count limits on processed history. When the
 count of `_`-prefixed files in a folder exceeds the configured maximum, the
-oldest files (by modification time) are deleted automatically.
+oldest files (by modification time) are removed automatically.
 
 | Config key | Default | Applies to |
 |---|---|---|
 | `GC_MAX_READ_FILES` | `0` | INBOX — `_`-prefixed (read) files |
 | `GC_MAX_SENT_FILES` | `11` | OUTBOX — `_`-prefixed (sent/delivered) files |
+| `GC_AUTO_DELETE_MODE` | `trash` | Automatic GC delete backend (`trash` or `permanent`) |
 
 `0` means no limit — auto-cleanup is disabled by default.
 
@@ -68,6 +77,11 @@ GC_MAX_SENT_FILES: 10
 Auto-cleanup only removes files that already carry the success prefix. Undelivered
 files (no prefix), error files (`!`, `!_`), and fatal files (`!!`, `!!_`) are
 never touched.
+
+Automatic GC deletion policy is independent from manual `jatai clear` policy:
+
+- auto-GC uses `GC_AUTO_DELETE_MODE`
+- manual clear uses `GC_DELETE_MODE`
 
 ## Interaction with `jatai clear`
 
