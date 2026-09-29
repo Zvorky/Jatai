@@ -11,9 +11,15 @@ import pytest
 
 @pytest.fixture
 def temp_dir():
-    """Create a temporary directory for test use."""
+    """Create a temporary directory for test use.
+
+    The path is resolved to its real path so that comparisons with
+    Node.node_path (which calls Path.resolve()) work correctly on macOS,
+    where /var/folders/... is a symlink to /private/var/folders/...
+    """
     temp_path = tempfile.mkdtemp()
-    yield Path(temp_path)
+    resolved = Path(temp_path).resolve()
+    yield resolved
     shutil.rmtree(temp_path, ignore_errors=True)
 
 

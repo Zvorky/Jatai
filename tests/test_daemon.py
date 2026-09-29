@@ -539,7 +539,19 @@ class TestDaemonExclusivity:
 class TestAutoStartRegistration:
     """Host auto-start registration tests."""
 
-    def test_linux_autostart_writes_systemd_service(self, temp_home):
+    def test_linux_autostart_writes_systemd_service(self, temp_home, monkeypatch):
+        """Verify that register() creates a systemd service file on Linux.
+
+        shutil.which and subprocess.run are mocked so this test is deterministic
+        on any host OS (macOS CI runners do not have systemctl).
+        """
+
+        class _Result:
+            returncode = 0
+
+        monkeypatch.setattr("jatai.core.autostart.shutil.which", lambda cmd: f"/usr/bin/{cmd}")
+        monkeypatch.setattr("jatai.core.autostart.subprocess.run", lambda *a, **kw: _Result())
+
         registrar = AutoStartRegistrar(
             home_path=temp_home,
             platform_name="linux",
