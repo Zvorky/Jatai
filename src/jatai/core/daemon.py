@@ -14,8 +14,9 @@ from pathlib import Path
 import yaml
 from filelock import FileLock, Timeout
 from send2trash import send2trash
-from watchdog.events import FileCreatedEvent, FileMovedEvent, FileSystemEventHandler
+from watchdog.events import FileCreatedEvent, FileMovedEvent, FileSystemEventHandler, FileSystemEvent
 from watchdog.observers import Observer
+from typing import Any
 
 from jatai.core.delivery import Delivery
 from jatai.core.node import Node
@@ -36,12 +37,12 @@ class JataiWatchdogHandler(FileSystemEventHandler):
         self.daemon = daemon
         self.source_node_path = Path(source_node_path).resolve()
 
-    def on_created(self, event: FileCreatedEvent) -> None:
+    def on_created(self, event: FileSystemEvent) -> None:
         if event.is_directory:
             return
         self.daemon.process_outbox_candidate(Path(event.src_path), self.source_node_path)
 
-    def on_moved(self, event: FileMovedEvent) -> None:
+    def on_moved(self, event: FileSystemEvent) -> None:
         if event.is_directory:
             return
         self.daemon.process_outbox_candidate(Path(event.dest_path), self.source_node_path)
@@ -56,7 +57,7 @@ class JataiNodeConfigHandler(FileSystemEventHandler):
         self.daemon = daemon
         self.node_path = Path(node_path).resolve()
 
-    def on_created(self, event: FileCreatedEvent) -> None:
+    def on_created(self, event: FileSystemEvent) -> None:
         self._handle_path(Path(event.src_path), event.is_directory)
 
     def on_modified(self, event) -> None:
@@ -64,7 +65,7 @@ class JataiNodeConfigHandler(FileSystemEventHandler):
             return
         self._handle_path(Path(event.src_path), False)
 
-    def on_moved(self, event: FileMovedEvent) -> None:
+    def on_moved(self, event: FileSystemEvent) -> None:
         self._handle_path(Path(event.src_path), event.is_directory)
         self._handle_path(Path(event.dest_path), event.is_directory)
 
@@ -113,7 +114,7 @@ class JataiDaemon:
         self.latest_log_path = Path(os.path.expanduser(str(global_config.get("LATEST_LOG_PATH", "~/.jatai_latest.log")))).expanduser()
         self.observer_factory = observer_factory
         self.stop_event = threading.Event()
-        self.observer: Observer | None = None
+        self.observer: Any = None
         self.node_config_cache: dict[Path, dict[str, object]] = {}
         self.retry_state = RetryState(self.retry_path)
         self.logger = self._build_logger(self.log_path)

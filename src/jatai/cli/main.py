@@ -663,7 +663,7 @@ def config(
         except FileNotFoundError:
             pass
 
-        registry.set_config(key, _coerce_config_value(value))
+        registry.set_config(str(key), _coerce_config_value(value))
         registry.save()
         typer.echo(f"✓ Updated global config: {key}")
         return
@@ -674,7 +674,7 @@ def config(
         typer.echo(f"✗ Error: {e}", err=True)
         raise typer.Exit(code=1)
 
-    node.set_config(key, _coerce_config_value(value))
+    node.set_config(str(key), _coerce_config_value(value))
     typer.echo(f"✓ Updated local config: {key}")
 
 
