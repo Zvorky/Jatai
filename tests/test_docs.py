@@ -23,8 +23,7 @@ def test_cli_snippets_in_markdown(md_file):
     for block in blocks:
         for line in block.split('\n'):
             line = line.strip().split('#')[0].strip() # remove comments
-            if line.startswith('$ '):
-                line = line[2:]
+            line = line.removeprefix('$ ')
             
             if line.startswith('jatai '):
                 parts = line.split()

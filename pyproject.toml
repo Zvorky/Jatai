@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jatai"
-version = "0.8.2"
+version = "0.8.17"
 description = "Local file-system message bus for scripts and agents"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.11"
 authors = [
     { name = "Enzo 'Zvorky' Zavorski Delevatti" },
 ]
@@ -50,3 +50,4 @@ where = ["src"]
 
 [tool.ruff]
 lint.ignore = ["BLE001", "S110", "SIM117", "RUF012", "B017", "F841", "UP045", "PLW1510"]
+target-version = "py311"

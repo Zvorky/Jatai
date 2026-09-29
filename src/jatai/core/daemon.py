@@ -8,7 +8,7 @@ import os
 import shutil
 import signal
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -113,7 +113,7 @@ class JataiDaemon:
         self.retry_path = Path(retry_path) if retry_path is not None else SystemState.BASE_PATH / "retry.yaml"
         SystemState.ensure_base()
         global_config = self._load_global_config()
-        self.log_path = Path(log_path) if log_path is not None else SystemState.BASE_PATH / "logs" / f"jatai_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.log"
+        self.log_path = Path(log_path) if log_path is not None else SystemState.BASE_PATH / "logs" / f"jatai_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.log"
         self.latest_log_path = Path(os.path.expanduser(str(global_config.get("LATEST_LOG_PATH", "~/.jatai_latest.log")))).expanduser()
         self.observer_factory = observer_factory
         self.stop_event = threading.Event()
@@ -178,7 +178,7 @@ class JataiDaemon:
             shutil.copy2(source, hello_path)
         else:
             hello_path.write_text(
-                f"# Welcome to Jatai\n\n(helloworld.md missing in docs/)\nGenerated at: {datetime.now(timezone.utc).isoformat()}\n",
+                f"# Welcome to Jatai\n\n(helloworld.md missing in docs/)\nGenerated at: {datetime.now(UTC).isoformat()}\n",
                 encoding="utf-8",
             )
 

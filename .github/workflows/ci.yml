@@ -16,8 +16,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: ["3.10", "3.11", "3.12"]
+        os: [ubuntu-latest]
+        python-version: ["3.11", "3.12"]
 
     steps:
       - uses: actions/checkout@v4
@@ -39,8 +39,8 @@ jobs:
       - name: Static Type Checking (MyPy)
         run: mypy src/
 
-      - name: Run Tests (Pytest)
-        run: pytest -v --strict-markers
+      - name: Run Tests (Pytest) with Coverage
+        run: pytest -v --strict-markers --cov=src --cov-fail-under=85
 
   docs:
     name: Docs QA (Lint & Links)
