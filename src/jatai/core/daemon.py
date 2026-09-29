@@ -10,13 +10,16 @@ import signal
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import yaml
 from filelock import FileLock, Timeout
 from send2trash import send2trash
-from watchdog.events import FileCreatedEvent, FileMovedEvent, FileSystemEventHandler, FileSystemEvent
+from watchdog.events import (
+    FileSystemEvent,
+    FileSystemEventHandler,
+)
 from watchdog.observers import Observer
-from typing import Any
 
 from jatai.core.delivery import Delivery
 from jatai.core.node import Node
