@@ -5,8 +5,9 @@ Coverage: Happy Path, Error/Failure Scenarios, Malicious/Adversarial Scenarios.
 """
 
 import hashlib
+
 import pytest
-from pathlib import Path
+
 from jatai.core.delivery import Delivery
 
 
@@ -31,7 +32,6 @@ class TestDeliveryHappyPath:
         dest_dir = temp_dir / "dest"
         dest_dir.mkdir()
 
-        import hashlib
         original_hash = hashlib.sha256(source.read_bytes()).hexdigest()
 
         delivery = Delivery(source, dest_dir)
@@ -52,7 +52,6 @@ class TestDeliveryHappyPath:
 
     def test_delivery_deliver_preserves_metadata(self, temp_dir):
         """Test that deliver preserves file metadata (shutil.copy2)."""
-        import time
 
         source = temp_dir / "source.txt"
         source.write_text("content")
@@ -182,7 +181,7 @@ class TestDeliveryErrorFailureScenarios:
         dest_dir = temp_dir / "dest"
         dest_dir.mkdir()
 
-        delivery = Delivery(source, dest_dir)
+        Delivery(source, dest_dir)
 
         # Delete destination during operation
         # Note: This is hard to simulate without threading, so we'll skip
@@ -295,7 +294,7 @@ class TestDeliveryMaliciousAdversarialScenarios:
         # Make dest_dir read-only after mkdir to simulate permission error during rename
         # Note: Hard to simulate without mocking - this is a theoretical case
         delivery = Delivery(source, dest_dir)
-        result = delivery.deliver()
+        delivery.deliver()
 
         # Verify .tmp file doesn't leak
         tmp_file = dest_dir / "source.txt.tmp"

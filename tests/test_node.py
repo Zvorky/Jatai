@@ -4,12 +4,13 @@ Tests for jatai.core.node module.
 Coverage: Happy Path, Error/Failure Scenarios, Malicious/Adversarial Scenarios.
 """
 
-import pytest
 import threading
 import time
+
+import pytest
 import yaml
-from pathlib import Path
 from filelock import Timeout
+
 from jatai.core.node import Node
 
 

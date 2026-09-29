@@ -3,8 +3,8 @@ Unit tests for jatai.core.sysstate.SystemState.
 
 Coverage: Happy Path, Error/Failure Scenarios, Adversarial Scenarios.
 """
+
 import pytest
-from pathlib import Path
 
 from jatai.core.sysstate import SystemState
 
@@ -126,7 +126,7 @@ class TestSysStateErrorScenarios:
         """read_bkp_config returns None if UUID exists but the bkp file was deleted."""
         node_path = "/tmp/orphan_uuid_node"
         uid = SystemState.assign_uuid(node_path)
-        bkp = SystemState.bkp_path(uid)
+        SystemState.bkp_path(uid)
         # Don't write the bkp file → should return None gracefully
         result = SystemState.read_bkp_config(node_path)
         assert result is None

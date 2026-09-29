@@ -1,6 +1,5 @@
 """Tests for uninstall cleanup helper behavior."""
 
-from pathlib import Path
 
 from typer.testing import CliRunner
 
@@ -8,7 +7,6 @@ from jatai.cli.main import app
 from jatai.core.registry import Registry
 from jatai.core.sysstate import SystemState
 from jatai.core.uninstall import cleanup_install_artifacts
-
 
 runner = CliRunner()
 

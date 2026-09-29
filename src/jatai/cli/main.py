@@ -1,25 +1,26 @@
 """
 Main CLI module for Jataí using Typer.
 """
+from __future__ import annotations
 
 import os
-import signal
 import shutil
+import signal
 import subprocess
 import sys
 import time
+from pathlib import Path
+
 import typer
 import yaml
-from pathlib import Path
-from typing import List, Optional
 from send2trash import send2trash
 
 from jatai.core.autostart import AutoStartRegistrar
 from jatai.core.daemon import AlreadyRunningError, JataiDaemon
 from jatai.core.delivery import Delivery
+from jatai.core.node import Node
 from jatai.core.prefix import Prefix
 from jatai.core.registry import Registry
-from jatai.core.node import Node
 from jatai.core.sysstate import SystemState
 from jatai.core.uninstall import cleanup_install_artifacts
 
@@ -68,7 +69,7 @@ def _to_path(node_path: Path, raw_value: str) -> Path:
     return node_path / candidate
 
 
-def _initialize_node(path: Optional[str] = None) -> None:
+def _initialize_node(path: str | None = None) -> None:
     """Initialize and register a Jataí node for the provided path."""
     if path is None:
         path = str(Path.cwd())
@@ -166,13 +167,13 @@ def _delete_file_by_mode(file_path: Path, mode: str) -> str:
     return "permanent"
 
 
-def _docs_markdown_files() -> List[Path]:
+def _docs_markdown_files() -> list[Path]:
     if not DOCS_ROOT.exists():
         return []
     return sorted(path for path in DOCS_ROOT.rglob("*.md") if path.is_file())
 
 
-def _render_docs_index(markdown_files: List[Path]) -> str:
+def _render_docs_index(markdown_files: list[Path]) -> str:
     categories: dict[str, list[str]] = {}
     for file_path in markdown_files:
         relative = file_path.relative_to(DOCS_ROOT)
@@ -226,8 +227,8 @@ def _export_text_to_inbox(node: Node, content: str, base_name: str) -> Path:
         index += 1
 
 
-def _render_docs_terminal(matches: List[Path]) -> str:
-    blocks: List[str] = []
+def _render_docs_terminal(matches: list[Path]) -> str:
+    blocks: list[str] = []
     for path in matches:
         rel = path.relative_to(DOCS_ROOT).as_posix()
         content = path.read_text(encoding="utf-8")
@@ -277,7 +278,7 @@ def _coerce_config_value(raw_value: str):
     return raw_value
 
 
-def _format_config_output(config_data: dict, key: Optional[str]) -> str:
+def _format_config_output(config_data: dict, key: str | None) -> str:
     if key is None:
         text = yaml.safe_dump(config_data, sort_keys=True)
         return text if text.endswith("\n") else text + "\n"
@@ -287,7 +288,7 @@ def _format_config_output(config_data: dict, key: Optional[str]) -> str:
 
 
 def _config_get(
-    key: Optional[str],
+    key: str | None,
     global_scope: bool,
     inbox: bool,
 ) -> None:
@@ -345,7 +346,7 @@ def _spawn_daemon_process() -> subprocess.Popen:
 
 @app.command()
 def init(
-    path: Optional[str] = typer.Argument(None, help="Path to initialize as a Jataí node"),
+    path: str | None = typer.Argument(None, help="Path to initialize as a Jataí node"),
 ) -> None:
     """Initialize a new Jataí node."""
     _initialize_node(path)
@@ -439,11 +440,11 @@ def stop() -> None:
 
 @app.command()
 def docs(
-    query: Optional[str] = typer.Argument(None, help="Optional query to match local docs."),
+    query: str | None = typer.Argument(None, help="Optional query to match local docs."),
     inbox: bool = typer.Option(False, "--inbox", "-i", help="Export docs content to current node INBOX."),
 ) -> None:
     """Show docs in terminal by default, or export them to INBOX with --inbox."""
-    node: Optional[Node] = None
+    node: Node | None = None
     if inbox:
         try:
             node = _load_node_from_cwd()
@@ -638,8 +639,8 @@ def unread(
 
 @app.command()
 def config(
-    key: Optional[str] = typer.Argument(None, help="Config key."),
-    value: Optional[str] = typer.Argument(None, help="Config value to set."),
+    key: str | None = typer.Argument(None, help="Config key."),
+    value: str | None = typer.Argument(None, help="Config value to set."),
     global_scope: bool = typer.Option(False, "--global", "-G", help="Operate on global registry config."),
     inbox: bool = typer.Option(False, "--inbox", "-i", help="Export config retrieval output to current node INBOX (for config get)."),
 ) -> None:
@@ -679,7 +680,7 @@ def config(
 
 @app.command()
 def remove(
-    path: Optional[str] = typer.Argument(None, help="Node path to soft-delete (defaults to current directory)."),
+    path: str | None = typer.Argument(None, help="Node path to soft-delete (defaults to current directory)."),
 ) -> None:
     """Soft-delete a node by renaming .jatai to ._jatai."""
     node_path = Path(path).resolve() if path else Path.cwd()

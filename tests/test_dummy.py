@@ -2,7 +2,6 @@
 Dummy test to verify pytest framework is working correctly.
 """
 
-import pytest
 
 
 def test_dummy_assertion():

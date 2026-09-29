@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
-from typing import List, Set
 
 from jatai.core.registry import Registry
 from jatai.core.sysstate import SystemState
@@ -15,9 +14,9 @@ def _normalize_removed_entry(entry: str) -> str:
     return str(entry).split(" --autoremoved", 1)[0].strip()
 
 
-def _collect_known_node_paths(registry: Registry) -> Set[Path]:
+def _collect_known_node_paths(registry: Registry) -> set[Path]:
     """Collect node paths from global registry and removed.yaml."""
-    node_paths: Set[Path] = set()
+    node_paths: set[Path] = set()
 
     for node_data in registry.nodes.values():
         node_path = node_data.get("path")
@@ -35,7 +34,7 @@ def _collect_known_node_paths(registry: Registry) -> Set[Path]:
     return node_paths
 
 
-def cleanup_install_artifacts(remove_logs: bool = False, dry_run: bool = False) -> List[str]:
+def cleanup_install_artifacts(remove_logs: bool = False, dry_run: bool = False) -> list[str]:
     """
     Remove Jatai configuration/control artifacts while preserving message data.
 
@@ -51,7 +50,7 @@ def cleanup_install_artifacts(remove_logs: bool = False, dry_run: bool = False) 
     Returns:
         Human-readable list of actions taken/planned.
     """
-    actions: List[str] = []
+    actions: list[str] = []
     registry = Registry()
 
     try:

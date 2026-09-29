@@ -1,10 +1,10 @@
 """
 Delivery module: Handles physical file copying with atomic delivery using temporary extensions.
 """
+from __future__ import annotations
 
 import shutil
 from pathlib import Path
-from typing import Optional
 
 
 class Delivery:
@@ -82,18 +82,18 @@ class Delivery:
 
             return final_file_path
 
-        except (IOError, OSError) as e:
+        except OSError as e:
             # Cleanup: remove temporary file if it exists
             if tmp_file_path.exists():
                 try:
                     tmp_file_path.unlink()
                 except Exception:
                     pass
-            raise IOError(f"Delivery failed: {e}")
+            raise OSError(f"Delivery failed: {e}")
 
     @staticmethod
     def has_ignore_prefix(
-        file_path: Path, ignore_prefix: str = "_", success_prefix: Optional[str] = None
+        file_path: Path, ignore_prefix: str = "_", success_prefix: str | None = None
     ) -> bool:
         """
         Check if a file has the ignore prefix (was processed or is being written).

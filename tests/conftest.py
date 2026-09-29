@@ -2,10 +2,11 @@
 Pytest configuration and shared fixtures for Jataí tests.
 """
 
-import pytest
-import tempfile
 import shutil
+import tempfile
 from pathlib import Path
+
+import pytest
 
 
 @pytest.fixture

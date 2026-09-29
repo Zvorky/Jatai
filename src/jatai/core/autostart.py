@@ -1,13 +1,13 @@
 """
 OS auto-start registration helpers for the Jataí daemon.
 """
+from __future__ import annotations
 
 import platform
 import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
 
 
 class AutoStartRegistrar:
@@ -16,9 +16,9 @@ class AutoStartRegistrar:
     def __init__(
         self,
         service_name: str = "jatai",
-        home_path: Optional[Path] = None,
-        platform_name: Optional[str] = None,
-        python_executable: Optional[str] = None,
+        home_path: Path | None = None,
+        platform_name: str | None = None,
+        python_executable: str | None = None,
     ) -> None:
         self.service_name = service_name
         self.home_path = Path(home_path) if home_path is not None else Path.home()
@@ -63,7 +63,7 @@ class AutoStartRegistrar:
                 print(
                     "Warning: Could not enable systemd user service. "
                     "Attempting crontab @reboot fallback. "
-                    "Run 'systemctl --user enable {0}.service' manually if needed.".format(self.service_name)
+                    f"Run 'systemctl --user enable {self.service_name}.service' manually if needed."
                 )
                 if not self._register_crontab_autostart():
                     print(

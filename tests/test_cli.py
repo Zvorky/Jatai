@@ -4,13 +4,13 @@ Tests for jatai.cli.main module.
 Coverage: Happy Path, Error/Failure Scenarios, Malicious/Adversarial Scenarios.
 """
 
-import pytest
 from pathlib import Path
+
 from typer.testing import CliRunner
 
-from jatai.cli.main import app, run, _run_tui
-from jatai.core.registry import Registry
+from jatai.cli.main import _run_tui, app, run
 from jatai.core.node import Node
+from jatai.core.registry import Registry
 from jatai.core.sysstate import SystemState
 
 runner = CliRunner()
@@ -978,6 +978,7 @@ class TestCLITUI:
 
     def test_jatai_app_capture_call_suppresses_typer_exit(self):
         import typer
+
         from jatai.tui import _capture_call
 
         def fn():
@@ -1007,8 +1008,8 @@ class TestCLITUI:
         assert "screen" in pushed
 
     def test_jatai_app_dispatch_status_calls_status(self):
-        from jatai.tui import JataiApp
         from jatai.cli import main as cli_main
+        from jatai.tui import JataiApp
 
         captured = {}
         app = JataiApp()
@@ -1020,11 +1021,10 @@ class TestCLITUI:
 
 
 
-import asyncio
 
 def test_jatai_app_dispatch_docs_index_calls_docs():
-    from jatai.tui import JataiApp
     from jatai.cli import main as cli_main
+    from jatai.tui import JataiApp
 
     captured = {}
 
@@ -1061,7 +1061,7 @@ def test_jatai_app_menu_item_keys_are_unique():
 
 def test_jatai_app_dispatch_legacy_browse_key_does_not_crash(monkeypatch):
     """Legacy/unrecognised keys must be ignored safely by the dispatcher."""
-    from jatai.tui import JataiApp, MENU_ITEMS
+    from jatai.tui import MENU_ITEMS, JataiApp
 
     pushed = {}
     app = JataiApp()

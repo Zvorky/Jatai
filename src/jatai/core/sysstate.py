@@ -1,8 +1,10 @@
 """System state storage for Jataí (Path, DB, and migration metadata)."""
+from __future__ import annotations
+
+import tempfile
 import uuid as _uuid_module
 from pathlib import Path
-from typing import Optional
-import tempfile
+
 import yaml
 
 
@@ -60,7 +62,7 @@ class SystemState:
         return new_uuid
 
     @classmethod
-    def get_uuid(cls, node_path: str) -> Optional[str]:
+    def get_uuid(cls, node_path: str) -> str | None:
         """Return the UUID for *node_path* or ``None`` if not yet registered."""
         uuid_map = cls.read_yaml(cls.uuid_map_path()) or {}
         value = uuid_map.get(node_path)
@@ -82,7 +84,7 @@ class SystemState:
         cls.write_yaml(cls.removed_path(), entries)
 
     @classmethod
-    def write_bkp_config(cls, node_path: str, config: dict) -> Optional[Path]:
+    def write_bkp_config(cls, node_path: str, config: dict) -> Path | None:
         """Write *config* to the system-level UUID backup for *node_path*.
 
         Creates or overwrites ``/tmp/jatai/bkp/<UUID>.yaml``.  Returns the path
@@ -97,7 +99,7 @@ class SystemState:
             return None
 
     @classmethod
-    def read_bkp_config(cls, node_path: str) -> Optional[dict]:
+    def read_bkp_config(cls, node_path: str) -> dict | None:
         """Read the system-level UUID backup config for *node_path*, or ``None``."""
         try:
             node_uuid = cls.get_uuid(node_path)

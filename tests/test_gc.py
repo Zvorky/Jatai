@@ -1,9 +1,8 @@
-import pytest
-from pathlib import Path
 from unittest.mock import patch
+
 from jatai.core.daemon import JataiDaemon
-from jatai.core.node import Node
 from jatai.core.registry import Registry
+
 
 class TestGCAUTODeleteMode:
     """Tests for ADR-16: Deletion Policy Separation and Operator Confirmation."""
@@ -18,7 +17,7 @@ class TestGCAUTODeleteMode:
         f.write_text("x")
         
         reg_path = temp_dir / "reg.yaml"
-        reg = Registry(registry_path=reg_path)
+        Registry(registry_path=reg_path)
         daemon = JataiDaemon(registry_path=reg_path)
         
         daemon._delete_path(f, mode="trash")

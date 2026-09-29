@@ -4,6 +4,7 @@ Tests for daemon lifecycle, startup scan, watchdog routing, and auto-start regis
 
 import json
 import os
+import shutil
 from pathlib import Path
 
 import pytest
@@ -14,7 +15,6 @@ from jatai.core.daemon import AlreadyRunningError, JataiDaemon, JataiWatchdogHan
 from jatai.core.node import Node
 from jatai.core.registry import Registry
 from jatai.core.sysstate import SystemState
-import shutil
 
 
 class FakeObserver:
@@ -540,7 +540,7 @@ class TestAutoStartRegistration:
     """Host auto-start registration tests."""
 
     def test_linux_autostart_writes_systemd_service(self, temp_home):
-        registrar = AutoStartRegistrar(  # noqa: SIM117
+        registrar = AutoStartRegistrar(
             home_path=temp_home,
             platform_name="linux",
             python_executable="/usr/bin/python3",
@@ -555,7 +555,6 @@ class TestAutoStartRegistration:
 
     def test_linux_autostart_crontab_fallback_when_no_systemd(self, temp_home, monkeypatch):
         """When systemctl is unavailable, register() falls back to crontab @reboot (ADR-5.3)."""
-        import subprocess as _subprocess
         captured_input: list = []
 
         class _Result:

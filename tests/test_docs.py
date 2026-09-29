@@ -1,7 +1,9 @@
-import pytest
-from pathlib import Path
 import re
+from pathlib import Path
+
+import pytest
 from typer.testing import CliRunner
+
 from jatai.cli.main import app
 
 runner = CliRunner()
@@ -28,7 +30,7 @@ def test_cli_snippets_in_markdown(md_file):
                 parts = line.split()
                 if len(parts) > 1:
                     cmd = parts[1]
-                    if cmd.startswith('-') or cmd.startswith('.'):
+                    if cmd.startswith(('-', '.')):
                         continue
                     
                     result = runner.invoke(app, [cmd, "--help"])

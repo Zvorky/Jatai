@@ -1,15 +1,15 @@
 """Textual-based interactive TUI for Jataí."""
+from __future__ import annotations
 
+import asyncio
 import io
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
-from typing import Optional
-import asyncio
 
 import typer
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, ScrollableContainer, VerticalScroll
+from textual.containers import Horizontal, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import (
     Button,
@@ -211,25 +211,49 @@ class JataiApp(App):
     # Command dispatcher
     # ------------------------------------------------------------------
 
-    def _dispatch(self, key: str) -> None:  # noqa: C901 — linear dispatch table
+    def _dispatch(self, key: str) -> None:
         from jatai.cli.main import (
             clear as clear_cmd,
+        )
+        from jatai.cli.main import (
             config as config_cmd,
+        )
+        from jatai.cli.main import (
             docs as docs_cmd,
+        )
+        from jatai.cli.main import (
             init as init_cmd,
+        )
+        from jatai.cli.main import (
             list_command,
+        )
+        from jatai.cli.main import (
             log as log_cmd,
+        )
+        from jatai.cli.main import (
             read as read_cmd,
+        )
+        from jatai.cli.main import (
             remove as remove_cmd,
+        )
+        from jatai.cli.main import (
             send as send_cmd,
+        )
+        from jatai.cli.main import (
             start as start_cmd,
+        )
+        from jatai.cli.main import (
             status as status_cmd,
+        )
+        from jatai.cli.main import (
             stop as stop_cmd,
+        )
+        from jatai.cli.main import (
             unread as unread_cmd,
         )
 
         if key == "0":
-            def _on_init(result: Optional[list[str]]) -> None:
+            def _on_init(result: list[str] | None) -> None:
                 if result is not None:
                     raw_path = result[0].strip() or None
                     self._run(init_cmd, raw_path)
@@ -243,7 +267,7 @@ class JataiApp(App):
             self._run(status_cmd)
 
         elif key == "2":
-            def _on_docs_index(result: Optional[list[str]]) -> None:
+            def _on_docs_index(result: list[str] | None) -> None:
                 try:
                     asyncio.get_running_loop()
                     has_loop = True
@@ -264,7 +288,7 @@ class JataiApp(App):
             )
 
         elif key == "3":
-            def _on_query(result: Optional[list[str]]) -> None:
+            def _on_query(result: list[str] | None) -> None:
                 try:
                     asyncio.get_running_loop()
                     has_loop = True
@@ -287,7 +311,7 @@ class JataiApp(App):
             )
 
         elif key == "4":
-            def _on_log_latest(result: Optional[list[str]]) -> None:
+            def _on_log_latest(result: list[str] | None) -> None:
                 try:
                     asyncio.get_running_loop()
                     has_loop = True
@@ -308,7 +332,7 @@ class JataiApp(App):
             )
 
         elif key == "5":
-            def _on_log_all(result: Optional[list[str]]) -> None:
+            def _on_log_all(result: list[str] | None) -> None:
                 try:
                     asyncio.get_running_loop()
                     has_loop = True
@@ -329,7 +353,7 @@ class JataiApp(App):
             )
 
         elif key == "6":
-            def _on_scope(result: Optional[list[str]]) -> None:
+            def _on_scope(result: list[str] | None) -> None:
                 if result is not None:
                     self._run(list_command, result[0].strip() or "inbox")
 
@@ -339,7 +363,7 @@ class JataiApp(App):
             )
 
         elif key == "7":
-            def _on_send(result: Optional[list[str]]) -> None:
+            def _on_send(result: list[str] | None) -> None:
                 if result is not None:
                     fp = result[0].strip()
                     move = result[1].strip().lower() in {"1", "y", "yes", "true"}
@@ -354,7 +378,7 @@ class JataiApp(App):
             )
 
         elif key == "8":
-            def _on_read(result: Optional[list[str]]) -> None:
+            def _on_read(result: list[str] | None) -> None:
                 if result is not None:
                     self._run(read_cmd, result[0].strip())
 
@@ -364,7 +388,7 @@ class JataiApp(App):
             )
 
         elif key == "9":
-            def _on_unread(result: Optional[list[str]]) -> None:
+            def _on_unread(result: list[str] | None) -> None:
                 if result is not None:
                     self._run(unread_cmd, result[0].strip())
 
@@ -374,7 +398,7 @@ class JataiApp(App):
             )
 
         elif key == "10":
-            def _on_config_get(result: Optional[list[str]]) -> None:
+            def _on_config_get(result: list[str] | None) -> None:
                 if result is not None:
                     key_val = result[0].strip() or None
                     global_flag = result[1].strip().lower() in {"1", "y", "yes", "true"}
@@ -391,7 +415,7 @@ class JataiApp(App):
             )
 
         elif key == "11":
-            def _on_config_set(result: Optional[list[str]]) -> None:
+            def _on_config_set(result: list[str] | None) -> None:
                 if result is not None:
                     k = result[0].strip()
                     v = result[1].strip()
@@ -408,7 +432,7 @@ class JataiApp(App):
             )
 
         elif key == "12":
-            def _on_remove(result: Optional[list[str]]) -> None:
+            def _on_remove(result: list[str] | None) -> None:
                 if result is not None:
                     raw_path = result[0].strip() or None
                     self._run(remove_cmd, raw_path)
@@ -419,7 +443,7 @@ class JataiApp(App):
             )
 
         elif key == "13":
-            def _on_clear(result: Optional[list[str]]) -> None:
+            def _on_clear(result: list[str] | None) -> None:
                 if result is not None:
                     clear_read = result[0].strip().lower() not in {"0", "n", "no", "false"}
                     clear_sent = result[1].strip().lower() not in {"0", "n", "no", "false"}

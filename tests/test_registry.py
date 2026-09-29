@@ -4,11 +4,12 @@ Tests for jatai.core.registry module.
 Coverage: Happy Path, Error/Failure Scenarios, Malicious/Adversarial Scenarios.
 """
 
-import pytest
-import yaml
 import threading
 import time
-from pathlib import Path
+
+import pytest
+import yaml
+
 from jatai.core.registry import Registry
 
 

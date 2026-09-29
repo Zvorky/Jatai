@@ -1,7 +1,7 @@
-import pytest
 import concurrent.futures
-from pathlib import Path
+
 from jatai.core.delivery import Delivery
+
 
 def test_concurrent_delivery(temp_dir):
     """Test concurrent delivery of files to same OUTBOX to validate atomic rename."""

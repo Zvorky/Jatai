@@ -1,13 +1,15 @@
 """
 Node module: Represents a single Jataí node with INBOX and OUTBOX folders.
 """
+from __future__ import annotations
 
 import shutil
-from filelock import FileLock, Timeout
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 import yaml
+from filelock import FileLock
+
 from jatai.core.sysstate import SystemState
 
 
@@ -49,7 +51,7 @@ class Node:
         self.outbox_path = self.node_path / self.OUTBOX_DIRNAME
         self.local_config_path = self.node_path / self.LOCAL_CONFIG_FILENAME
         self.disabled_config_path = self.node_path / self.LOCAL_CONFIG_DISABLED
-        self.local_config: Dict[str, Any] = {}
+        self.local_config: dict[str, Any] = {}
 
     @staticmethod
     def validate_inbox_outbox_overlap(inbox_path: Path, outbox_path: Path) -> None:
@@ -62,9 +64,9 @@ class Node:
 
     def create(
         self,
-        global_config: Optional[Dict[str, Any]] = None,
-        inbox_path: Optional[Path] = None,
-        outbox_path: Optional[Path] = None,
+        global_config: dict[str, Any] | None = None,
+        inbox_path: Path | None = None,
+        outbox_path: Path | None = None,
     ) -> None:
         """
         Create the node structure (node dir, INBOX, OUTBOX, .jatai config).
@@ -150,7 +152,7 @@ class Node:
             except yaml.YAMLError as e:
                 raise yaml.YAMLError(f"Failed to parse local config: {e}")
 
-    def apply_effective_config(self, global_config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def apply_effective_config(self, global_config: dict[str, Any] | None = None) -> dict[str, Any]:
         """Merge global defaults with local overrides and update resolved paths."""
         effective_config = dict(global_config or {})
         effective_config.update(self.local_config)
@@ -178,15 +180,14 @@ class Node:
             with open(self.local_config_path, "w", encoding="utf-8") as f:
                 yaml.safe_dump(self.local_config, f, default_flow_style=False)
 
-    def write_config(self, config: Dict[str, Any], target_path: Optional[Path] = None) -> None:
+    def write_config(self, config: dict[str, Any], target_path: Path | None = None) -> None:
         """Write a configuration mapping to the target path."""
         destination = target_path or self.local_config_path
         destination.parent.mkdir(parents=True, exist_ok=True)
-        with self._lock():
-            with open(destination, "w", encoding="utf-8") as f:
-                yaml.safe_dump(config, f, default_flow_style=False)
+        with self._lock(), open(destination, "w", encoding="utf-8") as f:
+            yaml.safe_dump(config, f, default_flow_style=False)
 
-    def backup_current_config(self, previous_config: Optional[Dict[str, Any]] = None) -> Path:
+    def backup_current_config(self, previous_config: dict[str, Any] | None = None) -> Path:
         """Persist the current or provided config into .jatai.bkp."""
         if previous_config is None:
             if self.local_config_path.exists():
@@ -302,8 +303,8 @@ class Node:
 
     def migrate_prefix_history(
         self,
-        previous_config: Dict[str, Any],
-        current_config: Dict[str, Any],
+        previous_config: dict[str, Any],
+        current_config: dict[str, Any],
     ) -> bool:
         """Rename local historical files when prefix values change."""
         rename_plan: list[tuple[Path, Path]] = []
@@ -350,7 +351,7 @@ class Node:
 
         return bool(rename_plan)
 
-    def drop_error_notice(self, message: str, error_prefix: Optional[str] = None) -> Path:
+    def drop_error_notice(self, message: str, error_prefix: str | None = None) -> Path:
         """Write an error notice into the INBOX for manual inspection."""
         self.inbox_path.mkdir(parents=True, exist_ok=True)
         prefix = error_prefix if error_prefix is not None else str(self.local_config.get("PREFIX_ERROR", "!_"))
