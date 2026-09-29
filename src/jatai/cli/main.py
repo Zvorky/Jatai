@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 
 import typer
+from typing import Optional
 import yaml
 from send2trash import send2trash
 
@@ -69,7 +70,7 @@ def _to_path(node_path: Path, raw_value: str) -> Path:
     return node_path / candidate
 
 
-def _initialize_node(path: str | None = None) -> None:
+def _initialize_node(path: Optional[str] = None) -> None:
     """Initialize and register a Jataí node for the provided path."""
     if path is None:
         path = str(Path.cwd())
@@ -278,7 +279,7 @@ def _coerce_config_value(raw_value: str):
     return raw_value
 
 
-def _format_config_output(config_data: dict, key: str | None) -> str:
+def _format_config_output(config_data: dict, key: Optional[str]) -> str:
     if key is None:
         text = yaml.safe_dump(config_data, sort_keys=True)
         return text if text.endswith("\n") else text + "\n"
@@ -288,7 +289,7 @@ def _format_config_output(config_data: dict, key: str | None) -> str:
 
 
 def _config_get(
-    key: str | None,
+    key: Optional[str],
     global_scope: bool,
     inbox: bool,
 ) -> None:
@@ -346,7 +347,7 @@ def _spawn_daemon_process() -> subprocess.Popen:
 
 @app.command()
 def init(
-    path: str | None = typer.Argument(None, help="Path to initialize as a Jataí node"),
+    path: Optional[str] = typer.Argument(None, help="Path to initialize as a Jataí node"),
 ) -> None:
     """Initialize a new Jataí node."""
     _initialize_node(path)
@@ -440,11 +441,11 @@ def stop() -> None:
 
 @app.command()
 def docs(
-    query: str | None = typer.Argument(None, help="Optional query to match local docs."),
+    query: Optional[str] = typer.Argument(None, help="Optional query to match local docs."),
     inbox: bool = typer.Option(False, "--inbox", "-i", help="Export docs content to current node INBOX."),
 ) -> None:
     """Show docs in terminal by default, or export them to INBOX with --inbox."""
-    node: Node | None = None
+    node: Optional[Node] = None
     if inbox:
         try:
             node = _load_node_from_cwd()
@@ -639,8 +640,8 @@ def unread(
 
 @app.command()
 def config(
-    key: str | None = typer.Argument(None, help="Config key."),
-    value: str | None = typer.Argument(None, help="Config value to set."),
+    key: Optional[str] = typer.Argument(None, help="Config key."),
+    value: Optional[str] = typer.Argument(None, help="Config value to set."),
     global_scope: bool = typer.Option(False, "--global", "-G", help="Operate on global registry config."),
     inbox: bool = typer.Option(False, "--inbox", "-i", help="Export config retrieval output to current node INBOX (for config get)."),
 ) -> None:
@@ -680,7 +681,7 @@ def config(
 
 @app.command()
 def remove(
-    path: str | None = typer.Argument(None, help="Node path to soft-delete (defaults to current directory)."),
+    path: Optional[str] = typer.Argument(None, help="Node path to soft-delete (defaults to current directory)."),
 ) -> None:
     """Soft-delete a node by renaming .jatai to ._jatai."""
     node_path = Path(path).resolve() if path else Path.cwd()
