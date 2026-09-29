@@ -1340,3 +1340,33 @@ class TestPhase7StateArchitecture:
             "UUID bkp fallback should allow prefix migration after cold restart"
         )
 
+
+class TestDaemonCoverageBump:
+    def test_daemon_stop_and_shutdown(self, temp_dir):
+        from jatai.core.daemon import JataiDaemon
+        from jatai.core.registry import Registry
+        
+        reg_path = temp_dir / "reg.yaml"
+        reg = Registry(registry_path=reg_path)
+        reg.save()
+        d = JataiDaemon(registry_path=reg_path)
+        
+        # Test stop sets flag
+        assert not d.stop_event.is_set()
+        d.stop()
+        assert d.stop_event.is_set()
+        
+        # Test shutdown watchdog
+        d.setup_watchdog()
+        assert d.observer is not None
+        d.shutdown_watchdog()
+        assert d.observer is None
+
+    def test_daemon_handle_shutdown_signal(self, temp_dir):
+        from jatai.core.daemon import JataiDaemon
+        from jatai.core.registry import Registry
+        reg = Registry(registry_path=temp_dir / "reg.yaml")
+        reg.save()
+        d = JataiDaemon(registry_path=temp_dir / "reg.yaml")
+        d._handle_shutdown_signal(15, None)
+        assert d.stop_event.is_set()

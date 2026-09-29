@@ -1,103 +1,66 @@
-# Prefix States
+# Prefix State Machine
 
-Jataí uses filename prefixes as a state machine. Every file in an OUTBOX or
-INBOX carries its delivery status encoded in its name — no database needed.
+This document describes the state machine based on Jataí's file prefix philosophy.
 
-## The 5-state matrix
+## State Transitions
 
-| Prefix | State | Location | Meaning |
-|--------|-------|----------|---------|
-| _(none)_ | **Pending** | OUTBOX | Unprocessed — daemon will act immediately on this file |
-| `_` | **Delivered** | OUTBOX | Broadcast to all active nodes successfully |
-| `!` | **Total Error** | OUTBOX | Failed to deliver to all active nodes — pending retry |
-| `!_` | **Partial Error** | OUTBOX | Delivered to some nodes, failed for others — pending retry |
-| `!!` | **Fatal Total Error** | OUTBOX | Max retries reached, all nodes failed — will not retry |
-| `!!_` | **Fatal Partial Error** | OUTBOX | Max retries reached, some nodes failed — will not retry |
+Jataí uses filename prefixes to track the state of messages in INBOX and OUTBOX.
 
-Additionally, files in INBOX may also carry a success prefix once read:
+```mermaid
+sequenceDiagram
+    participant User
+    participant OUTBOX (Node A)
+    participant Jatai Daemon
+    participant INBOX (Node B)
 
-| Prefix | State | Location | Meaning |
-|--------|-------|----------|---------|
-| _(none)_ | Unread | INBOX | Incoming file, not yet processed locally |
-| `_` | Read | INBOX | Marked as processed (via `jatai read`, planned Phase 6) |
-| `!` | Error | INBOX | Rollback/error notices dropped by the daemon |
-
-## How the daemon applies prefixes
-
-On each delivery attempt, the daemon:
-
-1. Looks for files in OUTBOX **without** prefixes.
-2. Attempts delivery to all other active nodes.
-3. Renames the file in OUTBOX to reflect the outcome.
-
-State flow:
-
-```
-[no prefix]  →  delivery succeeds  →  _filename
-             →  all nodes fail     →  !filename       (retry scheduled)
-             →  some nodes fail    →  !_filename      (retry scheduled)
-
-!filename    →  retry succeeds     →  _filename
-             →  still failing      →  !filename       (next retry)
-             →  max retries hit    →  !!filename      (fatal, no more retries)
-
-!_filename   →  retry succeeds     →  _filename
-             →  still partial      →  !_filename      (next retry)
-             →  max retries hit    →  !!_filename     (fatal, no more retries)
+    User->>OUTBOX (Node A): Drop file.txt
+    Jatai Daemon->>OUTBOX (Node A): Detect file.txt
+    Jatai Daemon->>INBOX (Node B): Copy as .file.txt.tmp
+    Jatai Daemon->>INBOX (Node B): Rename to file.txt
+    Jatai Daemon->>OUTBOX (Node A): Rename to _file.txt (Ignored/Sent)
 ```
 
-## Configuring prefixes
+## Retry and Recovery Flows
 
-Both prefixes are configurable. Defaults:
+When a delivery fails, Jataí enters a retry state and uses exponential backoff.
 
-- `PREFIX_IGNORE` = `_` (ignore/delivered prefix in OUTBOX; read prefix in INBOX)
-- `PREFIX_ERROR` = `!_` (base error prefix; daemon derives error variants from it)
+```mermaid
+sequenceDiagram
+    participant Jatai Daemon
+    participant OUTBOX (Node A)
+    participant INBOX (Offline Node)
 
-Set per-node in `.jatai` or globally in `~/.jatai`:
-
-```yaml
-PREFIX_IGNORE: "done_"
-PREFIX_ERROR: "err_"
+    Jatai Daemon->>INBOX (Offline Node): Attempt Delivery (file.txt)
+    INBOX (Offline Node)-->>Jatai Daemon: Delivery Failed (I/O Error)
+    Jatai Daemon->>OUTBOX (Node A): Rename to !file.txt (Total Error)
+    
+    loop Exponential Backoff
+        Jatai Daemon->>INBOX (Offline Node): Retry Delivery (!file.txt)
+        INBOX (Offline Node)-->>Jatai Daemon: Delivery Failed
+    end
+    
+    Jatai Daemon->>OUTBOX (Node A): Max retries reached
+    Jatai Daemon->>OUTBOX (Node A): Rename to !!file.txt (Fatal Error)
 ```
 
-## Prefix hot-swap and rollback
+## Orphaned Directories Recovery
 
-When you change a prefix in `.jatai`, the daemon automatically renames all
-existing historical files in INBOX and OUTBOX to match the new prefix.
+When a `.jatai` configuration is removed, the node becomes an orphaned directory and goes into soft-delete. Reactivation requires user intervention.
 
-If any rename would cause a name collision with an existing file, the daemon aborts
-the migration entirely:
-- The previous config is restored from `.jatai.bkp`.
-- An error notice file is dropped into the node's INBOX describing the collision.
+```mermaid
+sequenceDiagram
+    participant User
+    participant Node
+    participant Jatai Daemon
+    participant /tmp/jatai/
 
-## What the daemon ignores
-
-Files that already have a prefix (any of `_`, `!`, `!_`, `!!`, `!!_`) are skipped
-during the delivery scan. This prevents reprocessing of already-handled files.
-
-Nodes in soft-delete state (`._jatai`) are also skipped and do **not** generate
-error prefixes for files routed while they are disabled.
-
-## System-generated INBOX artifacts
-
-Any file written directly into INBOX by Jataí itself (not delivered from another
-node OUTBOX) uses the `!` prefix. This makes system-generated content immediately
-distinguishable from user payload files.
-
-Common patterns:
-
-| Pattern | When dropped |
-|---|---|
-| `!helloworld.md` | Welcome message dropped during explicit node initialization |
-| `!_config-migration-error*.md` | Prefix migration aborted due to naming collision |
-| `!docs-index.md` | Docs index exported via `jatai docs -i` |
-| `!log-latest.txt` | Log snapshot exported via `jatai log -i` |
-| `!log-all.txt` | Full log exported via `jatai log -a -i` |
-| `!config-local.txt` | Local config exported via `jatai config get -i` |
-| `!config-local-<KEY>.txt` | Single local key exported via `jatai config get KEY -i` |
-| `!config-global.txt` | Global config exported via `jatai config get -G -i` |
-| `!config-global-<KEY>.txt` | Single global key exported via `jatai config get KEY -G -i` |
-| `!<docname>.md` | Docs file exported via `jatai docs QUERY -i` |
-
-These files share the same prefix conventions and can be cleared using
-`jatai clear -r`.
+    User->>Node: Delete .jatai
+    Jatai Daemon->>Node: Detect missing .jatai
+    Jatai Daemon->>/tmp/jatai/: Add to removed.yaml (--autoremoved)
+    Jatai Daemon->>Node: Ignore node operations
+    
+    User->>Node: Create new .jatai or jatai init
+    Jatai Daemon->>Node: Detect new .jatai
+    Jatai Daemon->>/tmp/jatai/: Remove from removed.yaml
+    Jatai Daemon->>Node: Resume normal operations
+```

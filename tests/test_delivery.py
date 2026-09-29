@@ -4,6 +4,7 @@ Tests for jatai.core.delivery module.
 Coverage: Happy Path, Error/Failure Scenarios, Malicious/Adversarial Scenarios.
 """
 
+import hashlib
 import pytest
 from pathlib import Path
 from jatai.core.delivery import Delivery
@@ -26,9 +27,12 @@ class TestDeliveryHappyPath:
     def test_delivery_deliver_creates_tmp_and_renames(self, temp_dir):
         """Test that deliver creates .tmp file then renames it."""
         source = temp_dir / "source.txt"
-        source.write_text("test content")
+        source.write_bytes(b"test content")
         dest_dir = temp_dir / "dest"
         dest_dir.mkdir()
+
+        import hashlib
+        original_hash = hashlib.sha256(source.read_bytes()).hexdigest()
 
         delivery = Delivery(source, dest_dir)
         result = delivery.deliver()
@@ -36,7 +40,11 @@ class TestDeliveryHappyPath:
         # Check that final file exists
         assert result.exists()
         assert result.name == "source.txt"
-        assert result.read_text() == "test content"
+        assert result.read_bytes() == b"test content"
+        
+        # Verify SHA-256 integrity
+        delivered_hash = hashlib.sha256(result.read_bytes()).hexdigest()
+        assert original_hash == delivered_hash
 
         # Check that .tmp file doesn't exist
         tmp_file = dest_dir / "source.txt.tmp"
