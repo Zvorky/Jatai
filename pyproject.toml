@@ -49,4 +49,4 @@ where = ["src"]
 "share/man/man1" = ["docs/jatai.1"]
 
 [tool.ruff]
-lint.ignore = ["BLE001", "S110", "SIM117", "RUF012", "B017", "F841", "PLW1510"]
+lint.ignore = ["BLE001", "S110", "SIM117", "RUF012", "B017", "F841", "UP045", "PLW1510"]
