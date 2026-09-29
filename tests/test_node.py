@@ -4,10 +4,13 @@ Tests for jatai.core.node module.
 Coverage: Happy Path, Error/Failure Scenarios, Malicious/Adversarial Scenarios.
 """
 
+import threading
+import time
+
 import pytest
 import yaml
-from pathlib import Path
 from filelock import Timeout
+
 from jatai.core.node import Node
 
 
@@ -41,6 +44,7 @@ class TestNodeHappyPath:
             "PREFIX_IGNORE": "-done",
             "PREFIX_ERROR": "❌",
             "RETRY_DELAY_BASE": 120,
+            "GC_AUTO_DELETE_MODE": "permanent",
         }
 
         node.create(global_config=global_config)
@@ -49,6 +53,7 @@ class TestNodeHappyPath:
         assert node.local_config["PREFIX_IGNORE"] == "-done"
         assert node.local_config["PREFIX_ERROR"] == "❌"
         assert node.local_config["RETRY_DELAY_BASE"] == 120
+        assert node.local_config["GC_AUTO_DELETE_MODE"] == "permanent"
 
     def test_node_apply_effective_config_prefers_local_over_global(self, temp_dir):
         node_path = temp_dir / "my_node"
@@ -238,3 +243,47 @@ class TestNodeHappyPath:
 
         with pytest.raises(Timeout):
             node.load_config()
+
+    def test_node_filelock_thread_contention_blocks_and_recovers(self, temp_dir):
+        """Local .jatai access must serialize concurrent readers/writers via filelock."""
+        node_path = temp_dir / "contention_node"
+        node = Node(node_path)
+        node.create()
+        node.set_config("initial", "value")
+
+        waiting_node = Node(node_path)
+
+        lock_entered = threading.Event()
+        release_lock = threading.Event()
+        operation_completed = threading.Event()
+
+        def holder() -> None:
+            with node._lock():
+                lock_entered.set()
+                release_lock.wait(timeout=5)
+
+        def waiter() -> None:
+            waiting_node.load_config()
+            waiting_node.local_config["thread_key"] = "thread_value"
+            waiting_node.save_config()
+            operation_completed.set()
+
+        holder_thread = threading.Thread(target=holder)
+        waiter_thread = threading.Thread(target=waiter)
+
+        holder_thread.start()
+        assert lock_entered.wait(timeout=2)
+
+        waiter_thread.start()
+        time.sleep(0.2)
+        assert not operation_completed.is_set()
+
+        release_lock.set()
+        holder_thread.join(timeout=5)
+        waiter_thread.join(timeout=5)
+
+        assert operation_completed.is_set()
+
+        verifier = Node(node_path)
+        verifier.load_config()
+        assert verifier.local_config["thread_key"] == "thread_value"

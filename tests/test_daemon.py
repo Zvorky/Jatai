@@ -4,6 +4,7 @@ Tests for daemon lifecycle, startup scan, watchdog routing, and auto-start regis
 
 import json
 import os
+import shutil
 from pathlib import Path
 
 import pytest
@@ -14,7 +15,6 @@ from jatai.core.daemon import AlreadyRunningError, JataiDaemon, JataiWatchdogHan
 from jatai.core.node import Node
 from jatai.core.registry import Registry
 from jatai.core.sysstate import SystemState
-import shutil
 
 
 class FakeObserver:
@@ -184,6 +184,45 @@ class TestDaemonHappyPath:
 
         assert log_path.exists()
         assert "Delivery succeeded" in log_path.read_text(encoding="utf-8")
+
+    def test_daemon_recreates_missing_destination_inbox_on_delivery(self, temp_home):
+        registry_path = temp_home / ".jatai"
+        node_a = register_node(registry_path, "node_a", temp_home / "node_a")
+        node_b = register_node(registry_path, "node_b", temp_home / "node_b")
+
+        shutil.rmtree(node_b.inbox_path)
+        assert not node_b.inbox_path.exists()
+        assert node_b.local_config_path.exists()
+        assert not node_b.disabled_config_path.exists()
+
+        source_file = node_a.outbox_path / "recreate-inbox.txt"
+        source_file.write_text("payload")
+
+        daemon = JataiDaemon(registry_path=registry_path, pid_path=temp_home / ".jatai.pid")
+        daemon.startup_scan()
+
+        assert node_b.inbox_path.exists()
+        assert (node_b.inbox_path / "recreate-inbox.txt").exists()
+        assert node_b.local_config_path.exists()
+        assert not node_b.disabled_config_path.exists()
+
+    def test_daemon_continues_delivery_after_manual_outbox_recreation(self, temp_home):
+        registry_path = temp_home / ".jatai"
+        node_a = register_node(registry_path, "node_a", temp_home / "node_a")
+        node_b = register_node(registry_path, "node_b", temp_home / "node_b")
+
+        shutil.rmtree(node_a.outbox_path)
+        assert not node_a.outbox_path.exists()
+
+        node_a.outbox_path.mkdir(parents=True, exist_ok=True)
+        source_file = node_a.outbox_path / "recreated-outbox.txt"
+        source_file.write_text("payload")
+
+        daemon = JataiDaemon(registry_path=registry_path, pid_path=temp_home / ".jatai.pid")
+        daemon.startup_scan()
+
+        assert (node_b.inbox_path / "recreated-outbox.txt").exists()
+        assert (node_a.outbox_path / "_recreated-outbox.txt").exists()
 
     def test_daemon_load_active_nodes_applies_local_override(self, temp_home):
         registry_path = temp_home / ".jatai"
@@ -500,8 +539,20 @@ class TestDaemonExclusivity:
 class TestAutoStartRegistration:
     """Host auto-start registration tests."""
 
-    def test_linux_autostart_writes_systemd_service(self, temp_home):
-        registrar = AutoStartRegistrar(  # noqa: SIM117
+    def test_linux_autostart_writes_systemd_service(self, temp_home, monkeypatch):
+        """Verify that register() creates a systemd service file on Linux.
+
+        shutil.which and subprocess.run are mocked so this test is deterministic
+        on any host OS (macOS CI runners do not have systemctl).
+        """
+
+        class _Result:
+            returncode = 0
+
+        monkeypatch.setattr("jatai.core.autostart.shutil.which", lambda cmd: f"/usr/bin/{cmd}")
+        monkeypatch.setattr("jatai.core.autostart.subprocess.run", lambda *a, **kw: _Result())
+
+        registrar = AutoStartRegistrar(
             home_path=temp_home,
             platform_name="linux",
             python_executable="/usr/bin/python3",
@@ -516,7 +567,6 @@ class TestAutoStartRegistration:
 
     def test_linux_autostart_crontab_fallback_when_no_systemd(self, temp_home, monkeypatch):
         """When systemctl is unavailable, register() falls back to crontab @reboot (ADR-5.3)."""
-        import subprocess as _subprocess
         captured_input: list = []
 
         class _Result:
@@ -744,17 +794,18 @@ class TestDaemonLogging:
         assert configured_latest.exists() or configured_latest.is_symlink()
         assert configured_latest.resolve() == daemon.log_path.resolve()
 
-    def test_daemon_gc_delete_mode_uses_persisted_global_config(self, temp_home, monkeypatch):
+    def test_daemon_auto_gc_delete_mode_uses_persisted_global_config(self, temp_home, monkeypatch):
         registry_path = temp_home / ".jatai"
         node = register_node(registry_path, "node_a", temp_home / "node_a")
 
         registry = Registry(registry_path=registry_path)
         registry.load()
-        registry.set_config("GC_DELETE_MODE", "permanent")
+        registry.set_config("GC_AUTO_DELETE_MODE", "permanent")
         registry.save()
 
-        target = node.outbox_path / "_old.txt"
-        target.write_text("payload")
+        node.set_config("GC_MAX_SENT_FILES", 1)
+        (node.outbox_path / "_old.txt").write_text("payload")
+        (node.outbox_path / "_new.txt").write_text("payload")
 
         send2trash_calls = {"count": 0}
 
@@ -764,10 +815,36 @@ class TestDaemonLogging:
         monkeypatch.setattr("jatai.core.daemon.send2trash", fake_send2trash)
 
         daemon = JataiDaemon(registry_path=registry_path, pid_path=temp_home / ".jatai.pid")
-        daemon._delete_path(target)
+        daemon.startup_scan()
 
         assert send2trash_calls["count"] == 0
-        assert not target.exists()
+
+    def test_daemon_auto_gc_delete_mode_local_override_wins(self, temp_home, monkeypatch):
+        registry_path = temp_home / ".jatai"
+        node = register_node(registry_path, "node_a", temp_home / "node_a")
+
+        registry = Registry(registry_path=registry_path)
+        registry.load()
+        registry.set_config("GC_AUTO_DELETE_MODE", "permanent")
+        registry.save()
+
+        node.set_config("GC_AUTO_DELETE_MODE", "trash")
+        node.set_config("GC_MAX_SENT_FILES", 1)
+        (node.outbox_path / "_old.txt").write_text("payload")
+        (node.outbox_path / "_new.txt").write_text("payload")
+
+        send2trash_calls = {"count": 0}
+
+        def fake_send2trash(path):
+            send2trash_calls["count"] += 1
+            Path(path).unlink(missing_ok=True)
+
+        monkeypatch.setattr("jatai.core.daemon.send2trash", fake_send2trash)
+
+        daemon = JataiDaemon(registry_path=registry_path, pid_path=temp_home / ".jatai.pid")
+        daemon.startup_scan()
+
+        assert send2trash_calls["count"] >= 1
 
     def test_log_delivery_failed_per_destination(self, temp_home, monkeypatch):
         registry_path = temp_home / ".jatai"
@@ -1274,3 +1351,33 @@ class TestPhase7StateArchitecture:
             "UUID bkp fallback should allow prefix migration after cold restart"
         )
 
+
+class TestDaemonCoverageBump:
+    def test_daemon_stop_and_shutdown(self, temp_dir):
+        from jatai.core.daemon import JataiDaemon
+        from jatai.core.registry import Registry
+        
+        reg_path = temp_dir / "reg.yaml"
+        reg = Registry(registry_path=reg_path)
+        reg.save()
+        d = JataiDaemon(registry_path=reg_path)
+        
+        # Test stop sets flag
+        assert not d.stop_event.is_set()
+        d.stop()
+        assert d.stop_event.is_set()
+        
+        # Test shutdown watchdog
+        d.setup_watchdog()
+        assert d.observer is not None
+        d.shutdown_watchdog()
+        assert d.observer is None
+
+    def test_daemon_handle_shutdown_signal(self, temp_dir):
+        from jatai.core.daemon import JataiDaemon
+        from jatai.core.registry import Registry
+        reg = Registry(registry_path=temp_dir / "reg.yaml")
+        reg.save()
+        d = JataiDaemon(registry_path=temp_dir / "reg.yaml")
+        d._handle_shutdown_signal(15, None)
+        assert d.stop_event.is_set()

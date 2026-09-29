@@ -21,6 +21,7 @@ INBOX_DIR: INBOX
 OUTBOX_DIR: OUTBOX
 GC_MAX_READ_FILES: 0
 GC_MAX_SENT_FILES: 11
+GC_AUTO_DELETE_MODE: trash
 GC_DELETE_MODE: trash
 LATEST_LOG_PATH: ~/.jatai_latest.log
 
@@ -52,7 +53,8 @@ contents but continues watching the root for reactivation.
 | `OUTBOX_DIR` | `OUTBOX` | global / local | Subdirectory name or absolute path for the node's outgoing folder |
 | `GC_MAX_READ_FILES` | `0` | global / local | Maximum number of `_`-prefixed files to keep in INBOX. `0` keeps all read history |
 | `GC_MAX_SENT_FILES` | `11` | global / local | Maximum number of `_`-prefixed files to keep in OUTBOX before oldest sent history is trimmed |
-| `GC_DELETE_MODE` | `trash` | global / local | Deletion backend for GC: `trash` by default, or permanent delete when configured otherwise |
+| `GC_AUTO_DELETE_MODE` | `trash` | global / local | Deletion backend for periodic automatic GC (`startup scan` + delivery-cycle trims): `trash` by default, or permanent delete when configured otherwise |
+| `GC_DELETE_MODE` | `trash` | global / local | Deletion backend for manual `jatai clear`: `trash` by default, or permanent delete when configured otherwise |
 | `LATEST_LOG_PATH` | `~/.jatai_latest.log` | global | Location of the latest-log symlink/copy used by `jatai log` |
 
 ### Relative vs absolute paths for INBOX/OUTBOX
@@ -137,12 +139,14 @@ This prevents INBOX and OUTBOX from growing unbounded over time.
 
 - `GC_MAX_READ_FILES`: caps the number of `_`-prefixed files retained in INBOX.
 - `GC_MAX_SENT_FILES`: caps the number of `_`-prefixed files retained in OUTBOX.
+- `GC_AUTO_DELETE_MODE`: decides whether automatic GC moves files to trash (`trash`) or permanently deletes them (`permanent`).
 
 When the limit is exceeded, the oldest processed files (by modification time) are
 deleted automatically during the startup scan and on every delivery cycle.
 
 Set `GC_MAX_READ_FILES` to `0` to keep all read history. OUTBOX history keeps 11
-files by default unless `GC_MAX_SENT_FILES` is overridden.
+files by default unless `GC_MAX_SENT_FILES` is overridden. Automatic GC uses
+`GC_AUTO_DELETE_MODE=trash` by default.
 
 See [Garbage Collection](../operations/garbage-collection.md) for the full reference.
 

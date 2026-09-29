@@ -6,9 +6,9 @@ The prefix philosophy:
 - Ignore prefix (_): Ignore/delivered (OUTBOX); or read (INBOX). Jataí skips these files.
 - Error prefix (!_): Failed transfer, requires retry or manual intervention
 """
+from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, Optional
 
 
 class Prefix:
@@ -41,7 +41,7 @@ class Prefix:
         normalized = error_prefix.rstrip("_")
         return normalized or "!"
 
-    def state_prefixes(self) -> Dict[str, str]:
+    def state_prefixes(self) -> dict[str, str]:
         """Return the complete 5-state prefix matrix."""
         return {
             "ignore": self.success_prefix,
@@ -220,7 +220,7 @@ class Prefix:
         file_path: Path,
         old_prefix: str,
         new_prefix: str,
-    ) -> Optional[Path]:
+    ) -> Path | None:
         """
         Migrate a file from old prefix to new prefix (hot-swap).
 

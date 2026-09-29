@@ -4,8 +4,9 @@ Tests for jatai.core.prefix module.
 Coverage: Happy Path, Error/Failure Scenarios, Malicious/Adversarial Scenarios.
 """
 
+
 import pytest
-from pathlib import Path
+
 from jatai.core.prefix import Prefix
 
 
@@ -253,9 +254,9 @@ class TestPrefixErrorFailureScenarios:
 
     def test_prefix_get_state_nonexistent_file(self, temp_dir):
         """Test get_state with nonexistent file returns unknown."""
-        file_path = temp_dir / "nonexistent.txt"
+        temp_dir / "nonexistent.txt"
 
-        prefix = Prefix()
+        Prefix()
         # Should not raise, behavior depends on implementation
         # Current impl returns "unknown" for non-existent files
         # (implicitly, since file_path.name doesn't exist)

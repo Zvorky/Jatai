@@ -79,6 +79,18 @@ To inspect the retry state file directly:
 cat /tmp/jatai/retry.yaml
 ```
 
+## Missing INBOX/OUTBOX recovery
+
+INBOX and OUTBOX directory deletion does not soft-delete a node by itself.
+Only local config removal/rename (`.jatai` -> `._jatai` or missing `.jatai`) affects
+node enablement state.
+
+- If destination `INBOX` is missing while `.jatai` still exists, Jatai recreates it
+	when a new file is delivered.
+- If local `OUTBOX` is missing, `jatai send` recreates it before enqueueing the file.
+- If the user recreates `OUTBOX` manually and drops new files there, daemon delivery
+	continues normally.
+
 You can also inspect operational output using CLI commands:
 
 ```bash

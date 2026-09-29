@@ -1,13 +1,15 @@
 """
 Retry state management for exponential backoff delivery retries.
 """
+from __future__ import annotations
 
 import json
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from filelock import FileLock, Timeout
+
 from jatai.core.sysstate import SystemState
 
 
@@ -16,9 +18,9 @@ class RetryState:
 
     LOCK_TIMEOUT_SECONDS = 10
 
-    def __init__(self, retry_path: Optional[Path] = None) -> None:
+    def __init__(self, retry_path: Path | None = None) -> None:
         self.retry_path = Path(retry_path) if retry_path is not None else SystemState.BASE_PATH / "retry.yaml"
-        self.data: Dict[str, Dict[str, Any]] = {}
+        self.data: dict[str, dict[str, Any]] = {}
 
     @property
     def lock_path(self) -> Path:
@@ -58,13 +60,13 @@ class RetryState:
     def _key(file_path: Path) -> str:
         return str(Path(file_path).resolve())
 
-    def get_entry(self, file_path: Path) -> Optional[Dict[str, Any]]:
+    def get_entry(self, file_path: Path) -> dict[str, Any] | None:
         return self.data.get(self._key(file_path))
 
     def clear(self, file_path: Path) -> None:
         self.data.pop(self._key(file_path), None)
 
-    def is_due(self, file_path: Path, now: Optional[float] = None) -> bool:
+    def is_due(self, file_path: Path, now: float | None = None) -> bool:
         entry = self.get_entry(file_path)
         if not entry:
             return False
@@ -74,12 +76,12 @@ class RetryState:
     def register_failure(
         self,
         file_path: Path,
-        failed_nodes: List[str],
+        failed_nodes: list[str],
         retry_delay_base: int,
         max_retries: int,
         partial_failure: bool,
-        now: Optional[float] = None,
-    ) -> Dict[str, Any]:
+        now: float | None = None,
+    ) -> dict[str, Any]:
         """Register a failed attempt and return scheduling/result metadata."""
         current_time = time.time() if now is None else now
         key = self._key(file_path)
@@ -91,7 +93,7 @@ class RetryState:
         # Fatal state is reached only after exceeding MAX_RETRIES.
         is_fatal = next_index > int(max_retries)
 
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "retry_index": next_index,
             "failed_nodes": list(failed_nodes),
             "partial_failure": bool(partial_failure),

@@ -1,7 +1,7 @@
 # **Jataí 🐝**
 **The local micro-email and messaging bus for your file system. Connect scripts and AI agents instantly using a zero-config drop-folder pattern. Jataí uses OS file events to route data across directories via standardized INBOX/OUTBOX folders, without complex APIs or sockets. Drop a file, and it's delivered!**
 
-**Version:** `0.7.3` (_Alpha_) · **Author:** Zvorky
+**Version:** `0.8.17` (_Alpha_) · **Author:** Zvorky
 
 ## **🎯 Philosophy & Goal**
 
@@ -51,6 +51,7 @@ Current implementation status: core modules, basic CLI, daemon lifecycle, startu
 10. **Onboarding and docs already implemented in core/CLI:** `jatai init` drops `!helloworld.md` in the node INBOX, `jatai docs` renders documentation in terminal by default, and `jatai docs [query]` renders matching markdown docs in terminal by default (`-i|--inbox` exports to files).
 11. **Manual local-config deletion safety:** If `.jatai` is manually deleted from an existing registered node directory, the daemon will record the node as auto-removed in `/tmp/jatai/removed.yaml` (appending ` --autoremoved` to the stored path) and will NOT recreate `._jatai`, `.jatai`, `INBOX`, or `OUTBOX` automatically. The `._jatai` soft-delete marker is only created by explicit CLI/TUI removal actions (for example `jatai remove`, which performs `.jatai` → `._jatai`).
 12. **First-run interactive bootstrap:** Opening the TUI (`jatai` with no args in interactive terminal) creates `~/.jatai` with default settings if it does not exist yet.
+13. **Directory deletion resilience:** Deleting `INBOX` or `OUTBOX` does not soft-delete the node while `.jatai` still exists. `INBOX` is recreated when new deliveries arrive, and `OUTBOX` is recreated when enqueueing files (CLI `send`) or when recreated manually before new file drops.
 
 ## **🛠️ CLI & TUI Toolbox**
 
@@ -67,9 +68,9 @@ Current implementation status: core modules, basic CLI, daemon lifecycle, startu
 | `jatai send <file> [-m\|--move]` | Copies (or moves) an external file into the local OUTBOX. |
 | `jatai read <file>` | Renames a file in the INBOX, adding the success prefix. |
 | `jatai unread <file>` | Removes the success prefix from a file in the INBOX. |
-| `jatai remove [path]` | Disables the node (current dir by default). Safeguarded against global origin. |
-| `jatai clear [-r\|--read] [-s\|--sent]` | Clears processed files (`_`) in INBOX/OUTBOX (both by default). |
-| `jatai cleanup --full [--dry-run] [--remove-logs] [-y\|--yes]` | Optional uninstall helper: removes local/global config artifacts and `/tmp/jatai` control state while preserving INBOX/OUTBOX contents (logs kept unless `--remove-logs`). |
+| `jatai remove [path]` | Disables the node via soft-delete (`.jatai` -> `._jatai`) and prints a warning clarifying it is reversible. |
+| `jatai clear [-r\|--read] [-s\|--sent] [-y\|--yes]` | Clears processed files (`_`) in INBOX/OUTBOX (both by default), asks for confirmation by default, and prints whether files go to OS Trash (`GC_DELETE_MODE=trash`) or are permanently deleted. |
+| `jatai cleanup --full [--dry-run] [--remove-logs] [-y\|--yes]` | Optional uninstall helper: permanently removes local/global config artifacts and `/tmp/jatai` control state while preserving INBOX/OUTBOX contents (logs kept unless `--remove-logs`), with explicit warning/dry-run notice. |
 | `jatai log` | Prints the latest log content in terminal (use `-i\|--inbox` to export). |
 | `jatai log -a\|--all` | Prints the complete log output in terminal (use `-i\|--inbox` to export). |
 | `jatai docs [query]` | Prints matching documentation in terminal by default (use `-i\|--inbox` to export file(s)). |

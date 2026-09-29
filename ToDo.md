@@ -87,6 +87,10 @@ Refining the internal engines for long-term disk safety and observability.
 	- Related: [ADR-12], [REQ-6.2], [REQ-6.3], [REQ-9.3], [REQ-9.4]
 - [x] [BUGFIX] Align retry defaults, README, and user-facing docs with `/tmp/jatai/retry.yaml` and current filesystem-first behavior.
 	- Related: [ADR-4], [ADR-12], [REQ-3.5.8], [REQ-6], [REQ-8], [REQ-9]
+- [x] [BUGFIX] Add explicit removal warnings in CLI/TUI (`remove`, `clear`, `cleanup`) and align `clear` behavior with `GC_DELETE_MODE` (`trash` vs permanent).
+	- Related: [ADR-7], [ADR-14], [REQ-3.7.3.2], [REQ-9.10]
+- [x] [BUGFIX] Separate automatic GC deletion policy into `GC_AUTO_DELETE_MODE` (default `trash`) with local `.jatai` override support, keeping `clear` policy independent.
+	- Related: [ADR-16], [REQ-3.7.3.2], [REQ-3.7.3.4]
 
 ---
 
@@ -94,11 +98,42 @@ Refining the internal engines for long-term disk safety and observability.
 Architectural discussions and network expansions.
 
 - [x] Implement OS Auto-Start fallbacks (e.g., `crontab @reboot` for Alpine/minimal Linux) and native compatibility for Windows/macOS.
-- [ ] **[ARCH]** Define detailed TUI Navigation rules (separating INBOX/OUTBOX views, webapp layout mirroring).
-- [ ] **[ARCH]** Define the Prefix Customization Schema (how users will change `_`, `!`, etc., in the `.jatai` file).
-- [ ] **[ARCH]** Define directory structure logic for Smart Routing & Topics.
-- [ ] **[ARCH]** Design the Node Addressing protocol (ID generation based on the existing UUID map for direct resolution).
-- [ ] **[ARCH]** Design payload structures and UI for the Built-in Chat Application.
-- [ ] Implement Built-in Chat Application using INBOX/OUTBOX for transport.
-- [ ] Implement Jataí Over Internet (IP/Port exposition).
-- [ ] Implement Global P2P & SaaS (Addressing providers).
+- [x] **[ARCH]** Define detailed TUI Navigation rules (separating INBOX/OUTBOX views, webapp layout mirroring).
+- [x] **[ARCH]** Define the Prefix Customization Schema (how users will change `_`, `!`, etc., in the `.jatai` file).
+- [x] **[ARCH]** Define directory structure logic for Smart Routing & Topics.
+- [x] **[ARCH]** Design the Node Addressing protocol (ID generation based on the existing UUID map for direct resolution).
+- [x] **[ARCH]** Design payload structures and UI for the Built-in Chat Application.
+- [x] Reintroduce TUI "Browse Nodes" to restore interactive node switching across registered addresses.
+	- Related: [ADR-14.1.7], [REQ-9.11]
+- [x] Implement Built-in Chat Application using INBOX/OUTBOX for transport.
+- [x] Implement Jataí Over Internet (IP/Port exposition).
+- [x] Implement Global P2P & SaaS (Addressing providers).
+## **Phase 8: Quality Engineering, CI/CD & Automated Governance (QA Audit)**
+
+Implementation of quality gates, automated testing pipelines, and architectural resilience based on the QA diagnosis.
+
+### **P0: CI/CD Pipeline & Quality Gates (Immediate)**
+- [x] Create `.github/workflows/ci.yml` running on push and PRs for `main` and `dev`.
+- [x] Configure multi-platform matrix in CI: Linux (`ubuntu-latest`), macOS (`macos-latest`), Windows (`windows-latest`).
+- [x] Configure Python version matrix in CI: 3.10, 3.11, 3.12.
+- [x] Add static analysis and linting step (`ruff check src/ tests/`).
+- [x] Add static type checking step (`mypy src/`).
+- [x] Configure automated test runner step (`pytest -v --strict-markers`).
+- [x] Configure branch protection rules requiring passing CI checks before merging into `dev` or `main`.
+
+### **P1: Test Precision, Integrity & Mutation Testing (Short-Term)**
+- [x] Configure `pytest-cov` in `pytest.ini` with minimum test coverage threshold (fail-under = 85%).
+- [x] Implement SHA-256 cryptographic verification in `test_delivery.py` to ensure byte-level copy integrity during atomic delivery.
+- [x] Add unit tests for `GC_AUTO_DELETE_MODE` (`trash` vs `purge` and OS trash fallback) validating ADR-16.
+- [x] Set up mutation testing framework (`mutmut`) focused on core routing (`src/jatai/core/delivery.py`, `gc.py`, `node.py`).
+- [x] Eliminate surviving mutants by replacing shallow assertions (`assert path.exists()`) with deep behavioral assertions.
+
+### **P2: Concurrency, Stress & Cross-Platform Resilience (Medium-Term)**
+- [x] Create `tests/test_concurrency.py` simulating 500+ concurrent file drops across multiple threads/processes.
+- [x] Test and validate atomic renaming edge cases under high filesystem load.
+- [x] Implement and test Windows-specific file locking behavior and retry resilience.
+
+### **P3: Documentation Quality Assurance & Linting (Ongoing)**
+- [x] Implement markdown linter and broken link checker in CI for `docs/` and `README.md`.
+- [x] Automate CLI snippet and example verification (doctests) to keep docs synchronized with code updates.
+- [x] Add Mermaid sequence diagrams in `docs/operations/` illustrating prefix state transitions and recovery flows.

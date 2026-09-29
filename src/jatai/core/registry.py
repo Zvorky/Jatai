@@ -1,11 +1,14 @@
 """
 Registry module: Manages the global ~/.jatai file containing all registered node paths.
 """
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
 
 import yaml
 from filelock import FileLock, Timeout
-from pathlib import Path
-from typing import Dict, Optional, Any
+
 from jatai.core.sysstate import SystemState
 
 
@@ -23,11 +26,12 @@ class Registry:
         "OUTBOX_DIR": "OUTBOX",
         "GC_MAX_READ_FILES": 0,
         "GC_MAX_SENT_FILES": 11,
+        "GC_AUTO_DELETE_MODE": "trash",
         "GC_DELETE_MODE": "trash",
         "LATEST_LOG_PATH": "~/.jatai_latest.log",
     }
 
-    def __init__(self, registry_path: Optional[Path] = None):
+    def __init__(self, registry_path: Path | None = None):
         """
         Initialize Registry with custom or default location.
 
@@ -39,8 +43,8 @@ class Registry:
         else:
             self.registry_path = Path(registry_path)
 
-        self.nodes: Dict[str, Dict[str, Any]] = {}
-        self.global_config: Dict[str, Any] = self.DEFAULT_CONFIG.copy()
+        self.nodes: dict[str, dict[str, Any]] = {}
+        self.global_config: dict[str, Any] = self.DEFAULT_CONFIG.copy()
 
     @property
     def lock_path(self) -> Path:
@@ -113,7 +117,7 @@ class Registry:
         except Timeout as e:
             raise TimeoutError(f"Registry lock timeout for {self.registry_path}: {e}")
 
-    def add_node(self, node_name: str, node_path: str, config: Optional[Dict[str, Any]] = None) -> None:
+    def add_node(self, node_name: str, node_path: str, config: dict[str, Any] | None = None) -> None:
         """
         Add a node to the registry.
 
@@ -122,12 +126,12 @@ class Registry:
             node_path: Absolute path to the node directory
             config: Optional node-specific configuration
         """
-        node_config: Dict[str, Any] = {"path": str(Path(node_path).resolve())}
+        node_config: dict[str, Any] = {"path": str(Path(node_path).resolve())}
         if config:
             node_config.update(config)
         self.nodes[node_name] = node_config
 
-    def get_node(self, node_name: str) -> Optional[Dict[str, Any]]:
+    def get_node(self, node_name: str) -> dict[str, Any] | None:
         """
         Get node configuration by name.
 
@@ -139,7 +143,7 @@ class Registry:
         """
         return self.nodes.get(node_name)
 
-    def list_nodes(self) -> Dict[str, str]:
+    def list_nodes(self) -> dict[str, str]:
         """
         List all registered nodes with their paths.
 
@@ -163,7 +167,7 @@ class Registry:
             return True
         return False
 
-    def get_config(self, key: str, node_name: Optional[str] = None) -> Any:
+    def get_config(self, key: str, node_name: str | None = None) -> Any:
         """
         Get configuration value (respects local > global priority).
 
@@ -181,7 +185,7 @@ class Registry:
 
         return self.global_config.get(key)
 
-    def set_config(self, key: str, value: Any, node_name: Optional[str] = None) -> None:
+    def set_config(self, key: str, value: Any, node_name: str | None = None) -> None:
         """
         Set configuration value (globally or for a specific node).
 
@@ -198,7 +202,7 @@ class Registry:
             self.global_config[key] = value
 
     @classmethod
-    def ensure_initialized(cls, registry_path: Optional[Path] = None) -> bool:
+    def ensure_initialized(cls, registry_path: Path | None = None) -> bool:
         """
         Create the global registry file with defaults if it does not exist yet.
 

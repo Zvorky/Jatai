@@ -4,8 +4,11 @@ Tests for jatai.core.delivery module.
 Coverage: Happy Path, Error/Failure Scenarios, Malicious/Adversarial Scenarios.
 """
 
-import pytest
+import hashlib
 from pathlib import Path
+
+import pytest
+
 from jatai.core.delivery import Delivery
 
 
@@ -26,9 +29,11 @@ class TestDeliveryHappyPath:
     def test_delivery_deliver_creates_tmp_and_renames(self, temp_dir):
         """Test that deliver creates .tmp file then renames it."""
         source = temp_dir / "source.txt"
-        source.write_text("test content")
+        source.write_bytes(b"test content")
         dest_dir = temp_dir / "dest"
         dest_dir.mkdir()
+
+        original_hash = hashlib.sha256(source.read_bytes()).hexdigest()
 
         delivery = Delivery(source, dest_dir)
         result = delivery.deliver()
@@ -36,7 +41,11 @@ class TestDeliveryHappyPath:
         # Check that final file exists
         assert result.exists()
         assert result.name == "source.txt"
-        assert result.read_text() == "test content"
+        assert result.read_bytes() == b"test content"
+        
+        # Verify SHA-256 integrity
+        delivered_hash = hashlib.sha256(result.read_bytes()).hexdigest()
+        assert original_hash == delivered_hash
 
         # Check that .tmp file doesn't exist
         tmp_file = dest_dir / "source.txt.tmp"
@@ -44,7 +53,6 @@ class TestDeliveryHappyPath:
 
     def test_delivery_deliver_preserves_metadata(self, temp_dir):
         """Test that deliver preserves file metadata (shutil.copy2)."""
-        import time
 
         source = temp_dir / "source.txt"
         source.write_text("content")
@@ -174,7 +182,7 @@ class TestDeliveryErrorFailureScenarios:
         dest_dir = temp_dir / "dest"
         dest_dir.mkdir()
 
-        delivery = Delivery(source, dest_dir)
+        Delivery(source, dest_dir)
 
         # Delete destination during operation
         # Note: This is hard to simulate without threading, so we'll skip
@@ -287,7 +295,7 @@ class TestDeliveryMaliciousAdversarialScenarios:
         # Make dest_dir read-only after mkdir to simulate permission error during rename
         # Note: Hard to simulate without mocking - this is a theoretical case
         delivery = Delivery(source, dest_dir)
-        result = delivery.deliver()
+        delivery.deliver()
 
         # Verify .tmp file doesn't leak
         tmp_file = dest_dir / "source.txt.tmp"
@@ -322,3 +330,63 @@ class TestDeliveryMaliciousAdversarialScenarios:
 
         assert result.exists()
         assert len(result.name) == len(long_name)
+
+    def test_delivery_filename_without_extension(self, temp_dir):
+        """Test delivery with a file that has no extension (covers no-suffix branch)."""
+        source = temp_dir / "noextfile"
+        source.write_text("content")
+
+        dest_dir = temp_dir / "dest"
+        dest_dir.mkdir()
+
+        delivery = Delivery(source, dest_dir)
+        result = delivery.deliver()
+
+        assert result.exists()
+        assert result.name == "noextfile"
+
+    def test_delivery_collision_resolution_deep(self, temp_dir):
+        """Test collision resolution when index must go beyond 1 (covers line 37 in the loop)."""
+        source = temp_dir / "file.txt"
+        source.write_text("original")
+
+        dest_dir = temp_dir / "dest"
+        dest_dir.mkdir()
+
+        # Pre-create collision candidates: file.txt, file (1).txt, file (2).txt
+        (dest_dir / "file.txt").write_text("existing")
+        (dest_dir / "file (1).txt").write_text("existing1")
+        (dest_dir / "file (2).txt").write_text("existing2")
+
+        delivery = Delivery(source, dest_dir)
+        result = delivery.deliver()
+
+        assert result.exists()
+        assert result.name == "file (3).txt"
+
+    def test_delivery_oserror_during_copy_cleans_tmp(self, temp_dir, monkeypatch):
+        """Test that OSError during copy triggers tmp file cleanup (covers lines 85-92)."""
+        import shutil as _shutil
+
+        source = temp_dir / "source.txt"
+        source.write_text("content")
+        dest_dir = temp_dir / "dest"
+        dest_dir.mkdir()
+
+        delivery = Delivery(source, dest_dir)
+
+        original_copy2 = _shutil.copy2
+
+        def failing_copy2(src, dst, **kwargs):
+            # Partially create the tmp file, then raise
+            Path(dst).write_text("partial")
+            raise OSError("Simulated copy failure")
+
+        monkeypatch.setattr("jatai.core.delivery.shutil.copy2", failing_copy2)
+
+        with pytest.raises(OSError, match="Delivery failed"):
+            delivery.deliver()
+
+        # Verify that the tmp file was cleaned up
+        tmp_file = dest_dir / "source.txt.tmp"
+        assert not tmp_file.exists()

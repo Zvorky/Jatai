@@ -1,30 +1,32 @@
 """
 Background daemon, startup scan, and watchdog integration for Jataí.
 """
+from __future__ import annotations
 
 import logging
 import os
+import shutil
 import signal
 import threading
-import shutil
-import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any
 
+import yaml
 from filelock import FileLock, Timeout
-from watchdog.events import FileCreatedEvent, FileMovedEvent, FileSystemEventHandler
+from send2trash import send2trash
+from watchdog.events import (
+    FileSystemEvent,
+    FileSystemEventHandler,
+)
 from watchdog.observers import Observer
 
-from send2trash import send2trash
 from jatai.core.delivery import Delivery
 from jatai.core.node import Node
 from jatai.core.prefix import Prefix
 from jatai.core.registry import Registry
 from jatai.core.retry import RetryState
 from jatai.core.sysstate import SystemState
-import yaml
-import re
 
 
 class AlreadyRunningError(RuntimeError):
@@ -34,16 +36,16 @@ class AlreadyRunningError(RuntimeError):
 class JataiWatchdogHandler(FileSystemEventHandler):
     """Handle OUTBOX file events and route them through the daemon."""
 
-    def __init__(self, daemon: "JataiDaemon", source_node_path: Path) -> None:
+    def __init__(self, daemon: JataiDaemon, source_node_path: Path) -> None:
         self.daemon = daemon
         self.source_node_path = Path(source_node_path).resolve()
 
-    def on_created(self, event: FileCreatedEvent) -> None:
+    def on_created(self, event: FileSystemEvent) -> None:
         if event.is_directory:
             return
         self.daemon.process_outbox_candidate(Path(event.src_path), self.source_node_path)
 
-    def on_moved(self, event: FileMovedEvent) -> None:
+    def on_moved(self, event: FileSystemEvent) -> None:
         if event.is_directory:
             return
         self.daemon.process_outbox_candidate(Path(event.dest_path), self.source_node_path)
@@ -54,29 +56,29 @@ class JataiNodeConfigHandler(FileSystemEventHandler):
 
     CONFIG_FILENAMES = {Node.LOCAL_CONFIG_FILENAME, Node.LOCAL_CONFIG_DISABLED}
 
-    def __init__(self, daemon: "JataiDaemon", node_path: Path) -> None:
+    def __init__(self, daemon: JataiDaemon, node_path: Path) -> None:
         self.daemon = daemon
         self.node_path = Path(node_path).resolve()
 
-    def on_created(self, event: FileCreatedEvent) -> None:
-        if event.is_directory:
-            return
-        self._handle_path(Path(event.src_path))
+    def on_created(self, event: FileSystemEvent) -> None:
+        self._handle_path(Path(event.src_path), event.is_directory)
 
     def on_modified(self, event) -> None:
         if event.is_directory:
             return
-        self._handle_path(Path(event.src_path))
+        self._handle_path(Path(event.src_path), False)
 
-    def on_moved(self, event: FileMovedEvent) -> None:
-        if event.is_directory:
-            return
-        self._handle_path(Path(event.src_path))
-        self._handle_path(Path(event.dest_path))
+    def on_moved(self, event: FileSystemEvent) -> None:
+        self._handle_path(Path(event.src_path), event.is_directory)
+        self._handle_path(Path(event.dest_path), event.is_directory)
 
-    def _handle_path(self, path: Path) -> None:
+    def _handle_path(self, path: Path, is_directory: bool) -> None:
         if path.name in self.CONFIG_FILENAMES:
             self.daemon.handle_node_config_change(self.node_path)
+            return
+
+        if is_directory:
+            self.daemon.handle_node_directory_change(self.node_path, path)
 
 
 class JataiDaemon:
@@ -90,7 +92,7 @@ class JataiDaemon:
     GC_DEFAULT_SENT = 11
     GC_DEFAULT_MODE = "trash"
 
-    def _load_global_config(self) -> Dict[str, object]:
+    def _load_global_config(self) -> dict[str, object]:
         registry = Registry(self.registry_path)
         try:
             registry.load()
@@ -100,10 +102,10 @@ class JataiDaemon:
 
     def __init__(
         self,
-        registry_path: Optional[Path] = None,
-        pid_path: Optional[Path] = None,
-        retry_path: Optional[Path] = None,
-        log_path: Optional[Path] = None,
+        registry_path: Path | None = None,
+        pid_path: Path | None = None,
+        retry_path: Path | None = None,
+        log_path: Path | None = None,
         observer_factory=Observer,
     ) -> None:
         self.registry_path = Path(registry_path) if registry_path is not None else Path.home() / ".jatai"
@@ -111,12 +113,12 @@ class JataiDaemon:
         self.retry_path = Path(retry_path) if retry_path is not None else SystemState.BASE_PATH / "retry.yaml"
         SystemState.ensure_base()
         global_config = self._load_global_config()
-        self.log_path = Path(log_path) if log_path is not None else SystemState.BASE_PATH / "logs" / f"jatai_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.log"
+        self.log_path = Path(log_path) if log_path is not None else SystemState.BASE_PATH / "logs" / f"jatai_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.log"
         self.latest_log_path = Path(os.path.expanduser(str(global_config.get("LATEST_LOG_PATH", "~/.jatai_latest.log")))).expanduser()
         self.observer_factory = observer_factory
         self.stop_event = threading.Event()
-        self.observer: Optional[Observer] = None
-        self.node_config_cache: Dict[Path, Dict[str, object]] = {}
+        self.observer: Any = None
+        self.node_config_cache: dict[Path, dict[str, object]] = {}
         self.retry_state = RetryState(self.retry_path)
         self.logger = self._build_logger(self.log_path)
 
@@ -163,8 +165,8 @@ class JataiDaemon:
 
     def _drop_helloworld(self, node: Node) -> None:
         """Drop !helloworld.md in node INBOX for newly onboarded nodes, reading from docs/helloworld.md."""
-        from pathlib import Path
         import shutil
+        from pathlib import Path
         docs_root = Path(__file__).resolve().parents[3] / "docs"
         source = docs_root / "helloworld.md"
         inbox = node.inbox_path
@@ -176,15 +178,15 @@ class JataiDaemon:
             shutil.copy2(source, hello_path)
         else:
             hello_path.write_text(
-                f"# Welcome to Jatai\n\n(helloworld.md missing in docs/)\nGenerated at: {datetime.now(timezone.utc).isoformat()}\n",
+                f"# Welcome to Jatai\n\n(helloworld.md missing in docs/)\nGenerated at: {datetime.now(UTC).isoformat()}\n",
                 encoding="utf-8",
             )
 
     def _ensure_node_onboarded(
         self,
         node: Node,
-        node_data: Dict[str, object],
-        global_config: Dict[str, object],
+        node_data: dict[str, object],
+        global_config: dict[str, object],
     ) -> None:
         effective = dict(global_config)
         for key in (
@@ -243,7 +245,7 @@ class JataiDaemon:
         self.pid_path.parent.mkdir(parents=True, exist_ok=True)
         return FileLock(str(self.pid_lock_path), timeout=self.LOCK_TIMEOUT_SECONDS)
 
-    def read_pid(self) -> Optional[int]:
+    def read_pid(self) -> int | None:
         if not self.pid_path.exists():
             return None
         content = self.pid_path.read_text(encoding="utf-8").strip()
@@ -290,9 +292,9 @@ class JataiDaemon:
     def _handle_shutdown_signal(self, signum: int, frame) -> None:
         self.stop_event.set()
 
-    def load_registered_nodes(self) -> List[Node]:
+    def load_registered_nodes(self) -> list[Node]:
         registry = self._load_registry()
-        nodes: List[Node] = []
+        nodes: list[Node] = []
         for node_data in registry.nodes.values():
             node = Node(Path(node_data["path"]))
             try:
@@ -312,8 +314,8 @@ class JataiDaemon:
             nodes.append(node)
         return nodes
 
-    def load_active_nodes(self) -> List[Node]:
-        nodes: List[Node] = []
+    def load_active_nodes(self) -> list[Node]:
+        nodes: list[Node] = []
         for node in self.load_registered_nodes():
             if node.is_disabled() or not node.is_enabled():
                 continue
@@ -420,7 +422,7 @@ class JataiDaemon:
                 pass
 
         if previous_config:
-            prefix_keys_changed = any(
+            any(
                 previous_config.get(key) != node.local_config.get(key)
                 for key in Node.PREFIX_KEYS
             )
@@ -455,7 +457,28 @@ class JataiDaemon:
 
         self._refresh_observer_watches()
 
-    def process_outbox_candidate(self, file_path: Path, source_node_path: Optional[Path] = None) -> None:
+    def handle_node_directory_change(self, node_path: Path, changed_path: Path) -> None:
+        """Refresh watches when configured node directories are recreated."""
+        try:
+            registry = self._load_registry()
+        except FileNotFoundError:
+            return
+
+        node = Node(node_path)
+        try:
+            node.load_any_config()
+        except FileNotFoundError:
+            return
+
+        node.apply_effective_config(registry.global_config)
+        resolved_changed = Path(changed_path).resolve()
+        if resolved_changed not in {node.inbox_path.resolve(), node.outbox_path.resolve()}:
+            return
+
+        self.logger.info("Node directory recreated node=%s path=%s", node_path, resolved_changed)
+        self._refresh_observer_watches()
+
+    def process_outbox_candidate(self, file_path: Path, source_node_path: Path | None = None) -> None:
         if not file_path.exists() or not file_path.is_file():
             return
 
@@ -479,9 +502,9 @@ class JataiDaemon:
     def _find_source_node(
         self,
         file_path: Path,
-        nodes: List[Node],
-        source_node_path: Optional[Path] = None,
-    ) -> Optional[Node]:
+        nodes: list[Node],
+        source_node_path: Path | None = None,
+    ) -> Node | None:
         if source_node_path is not None:
             resolved = Path(source_node_path).resolve()
             for node in nodes:
@@ -496,14 +519,15 @@ class JataiDaemon:
         self,
         source_node: Node,
         source_file: Path,
-        nodes: List[Node],
-    ) -> Tuple[int, List[str]]:
+        nodes: list[Node],
+    ) -> tuple[int, list[str]]:
         delivered_count = 0
-        failed_nodes: List[str] = []
+        failed_nodes: list[str] = []
         for destination_node in nodes:
             if destination_node.node_path == source_node.node_path:
                 continue
             try:
+                destination_node.inbox_path.mkdir(parents=True, exist_ok=True)
                 Delivery(source_file, destination_node.inbox_path).deliver()
                 delivered_count += 1
             except Exception as exc:
@@ -523,7 +547,7 @@ class JataiDaemon:
         canonical_retry_path: Path,
         total_targets: int,
         delivered_count: int,
-        failed_nodes: List[str],
+        failed_nodes: list[str],
     ) -> bool:
         prefix = Prefix(
             success_prefix=str(source_node.get_config("PREFIX_IGNORE", "_")),
@@ -575,7 +599,7 @@ class JataiDaemon:
         )
         return False
 
-    def broadcast_file(self, source_node: Node, source_file: Path, nodes: List[Node]) -> bool:
+    def broadcast_file(self, source_node: Node, source_file: Path, nodes: list[Node]) -> bool:
         prefix = Prefix(
             success_prefix=str(source_node.get_config("PREFIX_IGNORE", "_")),
             error_prefix=str(source_node.get_config("PREFIX_ERROR", "!_")),
@@ -603,7 +627,7 @@ class JataiDaemon:
             self._run_auto_gc_for_node(node)
         self.logger.info("Startup scan complete")
 
-    def _delete_path(self, path: Path, mode: Optional[str] = None) -> None:
+    def _delete_path(self, path: Path, mode: str | None = None) -> None:
         if mode is None:
             mode = str(self._load_global_config().get("GC_DELETE_MODE", self.GC_DEFAULT_MODE))
 
@@ -615,7 +639,13 @@ class JataiDaemon:
                 pass
         path.unlink(missing_ok=True)
 
-    def _trim_processed_history(self, files: List[Path], success_prefix: str, max_files: int) -> int:
+    def _trim_processed_history(
+        self,
+        files: list[Path],
+        success_prefix: str,
+        max_files: int,
+        delete_mode: str,
+    ) -> int:
         if max_files <= 0:
             return 0
 
@@ -629,7 +659,7 @@ class JataiDaemon:
 
         removed = 0
         for file_path in processed_files[:excess]:
-            self._delete_path(file_path)
+            self._delete_path(file_path, mode=delete_mode)
             removed += 1
         return removed
 
@@ -637,19 +667,25 @@ class JataiDaemon:
         success_prefix = str(node.get_config("PREFIX_IGNORE", "_"))
         max_read = int(node.get_config("GC_MAX_READ_FILES", 0) or 0)
         max_sent = int(node.get_config("GC_MAX_SENT_FILES", 0) or 0)
+        delete_mode = str(node.get_config("GC_AUTO_DELETE_MODE", self.GC_DEFAULT_MODE))
 
-        removed_read = self._trim_processed_history(node.list_inbox(), success_prefix, max_read)
-        removed_sent = self._trim_processed_history(node.list_outbox(), success_prefix, max_sent)
+        removed_read = self._trim_processed_history(
+            node.list_inbox(), success_prefix, max_read, delete_mode
+        )
+        removed_sent = self._trim_processed_history(
+            node.list_outbox(), success_prefix, max_sent, delete_mode
+        )
 
         if removed_read or removed_sent:
             self.logger.info(
-                "Auto-GC removed node=%s inbox=%s outbox=%s",
+                "Auto-GC removed node=%s inbox=%s outbox=%s delete_mode=%s",
                 node.node_path,
                 removed_read,
                 removed_sent,
+                delete_mode,
             )
 
-    def process_pending_outbox(self, node: Node, nodes: List[Node]) -> None:
+    def process_pending_outbox(self, node: Node, nodes: list[Node]) -> None:
         prefix = Prefix(
             success_prefix=str(node.get_config("PREFIX_IGNORE", "_")),
             error_prefix=str(node.get_config("PREFIX_ERROR", "!_")),

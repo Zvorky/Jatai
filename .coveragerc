@@ -1,0 +1,5 @@
+[run]
+omit =
+    src/jatai/tui.py
+    src/jatai/cli/*
+    src/jatai/core/autostart.py

@@ -1,0 +1,13 @@
+default: true
+MD013: false # line-length
+MD004: false # unordered-list-style
+MD049: false # emphasis-style
+MD060: false # table-column-style
+MD038: false # no-space-in-code
+MD010: false # no-hard-tabs
+MD040: false # fenced-code-language
+MD031: false # blanks-around-fences
+MD012: false # no-multiple-blanks
+MD022: false # blanks-around-headings
+MD032: false # blanks-around-lists
+MD029: false # ol-prefix

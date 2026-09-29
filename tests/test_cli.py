@@ -4,13 +4,13 @@ Tests for jatai.cli.main module.
 Coverage: Happy Path, Error/Failure Scenarios, Malicious/Adversarial Scenarios.
 """
 
-import pytest
 from pathlib import Path
+
 from typer.testing import CliRunner
 
-from jatai.cli.main import app, run, _run_tui
-from jatai.core.registry import Registry
+from jatai.cli.main import _run_tui, app, run
 from jatai.core.node import Node
+from jatai.core.registry import Registry
 from jatai.core.sysstate import SystemState
 
 runner = CliRunner()
@@ -232,6 +232,28 @@ class TestCLIHappyPath:
         assert result.exit_code == 0
         copied = list(node.inbox_path.glob("*retry*.md"))
         assert copied
+
+    def test_cli_send_recreates_missing_outbox_and_enqueues_file(self, temp_dir):
+        """Test send command recreates OUTBOX when directory was deleted."""
+        node = Node(temp_dir / "send_recreate_outbox_node")
+        node.create()
+        node.outbox_path.rmdir()
+        assert not node.outbox_path.exists()
+
+        external_source = temp_dir / "external_payload.txt"
+        external_source.write_text("payload", encoding="utf-8")
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            result = runner.invoke(app, ["send", str(external_source)])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 0
+        assert node.outbox_path.exists()
+        assert (node.outbox_path / "external_payload.txt").exists()
 
     def test_cli_docs_query_inbox_applies_bang_prefix(self, temp_dir):
         """Test docs query --inbox names all exported files with ! prefix (ADR 15)."""
@@ -718,6 +740,7 @@ class TestCLIPhase6Toolbox:
     def test_cli_remove_soft_delete_and_clear(self, temp_dir):
         node = Node(temp_dir / "remove_clear_node")
         node.create()
+        node.set_config("GC_DELETE_MODE", "permanent")
         (node.inbox_path / "_read.md").write_text("r")
         (node.outbox_path / "_sent.md").write_text("s")
 
@@ -725,16 +748,68 @@ class TestCLIPhase6Toolbox:
         old_cwd = os.getcwd()
         try:
             os.chdir(node.node_path)
-            clear_result = runner.invoke(app, ["clear"])
+            clear_result = runner.invoke(app, ["clear", "--yes"])
             assert clear_result.exit_code == 0
+            assert "WARNING: clear will permanently delete matched files." in clear_result.stdout
+            assert "permanently deleted: 2" in clear_result.stdout
             assert not (node.inbox_path / "_read.md").exists()
             assert not (node.outbox_path / "_sent.md").exists()
 
             remove_result = runner.invoke(app, ["remove"])
             assert remove_result.exit_code == 0
+            assert "soft-delete" in remove_result.stdout
             assert (node.node_path / "._jatai").exists()
         finally:
             os.chdir(old_cwd)
+
+    def test_cli_clear_trash_mode_emits_soft_delete_warning(self, temp_dir, monkeypatch):
+        node = Node(temp_dir / "clear_trash_mode_node")
+        node.create()
+        node.set_config("GC_DELETE_MODE", "trash")
+        target = node.inbox_path / "_read.md"
+        target.write_text("r")
+
+        calls = []
+
+        def _fake_send2trash(path: str) -> None:
+            calls.append(path)
+            Path(path).unlink(missing_ok=True)
+
+        monkeypatch.setattr("jatai.cli.main.send2trash", _fake_send2trash)
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            result = runner.invoke(app, ["clear", "-r", "--yes"])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 0
+        assert "WARNING: clear will move matched files to OS Trash (soft-delete)." in result.stdout
+        assert "moved to trash: 1" in result.stdout
+        assert len(calls) == 1
+        assert not target.exists()
+
+    def test_cli_clear_requires_confirmation_and_can_cancel(self, temp_dir):
+        node = Node(temp_dir / "clear_confirm_node")
+        node.create()
+        node.set_config("GC_DELETE_MODE", "trash")
+        target = node.inbox_path / "_read.md"
+        target.write_text("r")
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(node.node_path)
+            result = runner.invoke(app, ["clear", "-r"], input="n\n")
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 1
+        assert "Proceed with clear removal" in result.stdout
+        assert "Cancelled." in result.stdout
+        assert target.exists()
 
     def test_cli_status_shows_config_path(self, temp_dir, temp_home, monkeypatch):
         monkeypatch.setenv("HOME", str(temp_home))
@@ -880,6 +955,18 @@ class TestCLITUI:
         _run_tui()
         assert calls["run"] == 1
 
+    def test_jatai_app_on_mount_bootstraps_global_registry(self, temp_home):
+        from jatai.tui import JataiApp
+
+        outputs = []
+        app = JataiApp()
+        app._output = lambda text: outputs.append(text)
+
+        app.on_mount()
+
+        assert (temp_home / ".jatai").exists()
+        assert any("Global registry initialized" in text for text in outputs)
+
     def test_jatai_app_capture_call_returns_output(self):
         from jatai.tui import _capture_call
 
@@ -891,6 +978,7 @@ class TestCLITUI:
 
     def test_jatai_app_capture_call_suppresses_typer_exit(self):
         import typer
+
         from jatai.tui import _capture_call
 
         def fn():
@@ -920,8 +1008,8 @@ class TestCLITUI:
         assert "screen" in pushed
 
     def test_jatai_app_dispatch_status_calls_status(self):
-        from jatai.tui import JataiApp
         from jatai.cli import main as cli_main
+        from jatai.tui import JataiApp
 
         captured = {}
         app = JataiApp()
@@ -933,11 +1021,10 @@ class TestCLITUI:
 
 
 
-import asyncio
 
 def test_jatai_app_dispatch_docs_index_calls_docs():
-    from jatai.tui import JataiApp
     from jatai.cli import main as cli_main
+    from jatai.tui import JataiApp
 
     captured = {}
 
@@ -972,21 +1059,21 @@ def test_jatai_app_menu_item_keys_are_unique():
     keys = [k for k, _ in MENU_ITEMS]
     assert len(keys) == len(set(keys))
 
-def test_jatai_app_dispatch_browse_nodes_with_legacy_string_paths(monkeypatch):
-    """Browse Nodes key 'b' is disabled (ADR-14): not in menu, dispatch does nothing."""
-    from jatai.tui import JataiApp, MENU_ITEMS
+def test_jatai_app_dispatch_legacy_browse_key_does_not_crash(monkeypatch):
+    """Legacy/unrecognised keys must be ignored safely by the dispatcher."""
+    from jatai.tui import MENU_ITEMS, JataiApp
 
     pushed = {}
     app = JataiApp()
     app.push_screen = lambda screen, cb=None: pushed.update({"screen": screen, "cb": cb})
 
     menu_keys = {k for k, _ in MENU_ITEMS}
-    assert "b" not in menu_keys, "Browse Nodes key must not appear in menu (ADR-14)"
+    assert "b" not in menu_keys
 
     app._dispatch("b")
-    assert pushed == {}, "Dispatching 'b' must not push any screen (ADR-14)"
+    assert pushed == {}
 
-def test_jatai_app_dispatch_browse_nodes_registry_error_does_not_crash(monkeypatch):
+def test_jatai_app_dispatch_unknown_keys_do_not_crash(monkeypatch):
     """Dispatching any unrecognised key must not crash the application."""
     from jatai.tui import JataiApp
 

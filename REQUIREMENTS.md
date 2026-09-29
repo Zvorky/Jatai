@@ -65,8 +65,10 @@ Jataí explicitly separates user configuration from system state.
   * **[REQ-3.7.2.3]** never create `._jatai` automatically when `.jatai` is manually removed; `._jatai` is reserved for explicit CLI/TUI user actions.
 * **[REQ-3.7.3]** Data Retention & Garbage Collection: Applies only to `_` prefixed files.
   * **[REQ-3.7.3.1]** Defaults: INBOX retains everything (`0` or `null` limit). OUTBOX retains a maximum of 11 files (`GC_MAX_SENT_FILES=11`), deleting the oldest first.
-  * **[REQ-3.7.3.2]** Deletion Engine: Uses OS Trash by default. Configurable to hard delete.
+  * **[REQ-3.7.3.2]** Deletion Engine: Periodic automatic GC uses `GC_AUTO_DELETE_MODE`, defaulting to OS Trash (`trash`) and configurable to hard delete.
   * **[REQ-3.7.3.3]** Triggers: Global sweep every 15 minutes. Immediate local sweep triggered instantly when a quantitative threshold (like the 11 file limit) is hit.
+  * **[REQ-3.7.3.4]** Scope Separation: Manual `jatai clear` deletion policy is controlled by `GC_DELETE_MODE` (independent from automatic GC policy).
+  * **[REQ-3.7.3.5]** Safety Prompt: Manual `jatai clear` must require interactive user confirmation unless `--yes` is provided.
 
 ## **[REQ-4] Routing Engine (Daemon & Watchdog)**
 
@@ -120,3 +122,4 @@ Jataí explicitly separates user configuration from system state.
   * **[REQ-9.13.1]** The helper must remove local `.jatai` and `._jatai` files from known nodes before removing the global `~/.jatai` file.
   * **[REQ-9.13.2]** The helper must clean `/tmp/jatai/` control-state files and allow optionally preserving logs by default.
   * **[REQ-9.13.3]** The helper must require explicit opt-in for destructive execution and support dry-run preview mode.
+  * **[REQ-9.13.4]** Applied cleanup is permanent for config/control artifacts; no Trash/soft-delete path is used in this command.

@@ -1,24 +1,27 @@
 """
 Main CLI module for Jataí using Typer.
 """
+from __future__ import annotations
 
 import os
-import signal
 import shutil
+import signal
 import subprocess
 import sys
 import time
+from pathlib import Path
+from typing import Optional
+
 import typer
 import yaml
-from pathlib import Path
-from typing import List, Optional
+from send2trash import send2trash
 
 from jatai.core.autostart import AutoStartRegistrar
 from jatai.core.daemon import AlreadyRunningError, JataiDaemon
 from jatai.core.delivery import Delivery
+from jatai.core.node import Node
 from jatai.core.prefix import Prefix
 from jatai.core.registry import Registry
-from jatai.core.node import Node
 from jatai.core.sysstate import SystemState
 from jatai.core.uninstall import cleanup_install_artifacts
 
@@ -144,13 +147,34 @@ def _load_node_from_cwd() -> Node:
     return node
 
 
-def _docs_markdown_files() -> List[Path]:
+def _normalize_delete_mode(mode: str) -> str:
+    normalized = str(mode or "").strip().lower()
+    if normalized == "trash":
+        return "trash"
+    return "permanent"
+
+
+def _delete_file_by_mode(file_path: Path, mode: str) -> str:
+    """Delete a file using trash/permanent policy and report the applied mode."""
+    if mode == "trash":
+        try:
+            send2trash(str(file_path))
+            return "trash"
+        except Exception:
+            file_path.unlink(missing_ok=True)
+            return "permanent-fallback"
+
+    file_path.unlink(missing_ok=True)
+    return "permanent"
+
+
+def _docs_markdown_files() -> list[Path]:
     if not DOCS_ROOT.exists():
         return []
     return sorted(path for path in DOCS_ROOT.rglob("*.md") if path.is_file())
 
 
-def _render_docs_index(markdown_files: List[Path]) -> str:
+def _render_docs_index(markdown_files: list[Path]) -> str:
     categories: dict[str, list[str]] = {}
     for file_path in markdown_files:
         relative = file_path.relative_to(DOCS_ROOT)
@@ -204,8 +228,8 @@ def _export_text_to_inbox(node: Node, content: str, base_name: str) -> Path:
         index += 1
 
 
-def _render_docs_terminal(matches: List[Path]) -> str:
-    blocks: List[str] = []
+def _render_docs_terminal(matches: list[Path]) -> str:
+    blocks: list[str] = []
     for path in matches:
         rel = path.relative_to(DOCS_ROOT).as_posix()
         content = path.read_text(encoding="utf-8")
@@ -548,6 +572,7 @@ def send(
         raise typer.Exit(code=1)
 
     try:
+        node.outbox_path.mkdir(parents=True, exist_ok=True)
         delivered = Delivery(source, node.outbox_path).deliver()
         if move:
             source.unlink()
@@ -639,7 +664,7 @@ def config(
         except FileNotFoundError:
             pass
 
-        registry.set_config(key, _coerce_config_value(value))
+        registry.set_config(str(key), _coerce_config_value(value))
         registry.save()
         typer.echo(f"✓ Updated global config: {key}")
         return
@@ -650,7 +675,7 @@ def config(
         typer.echo(f"✗ Error: {e}", err=True)
         raise typer.Exit(code=1)
 
-    node.set_config(key, _coerce_config_value(value))
+    node.set_config(str(key), _coerce_config_value(value))
     typer.echo(f"✓ Updated local config: {key}")
 
 
@@ -662,6 +687,7 @@ def remove(
     node_path = Path(path).resolve() if path else Path.cwd()
     node = Node(node_path)
     try:
+        typer.echo("WARNING: remove performs a soft-delete (.jatai -> ._jatai), not a permanent file deletion.")
         node.disable()
         typer.echo(f"✓ Disabled node at {node.node_path}")
     except Exception as e:
@@ -673,6 +699,7 @@ def remove(
 def clear(
     read: bool = typer.Option(False, "--read", "-r", help="Clear processed files from INBOX."),
     sent: bool = typer.Option(False, "--sent", "-s", help="Clear processed files from OUTBOX."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip interactive confirmation."),
 ) -> None:
     """Clear processed history files from INBOX and/or OUTBOX."""
     try:
@@ -686,21 +713,61 @@ def clear(
         sent = True
 
     success_prefix = str(node.get_config("PREFIX_IGNORE", "_"))
+    delete_mode = _normalize_delete_mode(
+        str(node.get_config("GC_DELETE_MODE", Registry.DEFAULT_CONFIG["GC_DELETE_MODE"]))
+    )
+    if delete_mode == "trash":
+        typer.echo("WARNING: clear will move matched files to OS Trash (soft-delete).")
+    else:
+        typer.echo("WARNING: clear will permanently delete matched files.")
+
+    if not yes:
+        confirmed = typer.confirm(
+            "Proceed with clear removal?",
+            default=False,
+        )
+        if not confirmed:
+            typer.echo("Cancelled.")
+            raise typer.Exit(code=1)
+
     removed = 0
+    trashed = 0
+    permanent = 0
+    fallback = 0
 
     if read:
         for file_path in node.list_inbox():
             if file_path.name.startswith(success_prefix):
-                file_path.unlink()
+                applied_mode = _delete_file_by_mode(file_path, delete_mode)
+                if applied_mode == "trash":
+                    trashed += 1
+                elif applied_mode == "permanent-fallback":
+                    permanent += 1
+                    fallback += 1
+                else:
+                    permanent += 1
                 removed += 1
 
     if sent:
         for file_path in node.list_outbox():
             if file_path.name.startswith(success_prefix):
-                file_path.unlink()
+                applied_mode = _delete_file_by_mode(file_path, delete_mode)
+                if applied_mode == "trash":
+                    trashed += 1
+                elif applied_mode == "permanent-fallback":
+                    permanent += 1
+                    fallback += 1
+                else:
+                    permanent += 1
                 removed += 1
 
     typer.echo(f"✓ Removed {removed} processed file(s)")
+    if trashed:
+        typer.echo(f"  moved to trash: {trashed}")
+    if permanent:
+        typer.echo(f"  permanently deleted: {permanent}")
+    if fallback:
+        typer.echo("WARNING: some files were permanently deleted because Trash move failed.")
 
 
 @app.command()
@@ -740,9 +807,14 @@ def cleanup(
         typer.echo("Use: jatai cleanup --full --dry-run", err=True)
         raise typer.Exit(code=1)
 
+    if dry_run:
+        typer.echo("WARNING: cleanup --dry-run does not delete files.")
+    else:
+        typer.echo("WARNING: cleanup permanently deletes Jatai config/control artifacts (no Trash/soft-delete).")
+
     if not yes and not dry_run:
         confirmed = typer.confirm(
-            "This will remove Jatai config/control artifacts. Continue?",
+            "This will permanently remove Jatai config/control artifacts. Continue?",
             default=False,
         )
         if not confirmed:
